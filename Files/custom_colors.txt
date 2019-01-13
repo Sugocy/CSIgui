@@ -1,0 +1,17 @@
+main =0.94118 0.94118 0.94118
+text_main =0.14902 0.14902 0.14902
+text_title =0.30196 0.74902 0.92941
+hilight1 =0.5 0 0
+hilight2 =0.8 0 0.50196
+lines1 =0 0.45098 0.74118
+lines2 =1 0 0
+grid =0.50196 0 0.10196
+\\
+Put information here
+% Backgrounds
+% Used for button text
+% Used for descriptions & titles
+% Highlight text
+% Higlight backgrounds
+% Static line color
+% Static line color
