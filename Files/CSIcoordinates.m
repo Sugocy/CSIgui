@@ -57,7 +57,7 @@ switch origin
         
         
 
-        negfac = [1 -1 1];
+        negfac = [1 1 1];
         for kk = 1:size(data.dim,2) 
                 
             % Parameters for direction N

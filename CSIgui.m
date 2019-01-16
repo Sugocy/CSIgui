@@ -6851,6 +6851,7 @@ function CSI_1D_movePanelToGUI(hObj, ~)
 obj1D = hObj.Parent; 
 % Get its panel window
 objPa = panel_1D_getInstanceData(hObj,'CSIpanel_1D'); 
+if ~ishandle(objPa), return; end
 
 % Get size and position 
 posPa = objPa.Position; pos1D = obj1D.Position;
