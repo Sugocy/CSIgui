@@ -2432,7 +2432,7 @@ for ci = 1:plot_par.dim(1) % Column loop.
         % Position of axis to plot
         pos = [x y plot_par.res(1) plot_par.res(2)];
         % Create axis with pos(3,4) size at pos(1,2) position
-        plot_par.ax{ri,ci} = axes('position',pos);
+        plot_par.ax{ri,ci} = axes('parent',fh,'position',pos);
         
         % Get plot data.
         plot_data = squeeze(data_max(:,ci,ri,sli,nDimC{:}));
@@ -3521,7 +3521,7 @@ for ri = 1:size(rem_index,1)
     title_str = strjoin(strsplit(num2str(indm),' '),'/');
     tabh{ri} = uitab(tabg, 'Title',title_str,...
             'BackgroundColor',clr_bg, 'ForegroundColor',clr_txt./3);
-    axh{ri}  = axes(tabh{ri},'Position',[0.1 0.1 0.8 0.8]);
+    axh{ri}  = axes('parent',tabh{ri},'Position',[0.1 0.1 0.8 0.8]);
     
     % Plot scatter
     tmp(tmp == 0) = eps; tmp(~isfinite(tmp)) = eps;tmp(isnan(tmp)) = eps;
@@ -4032,7 +4032,7 @@ if plotImg && ~isnan(sum(img(:)))
     
     % Create axis for image
     hold on; 
-    imax = axes('Parent',tgui.tab{sli}.tabh,...
+    imax = axes('parent',tgui.tab{sli}.tabh,...
         'Position',[0 0 1 1], 'Color', 'None');
     
     % Plot Images
@@ -5623,7 +5623,7 @@ if isappdata(csiguiObj, 'conv')
             plot_par.fh.Units = 'Pixels';
             ax_sz = plot_par.fh.Position(3:4);
             plot_par.imax = ...
-                axes(plot_par.fh,...
+                axes('parent',plot_par.fh,...
                 'Unit','pixels','InnerPosition',[1 1 ax_sz], 'Color', 'blue');
         end
         plot_par.imax.Units = 'normalized';
@@ -5701,7 +5701,7 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         % Create axis with pos(3,4) size at pos(1,2) position
         if ~ishandle(plot_par.fh), return; end
         if createFig
-            plot_par.ax{ri,ci} = axes(plot_par.fh,'position',pos);
+            plot_par.ax{ri,ci} = axes('parent',plot_par.fh,'position',pos);
         end
 
         % VOXEL DATA % ----------------- %
@@ -6772,7 +6772,7 @@ fig_loc = [ceil(scrsz(3)/2 - (figsz(3)/2)) ceil(scrsz(4)/2 - (figsz(4)/2))];
 set(CSI_1Dobj,'Position',[fig_loc(1) fig_loc(2) figsz(3) figsz(4)]);
 
 % Create axis
-data1D.axes = axes(CSI_1Dobj);
+data1D.axes = axes('parent',CSI_1Dobj);
 
 % Create instance text for instance-tag
 uicontrol(CSI_1Dobj, 'Style','Text', 'String', ['Instance: ' instance.tag],...
@@ -9223,7 +9223,7 @@ for sli = 1:plot_par.dim(3)
         
         % Create axis for image
         hold on; 
-        imax = axes('Parent',save_data.tabh{sli},...
+        imax = axes('parent',save_data.tabh{sli},...
             'Position',[0 0 1 1], 'Color', 'None');
 
         % Plot Images
@@ -9263,7 +9263,7 @@ for sli = 1:plot_par.dim(3)
             % Create axis with pos(3,4) size at pos(1,2) position
             if ishandle(plot_par.fh)
                 save_data.ax{ri,ci,sli} =...
-                    axes(save_data.tabh{sli},'position',pos);
+                    axes('parent',save_data.tabh{sli},'position',pos);
             else, return; 
             end
             
@@ -9832,7 +9832,7 @@ if isappdata(gui.CSIgui_main, 'conv')
     
     % Create axis for image
     hold on; 
-    imax = axes('Parent',save_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
+    imax = axes('parent',save_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
     
     % Plot Images
     if (sum(img2plot(:)) == 0) % Image is only zeroes.
