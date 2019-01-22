@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 10-Dec-2018 16:07:56
+% Last Modified by GUIDE v2.5 22-Jan-2019 19:18:29
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -9048,92 +9048,9 @@ end
 % --------------------------------------------------------------------- %
 
 
-% --- Executes on button press in button_TestSomething.
-function button_TestSomething_Callback(hObj, eventdata, gui)
-% Normalize data to maximum in a spectrum or a specific peak of the
-% spectrum.
-
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
-display('need of additional processing for normalization')
 
 
-
-data = csi.data.raw;
-dataR = CSI_getUnit(data,'Real');
-dataI = CSI_getUnit(data,'Imaginary');
-
-% Data as cell index layout
-sz = size(dataR); cell_layout = ...
-arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-
-% Creat cell of data.
-datac = mat2cell(dataR, sz(1), cell_layout{:});
-datac = cellfun(@(x) x./max(x(:)), datac,'Uniform',0);
-
-dataR = cell2mat(datac);
-
-data = complex(dataR, dataI);
-
-csi.data.raw = data;
-
-setappdata(gui.CSIgui_main, 'csi', csi);
-
-% % Check for CSI data
-% if ~isappdata(gui.CSIgui_main,'csi'), return; end
-% csi = getappdata(gui.CSIgui_main,'csi'); 
-% % 
-% % % Get dimension to flip over
-% % useans = getUserInput({'Dimension:'}, {2});
-% % if isempty(useans), return; end
-% % dim = str2double(useans{1});
-% 
-% % Flip over this dimension 
-% dim = [4 2 3];
-% csi.data.raw = flip(csi.data.raw,dim(1));
-% csi.data.raw = flip(csi.data.raw,dim(2));
-% csi.data.raw = flip(csi.data.raw,dim(3));
-% 
-% % Update appdata
-% setappdata(gui.CSIgui_main,'csi',csi); 
-% 
-% % Display information to user.
-% CSI_Log({'CSI data flipped. Dimension:'},{dim});
-
-
-
-function CSI_showAllImages_Something(hObj)
-% Get app-data
-csi = getappdata(gui.CSIgui_main,'csi'); 
-if isempty(csi), CSI_Log({'No CSI data in memory.'},{''}); return; end
-
-disp('There is CSI data in memory! Wooh!');
-
-[~, img_all, soi_range] = MRI_matchSlices(hObj);
-
-
-panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay'); 
-if ~isempty(panelobj)
-    % If it exists get guidata panel 2D.
-    pan2D_gui = guidata(panelobj);
-    % Get values from panel
-    plotindex = cell(1,size(pan2D_gui.sliders,2));
-    for kk = 1:size(pan2D_gui.sliders,2)
-        plotindex{kk} = get(pan2D_gui.sliders{kk}, 'Value');
-    end
-else, plotindex = {1}; % Slice and other indices set to 1.
-end
-
-soi = soi_range(plotindex{1},:);
-img_in_slice = img_all(:,:,soi(1):soi(2));
-
-display3D(img_in_slice, 'limit',[0 max(img_in_slice(:))*0.75]);
-
-
-
-
+%%% MERGE VOXELS % ------------------------------------------------------ %
 
 % --- Executed if user presses merge voxels button
 function CSI_MergeVoxels_Initiate(hObj, gui)
@@ -9185,8 +9102,6 @@ function button_CSI_MergeVoxels_Callback(hObj, ~, gui)
 
 % Initiate a figure for CSI_mergeVoxels
 CSI_MergeVoxels_Initiate(hObj, gui);
-
-
 
 % --- Executes by CSI_MergeVoxels_Initiate
 function CSI_MergeVoxels_plotVoxels(hObj, gui, plot_par)
@@ -9441,11 +9356,6 @@ end
 % LOG
 CSI_Log({'Saved selected voxel figure to:'},{[fp '\' fn '.fig']});
 
-
-
-
-
-
 % --- % Executes is user requests merge with options none
 function CSI_MergeVoxels_Average(sel)
 % Requires data structure data with fields:
@@ -9699,35 +9609,49 @@ for kk = 1:nfig
 end
 
 
-% for vi = 1:nVox
-%     subplot(nVox,1, vi);
-%     
-%     if isfield(sel.xaxis,'ppm'), xax = sel.xaxis.ppm;
-%     else,                        xax = sel.xaxis.none;
-%     end
-%         
-%     % Plot voxel
-%     plV = plot(xax, real(voxels(:,vi))); hold on;
-%     % Plot aligned
-%     plA = plot(xax, real(voi_aligned(:,vi)));
-%     
-%     % Axis cosmetics
-%     axh = plV.Parent;
-%     plV.Parent.XDir = 'reverse';
-% end
+%%% MERGE VOXELS % ------------------------------------------------------ %
 
 
 
 
+% --- Executes on button press in button_TestSomething.
+function button_TestSomething_Callback(hObj, eventdata, gui)
+% Normalize data to maximum in a spectrum or a specific peak of the
+% spectrum.
+
+% --- Executes on button press in button_IMGinCSI.
+function button_IMGinCSI_Callback(hObject, eventdata, gui)
+MRI_plotImage_inCSIslice(hObj);
+
+% --- Plot images in CSI slice
+function MRI_plotImage_inCSIslice(hObj)
+
+gui = guidata(hObj);
+% Get app-data
+csi = getappdata(gui.CSIgui_main,'csi'); 
+if isempty(csi), CSI_Log({'No CSI data in memory.'},{''}); return; end
+
+disp('There is CSI data in memory! Wooh!');
+
+[~, img_all, soi_range] = MRI_matchSlices(hObj);
 
 
+panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay'); 
+if ~isempty(panelobj)
+    % If it exists get guidata panel 2D.
+    pan2D_gui = guidata(panelobj);
+    % Get values from panel
+    plotindex = cell(1,size(pan2D_gui.sliders,2));
+    for kk = 1:size(pan2D_gui.sliders,2)
+        plotindex{kk} = get(pan2D_gui.sliders{kk}, 'Value');
+    end
+else, plotindex = {1}; % Slice and other indices set to 1.
+end
 
+soi = soi_range(plotindex{1},:);
+img_in_slice = img_all(:,:,soi(1):soi(2));
 
-
-
-
-
-
+display3D(img_in_slice, 'limit',[0 max(img_in_slice(:))*0.75]);
 
 % --- Executes on button press in button_MRI_plotImage_Grid.
 function button_MRI_plotImage_Grid_Callback(hObj, ~, gui)
@@ -9875,11 +9799,6 @@ function button_Flip092_Callback(~, ~, gui)
 % Check for CSI data
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi'); 
-% 
-% % Get dimension to flip over
-% useans = getUserInput({'Dimension:'}, {2});
-% if isempty(useans), return; end
-% dim = str2double(useans{1});
 
 % Flip over this dimension 
 dim = [4 2 3];
@@ -9910,6 +9829,7 @@ button_CSI_FFT_Callback([], [], gui);
 button_CSI_AutoPhase_Callback([], [], gui);
 
 
+% --- Normalize CSI data.
 function CSI_Normalize(gui)
 % Normalize data to maximum in a spectrum or the volume.
 % The real-part of the spectrum is used.
@@ -9966,3 +9886,6 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % --- Executes on button press in button_Normalize.
 function button_Normalize_Callback(~ , ~, gui)
 CSI_Normalize(gui);
+
+
+
