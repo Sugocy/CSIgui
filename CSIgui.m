@@ -648,8 +648,8 @@ function success = parse_mat(fp, fn, gui)
 % Created: csi-struct.
 
 % Expected fields of interest
-foi = {'data','ext','filename','filepath',...
-       'xaxis','csi','raw','dim','labels', 'conv','mri'};
+% foi = {'data','ext','filename','filepath',...
+%        'xaxis','csi','raw','dim','labels', 'conv','mri'};
 
 % Check mat-file integrety   
 mat_cont = whos('-file',[fp '\' fn '.mat']);
@@ -691,6 +691,10 @@ csi.data = csigui;
 
 % Set extensions
 csi.ext = 'mat';
+
+% Set mat-filename
+csi.data.filename = fn; csi.data.filepath = fp;
+csi.filename = fn; csi.filepath = fp;
 
 % Find xaxis stuct and store
 if isfield(csigui, 'xaxis')
@@ -999,7 +1003,7 @@ if isempty(csi), CSI_Log({'No MRSI data loaded.'},{''}); return; end
 % Get default file path if available
 if isappdata(gui.CSIgui_main,'csi')
     csi = getappdata(gui.CSIgui_main,'csi');
-    if isfield(csi,'filepath'), fp = csi.filepath; else, fp = []; end
+    if isfield(csi.data,'filepath'), fp = csi.data.filepath; else, fp = []; end
 else, fp = []; 
 end
 
@@ -9620,8 +9624,8 @@ function button_TestSomething_Callback(hObj, eventdata, gui)
 % spectrum.
 
 % --- Executes on button press in button_IMGinCSI.
-function button_IMGinCSI_Callback(hObject, eventdata, gui)
-MRI_plotImage_inCSIslice(hObj);
+function button_IMGinCSI_Callback(hobj, evt, gui)
+MRI_plotImage_inCSIslice(hobj);
 
 % --- Plot images in CSI slice
 function MRI_plotImage_inCSIslice(hObj)

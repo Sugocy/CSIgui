@@ -11,16 +11,21 @@ function fft_data = csi_rawfft(csi, dim, shift_method)
 %%%        shift_method     - switch between circshift(0) or fftshift(1)
 %%%                           
 %%%        NB:  Circshift shifts all dimensions first before FFT.
+%%%             
 %%%             FFTshift shifts the dimension, applies FFT and shifts back
 %%%             before moving to the next dimension to FFT over.
-%%%                           
+%%%                            
 %%%
 %%% Contact: qhoutum2@umcutrecht.nl
+%%%
+%%% Set "loop" to 0 if shifting before any FFT is required. See line 28.
 
 % Process input
 if nargin ~= 3, shift_method = 0; end
 fft_data = csi; sz = size(fft_data);
 
+
+loop = 1;
 
 
 % CIRC SHIFT
@@ -43,11 +48,31 @@ if shift_method == 0
 elseif shift_method == 1
     
     
-    % FFT and FFTshift in one loop.
-    for kk = 1:size(dim,2)
-        fft_data =  ...
-        fftshift(ifft(ifftshift(fft_data, dim(kk)), [], dim(kk)),dim(kk) );
-    end
+    if ~loop
+        disp 'Shifting first before FFT in any dimension'
+        % Output equal to looping method.
+        
+        % Shift everything first.
+        for kk = 1:size(dim,2)
+            fft_data =  ifftshift(fft_data, dim(kk));
+        end
+
+        % FFT all dimensions in one loop.
+        for kk = 1:size(dim,2)
+            fft_data =  ifft(fft_data,[], dim(kk));
+        end
+
+        % Shift everything back
+        for kk = 1:size(dim,2)
+            fft_data =  fftshift(fft_data, dim(kk));
+        end
     
+    else
+        % FFT and FFTshift in one loop.
+        for kk = 1:size(dim,2)
+            fft_data =  ...
+            fftshift(ifft(ifftshift(fft_data, dim(kk)), [], dim(kk)),dim(kk) );
+        end
+    end
 end
 
