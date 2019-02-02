@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 22-Jan-2019 19:18:29
+% Last Modified by GUIDE v2.5 02-Feb-2019 16:09:59
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -9892,4 +9892,121 @@ function button_Normalize_Callback(~ , ~, gui)
 CSI_Normalize(gui);
 
 
+% --- Executes on button press in button_CSI_Bin.
+function button_CSI_Bin_Callback(hObject, eventdata, gui)
+
+
+% Get app data
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Dimension to bin over and number of bins?
+uans = getUserInput({'Dimension to bin: ','Number of bins: '},{1,2});
+if isempty(uans{1}), return; end
+dim = str2double(uans{1}); nbin = str2double(uans{2});
+
+% Create backup
+CSI_backupSet(gui, 'Before binning.');
+
+% Process data
+tmp = csi.data.raw;  sz = size(tmp);
+step = sz(dim)./ nbin;
+bin_vec = 1:step:sz(dim); bin_vec(1,end+1) = sz(dim)+1;
+
+dim_vec = cellfun(@(x) 1:x, num2cell(sz),'uniform',0);
+dim_vec{dim} = NaN;
+
+sz_temp = sz; sz_temp(dim) = step;
+bin = NaN([sz_temp(:)',nbin]);
+for bi = 1:size(bin_vec,2)-1
+    
+     % Index to correct arrays
+     dim_vec_temp = dim_vec; 
+     dim_vec_temp{dim} = bin_vec(bi):bin_vec(bi+1)-1;
+     % Data
+     tmp_bin = tmp(dim_vec_temp{:});
+     % Store
+     dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:step;
+     dim_vec_temp{end+1} = bi;
+     bin( dim_vec_temp{:} ) = tmp_bin; 
+    
+end
+
+% Store data
+csi.data.raw = bin;
+csi.data.labels = cat(2,csi.data.labels,'bin');
+csi.data.dim = size(csi.data.raw);
+
+% Save appdata.
+setappdata(gui.CSIgui_main, 'csi', csi);
+
+% Log
+msg = ...
+sprintf('Binned dimension "%s" over %i bins', csi.data.labels{dim}, nbin);
+CSI_Log({msg},{''});
+
+
+% --- Executes on button press in button_CSI_Linewidth.
+function button_CSI_Linewidth_Callback(hobj, evt, gui)
+% Get app data
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Create backup
+% CSI_backupSet(gui, 'Before linew.');
+
+% Process data
+tmp = csi.data.raw; sz = size(tmp);
+
+% Get data at peak of interest
+[doi, doi_axis, range] = CSI_getDataAtPeak(tmp, csi.xaxis);
+
+
+ 
+% % Maximum in this range
+[~,mi] = max(doi,[],1);
+
+% Set max as peak centre.
+peak_pos = mi+range(1);
+
+        
+% % Peak width 
+peak_width = ceil(csi.xaxis.N/100);
+if peak_width <= 3, peak_width = 4; end
+    
+
+sz = size(peak_pos); lw = NaN(sz); 
+lwv = NaN(sz(1),2); lwp = NaN(sz(1),2);
+
+% Peak range used to find FWHM
+poi_range_perVox = range + [-peak_width peak_width];
+poi_range_perVox = poi_range_perVox(1):poi_range_perVox(2);
+
+
+
+
+% Input cell data
+sz = size(tmp); 
+cell_layout = ...
+arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+
+% Input axis
+ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
+
+% Input range
+poi_range_perVox = repmat({poi_range_perVox},size(tmp));
+
+
+[a,b,c] = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,'Uniform',0);
+
+% Calculate FWHM % ---- %
+% [lw(pp), lwv(pp,:), lwp(pp,:)] = ... % lw, value & point
+%     csi_LineWidth(data, ax, range(1):range(2), 0);
+
+
+disp dwadjkawdwj
+% WHY NOT SAME AS 1D???/
+CSI_dataAsGraph(cell2mat(a), gui, 'LineWidth')
+CSI_dataAsTable(cell2mat(a), 'LineWidth')
 

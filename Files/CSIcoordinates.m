@@ -64,7 +64,7 @@ switch origin
             N = data.dim(kk); res = data.res(kk); 
             offc = data.offcenter(kk);
             
-%             vec_form = @(N) -1.* N/2 : 1 : (N-1)/2;
+%           vec_form = @(N) -1.* N/2 : 1 : (N-1)/2;
             vec_form = @(N)   -1.*(N-1)/2 : 1 : (N)/2;
             
             if vox_cor      
