@@ -17,7 +17,7 @@ function [fwhm, fwhm_val, fwhm_pos] = csi_LineWidth(data, ppm, poi, show_plot)
 % Default no graphs displayed
 if nargin == 3, show_plot = 0; end
     
-interp_factor = 10^-3;              % Interpolation factor
+interp_factor = 10^-2;              % Interpolation factor
 doi = data(poi,:); xoi = ppm(poi)'; % Data at POI
 
 mi = min(doi); if mi < 0, doi = doi+abs(mi); end % Correct for negative
@@ -29,17 +29,30 @@ doii = interp1(xoi,doi,xoii,'linear');                    % New data array
 % Take real part of POI
 doii = real(doii);
 
-% Find maximum and half-maximum
+% 1. Find maximum and half-maximum
 [~, max_ind] = max((doii)); max_half = abs((doii(max_ind))/2);
 
+% LEFT SIDE (positive) % ------------------------------------------ %
 % Find position closest to half-max / left side
-[~, fwhm_indl] =  min(abs( (doii(max_ind:end)) - (max_half) )); 
+close_to_HM = abs( (doii(max_ind:end)) - (max_half) );
+bool = islocalmin(close_to_HM); ind = find(bool == 1);
+fwhm_indl = ind(1);
 
 fwhm_val(2) = doii(fwhm_indl+max_ind-1); 
 fwhm_pos(2) = xoii(fwhm_indl+max_ind-1);
-
+ 
+% RIGHT SIDE (negative) % ------------------------------------------ %
 % Find position closest to half-max / right side
-[~, fwhm_indr] =  min(abs( doii(1:max_ind) - max_half)); 
+
+% Calculate difference between HM and each point.
+% Flip, so we begin at the maximum and ride the peak down 
+close_to_HM = flip(abs( doii(1:max_ind) - max_half),2);
+% Find the lowest  e.g. almost zero! (Almost no difference)
+bool = islocalmin(close_to_HM); ind = find(bool == 1);
+% Take the first minimum e.g. first index to be half maximum from maximum
+fwhm_indr = ind(1);
+% Correct for the flip we applied
+fwhm_indr = abs( size(doii(1:max_ind),2) - fwhm_indr ) + 1;
 
 fwhm_val(1) = doii(fwhm_indr); 
 fwhm_pos(1) = xoii(fwhm_indr);
@@ -62,17 +75,20 @@ if show_plot
     ylim(ylim_val); title('Original');
     % Plot fwhm in original
     hold(ax1,'on'); plot(ax1, fwhm_pos, fwhm_val,'or');
+    ax1.XDir = 'Reverse';
     
     % Plot peak of interest
     ax2 = subplot(3,1,2); plot(ax2, xoi, real(doi),'s-'); 
     title('Peak of Interest');
     hold(ax2,'on'); plot(ax2, fwhm_pos, fwhm_val,'-or', 'LineWidth', 1.5);
+    ax2.XDir = 'Reverse';
     
     % Show interpolated
     ax3 = subplot(3,1,3); plot(ax3, xoii, real(doii),'-'); 
     title('Peak of Interest (Interpolated)');
     % Plot fwhm in interpolated
     hold(ax3,'on'); plot(ax3, fwhm_pos, fwhm_val,'-or', 'LineWidth', 1.5);
+    ax3.XDir = 'Reverse';
     
     % Show LW in last plot
     lw_str = sprintf('FWHM: %2.3f',fwhm);

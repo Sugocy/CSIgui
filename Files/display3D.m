@@ -103,16 +103,17 @@ txt = uicontrol(fh,'Style','Text','Units','Pixels',...
                 'ForegroundColor','Yellow','BackgroundColor','Black',...
                 'HorizontalAlignment','Center','FontSize',7);              
 txt.String = sprintf('%i/%i',1,size(data,3));
-
+txt.FontWeight = 'bold';
 
 % 4. TAG TEXT
 if isfield(opt,'tag')
-    tag_w = 50;
+    tag_w = 80;
     tag = uicontrol(fh,'Style','Text','Units','Pixels',...
                    'Position',[txt.Position(3) 0 tag_w 10],...
                    'ForegroundColor','Yellow','BackgroundColor','Black',...
-                   'HorizontalAlignment','Right','FontSize',6);    
+                   'HorizontalAlignment','Center','FontSize',7);    
     tag.String = opt.tag;
+    tag.FontWeight = 'bold';
 else
     tag = [];
 end

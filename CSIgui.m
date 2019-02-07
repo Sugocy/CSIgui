@@ -920,9 +920,11 @@ regexp(nfo.Nucleus,'\d*','Match'), regexp(nfo.Nucleus,'[A-Z]','Match'));
 csi.xaxis.nucleus = cat(2,nucleus{:});
 csi.xaxis.BW = nfo.SpectralBW_Hz;
 
+if isfield(nfo,'VoxAP_mm') && isfield(nfo,'VoxRL_mm')
 % Copy some coordnate parameters
 csi.ori.res = [nfo.VoxAP_mm nfo.VoxelSizeRL_mm nfo.VoxFH_mm];
 csi.ori.offcenter = [nfo.SliceOffc_AP_P__mm nfo.RL_L__mm nfo.FH_H__mm];
+end
 
 
                 % --------- % Clean Up % --------- %
@@ -1644,7 +1646,9 @@ end
     
 % Average
 [data_averaged, nsa_ind] = CSI_average(csi.data.raw,nsa_ind);
-if isempty(data_averaged), return; end
+if isempty(data_averaged)
+    CSI_Log({'No index to average.'},{'Cancelled averaging.'}); return; 
+end
 
 % Replace data with averaged and set averaged index size to one.
 csi.data.raw = data_averaged; csi.data.dim(nsa_ind) = 1;
@@ -3266,7 +3270,7 @@ end
 % Data format: [dt x channels x rest ... ]
 
 % Permute vector - channel index on index 2.
-sz = csi.data.dim;                                         % Size of data array
+sz = csi.data.dim;                                    % Size of data array
 rm_ind = 2:numel(sz); rm_ind(rm_ind == ind_cha) = []; % Vector of #dims
 permv = [1 ind_cha]; permv = cat(2,permv,rm_ind);     % Permute vector.
 % Permute data
@@ -3335,6 +3339,16 @@ tmp = reshape(comb.data, sz_cell); % prod(sz_cell) == numel(comb.data)!
 % Reorder back to starting order of index dimensions.
 % Using the label-change during the first reshaping permute, find the
 % permute vector to go back to initial state.
+
+% Check if no repeated labels are present
+if size(unique(csi.data.labels)) ~= size(csi.data.labels)
+    unilab = unique(csi.data.labels);
+    for kk = 1:unilab
+        
+    end
+    
+end
+
 cur2prev_permv = csi_findDimLabel(tmp_label, csi.data.labels);
 csi.data.raw   = permute(tmp,cur2prev_permv);
 
@@ -4207,7 +4221,7 @@ plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume.
 if plot_par.data_dim == 1, plot_par.dim(2) = 1; plot_par.data_dim = 2; end
 
 % Create Figure % ----------------- %
-plot_par = CSI_2D_setFigure(plot_par, [],datatag);
+plot_par = CSI_2D_setFigure(plot_par, [], datatag);
 
             
 % Data unit % --------------------- % 
@@ -4306,12 +4320,17 @@ for sli = 1:size(data,4) % ----------------- %
            
         
         % Add text % ---------------------- %
-        xlimit = [0 size(plot_data,1)+1];
+        if size(plot_data,2) > size(plot_data,1)
+            xlimit = [0 size(plot_data,2)+1];
+        else
+            xlimit = [0 size(plot_data,1)+1];
+        end
+        
         plot_par.ax{ri,ci}.XLim = xlimit; 
         
         xpos_text = plot_par.ax{ri,ci}.XLim(end);
         text(plot_par.ax{ri,ci}, xpos_text, ylimit(2), ...
-             sprintf('Mean: %3.3e\n Min|Max: %3.3e|%3.3e',...
+             sprintf('Mean: %2.2g\n Min|Max: %2.2g|%2.2g',...
              nanmean(plot_data(:)), max(plot_data(:)), min(plot_data(:))),...
              'Color', [0.6 0.6 0.6],'FontSize',8,'FontWeight','Bold',...
              'HorizontalAlignment', 'Right','VerticalAlignment', 'Top');    
@@ -5389,10 +5408,6 @@ end % End of "if create fig is yes"
 
 % ---- % Save xaxis to plot parameters: always as can be updated.
 plot_par.xaxis = csi.xaxis; 
-% % If the x-axis changed - replot figure; 
-% if size(openFig.gui.xaxis.none,2) ~= size(plot_par.xaxis.none,2)
-%     openFig.grid_sz = NaN;
-% end
 
 % ------- % Get data for plotting
 plot_par = CSI_2D_getData(plot_par, gui,  csi.data.raw);
@@ -5419,11 +5434,11 @@ function plot_par = CSI_2D_setFigure(plot_par, init_pos, fig_tag)
 
 % Process input-arguments
 if     nargin == 1, init_pos = 0; fig_tag = 'CSIgui_plot2D'; 
-elseif nargin == 2,                       fig_tag = 'CSIgui_plot2D';
+elseif nargin == 2,               fig_tag = 'CSIgui_plot2D';
 end
 
 % Create a new figure
-fh = figure('Tag',fig_tag,'Name', 'CSIgui 2D-plot',...
+fh = figure('Tag',fig_tag, 'Name', ['CSIgui 2D-plot: ' fig_tag],...
         'Color',plot_par.colors.main, 'Toolbar', 'None', 'MenuBar', 'None',...
         'NumberTitle', 'Off');                   
 set(fh, 'CloseRequestFcn', @CSI_close2D);
@@ -7433,9 +7448,11 @@ if strcmp(uans,'Individual')
     if isempty(range), return; end
     
     % Maximum in this range
-    [~,mi] = max(data(range(1):range(2)));
+    [~,mi] = max(real(data(range(1):range(2))));
     % Set max as peak centre.
-    peak_pos = mi+range(1);
+    range
+    mi
+    peak_pos = mi+range(1)
     
 elseif strcmp(uans,'Automatic')
     % Get peak positions automatically (Maximum of peak!)
@@ -7444,7 +7461,7 @@ end
     
 % Peak width 
 peak_width = ceil(appdata1D.axis.N/100);
-if peak_width < 3, peak_width = 4; end
+if peak_width < 3, peak_width = 3; end
 
 
 % Loop each peak. %  ------ %
@@ -9846,7 +9863,7 @@ uans = getUserInput_Popup({'Normalize by: '},{{'Maximum per voxel',...
 if isempty(uans), return; end
 
 % Create backup
-CSI_backupSet(gui, 'Before normalize.');
+CSI_backupSet(gui, 'Before normalization.');
 
 % Check if csi appdata is present
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -9894,29 +9911,40 @@ CSI_Normalize(gui);
 
 % --- Executes on button press in button_CSI_Bin.
 function button_CSI_Bin_Callback(hObject, eventdata, gui)
+% Bin a specific dimension, splitting up the csi data.
 
-
-% Get app data
+% Check if csi app data exists
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
 
+
+% User Input % -------- %
 % Dimension to bin over and number of bins?
 uans = getUserInput({'Dimension to bin: ','Number of bins: '},{1,2});
 if isempty(uans{1}), return; end
 dim = str2double(uans{1}); nbin = str2double(uans{2});
 
+
 % Create backup
 CSI_backupSet(gui, 'Before binning.');
+% Get CSI data
+csi = getappdata(gui.CSIgui_main, 'csi');
+
 
 % Process data
 tmp = csi.data.raw;  sz = size(tmp);
-step = sz(dim)./ nbin;
-bin_vec = 1:step:sz(dim); bin_vec(1,end+1) = sz(dim)+1;
 
+stepsz = sz(dim)/ nbin;
+if ~(mod(sz(dim),nbin)==0) % BIN size does not fit the dimension
+    CSI_Log({'Number of bins does not fit the data. Bin size:'},{stepsz});
+    return;
+end
+% Calculate vector with index in tmp for each bin.
+bin_vec = 1:stepsz:sz(dim); bin_vec(1,end+1) = sz(dim)+1;
+% Index cell for all other dimensions
 dim_vec = cellfun(@(x) 1:x, num2cell(sz),'uniform',0);
 dim_vec{dim} = NaN;
 
-sz_temp = sz; sz_temp(dim) = step;
+sz_temp = sz; sz_temp(dim) = stepsz;
 bin = NaN([sz_temp(:)',nbin]);
 for bi = 1:size(bin_vec,2)-1
     
@@ -9926,15 +9954,14 @@ for bi = 1:size(bin_vec,2)-1
      % Data
      tmp_bin = tmp(dim_vec_temp{:});
      % Store
-     dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:step;
+     dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:stepsz;
      dim_vec_temp{end+1} = bi;
      bin( dim_vec_temp{:} ) = tmp_bin; 
     
 end
 
 % Store data
-csi.data.raw = bin;
-csi.data.labels = cat(2,csi.data.labels,'bin');
+csi.data.raw = bin; csi.data.labels = cat(2,csi.data.labels,'bin');
 csi.data.dim = size(csi.data.raw);
 
 % Save appdata.
@@ -9958,13 +9985,15 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % Process data
 tmp = csi.data.raw; sz = size(tmp);
 
+% range = CSI_getPeakOfInterest(csi.xaxis)
+
+
 % Get data at peak of interest
-[doi, doi_axis, range] = CSI_getDataAtPeak(tmp, csi.xaxis);
+[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 
 
- 
 % % Maximum in this range
-[~,mi] = max(doi,[],1);
+[~,mi] = max(real(doi),[],1);
 
 % Set max as peak centre.
 peak_pos = mi+range(1);
@@ -9972,17 +10001,16 @@ peak_pos = mi+range(1);
         
 % % Peak width 
 peak_width = ceil(csi.xaxis.N/100);
-if peak_width <= 3, peak_width = 4; end
+if peak_width < 3, peak_width = 3; end
     
 
-sz = size(peak_pos); lw = NaN(sz); 
-lwv = NaN(sz(1),2); lwp = NaN(sz(1),2);
+sz = size(peak_pos); lw = NaN(sz); lwv = NaN(sz(1),2); lwp = NaN(sz(1),2);
 
 % Peak range used to find FWHM
-poi_range_perVox = range + [-peak_width peak_width];
-poi_range_perVox = poi_range_perVox(1):poi_range_perVox(2);
-
-
+% poi_range_perVox = peak_pos + [-peak_width peak_width];
+peak_pLow = num2cell(peak_pos - peak_width);
+peak_pHig = num2cell(peak_pos + peak_width);
+poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
 
 
 % Input cell data
@@ -9994,19 +10022,16 @@ tmp = mat2cell(tmp, sz(1), cell_layout{:});
 % Input axis
 ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
 
-% Input range
-poi_range_perVox = repmat({poi_range_perVox},size(tmp));
 
+plot_off = repmat({0},size(tmp));
+plot_off{1,2,4,1} = 1;
 
-[a,b,c] = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,'Uniform',0);
+[a,b,c] = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
+    plot_off,'Uniform',0);
 
-% Calculate FWHM % ---- %
-% [lw(pp), lwv(pp,:), lwp(pp,:)] = ... % lw, value & point
-%     csi_LineWidth(data, ax, range(1):range(2), 0);
-
-
-disp dwadjkawdwj
-% WHY NOT SAME AS 1D???/
 CSI_dataAsGraph(cell2mat(a), gui, 'LineWidth')
 CSI_dataAsTable(cell2mat(a), 'LineWidth')
 
+std_ofa = std(cell2mat(a), [], 6);
+
+CSI_dataAsTable(std_ofa, 'LineWidth STD');
