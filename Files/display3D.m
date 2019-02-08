@@ -12,7 +12,10 @@
 %%%    'colormap'       Standard matlab colormaps or matrix
 %%%    'limit'          Axis limits of colormap to show i.e. contrast
 %%%    'tag'            Tag to show @ bottom of image display
-%%% 
+%%%    'pos'            Position of display3D on the screen.
+%%%                     If (1x2) positioned, if (1x4) sizes and positions
+%%%                     expecting [x y w h];
+%%%
 %%% Control options:
 %%%    'Middle mouse'   When hold, mouse movements changes contrast
 %%%    'Right mouse'    Revert to default contrast of the current array
@@ -32,7 +35,7 @@ data = reshape(data, sz(1), sz(2), []);
 % Process any variable options
 opt = struct;
 if nargin > 1
-   inp_arg = {'colormap','limit','tag'};
+   inp_arg = {'colormap','limit','tag','pos'};
    for ii = 1:2:size(varargin,2)
        opt_type = lower(varargin{ii});
        if sum(contains(inp_arg,opt_type))
@@ -70,9 +73,16 @@ end
 
 % At screen center
 fig_ps = (scrsz(3:4)./2) - ([fig_sz(1)  fig_sz(2)]./2); 
-
 fh.Position = [fig_ps fig_sz];
 
+% User Input: Position
+if isfield(opt,'pos')
+    if size(opt.pos,2) == 4
+        fh.Position = opt.pos;
+    else
+        fh.Position(1:2) = opt;pos;
+    end
+end
 
 
 % --- Add UI elements
@@ -251,7 +261,7 @@ if isfield(gui, 'mousePos')
 
     % Calculate new contrast
     currSlice    = gui.data(:,:,gui.sb.Value);
-    contrastStep = abs( max(currSlice(:))) / 100;
+    contrastStep = (abs( max(currSlice(:))) - abs(min(currSlice(:)))) / 256;
     contrastNew  = gui.ax.CLim + (contrastStep .* change);
     
     % Axis limit safety check
