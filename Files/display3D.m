@@ -25,6 +25,10 @@ function display3D(data,varargin)
 % Display 3D data quickly in a 2D plot with option to navigate through the
 % data.
 
+if nargin == 0
+    data = rand(25,25).*10;
+end
+
 % --- Process input
 
 % Squeeze and reshape data if necessary

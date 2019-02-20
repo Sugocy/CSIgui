@@ -50,7 +50,13 @@ close_to_HM = flip(abs( doii(1:max_ind) - max_half),2);
 % Find the lowest  e.g. almost zero! (Almost no difference)
 bool = islocalmin(close_to_HM); ind = find(bool == 1);
 % Take the first minimum e.g. first index to be half maximum from maximum
-fwhm_indr = ind(1);
+if isempty(ind)
+    figure();
+    plot(doii(1:max_ind)); fwhm_indr = max_ind;
+else
+    fwhm_indr = ind(1);
+end
+
 % Correct for the flip we applied
 fwhm_indr = abs( size(doii(1:max_ind),2) - fwhm_indr ) + 1;
 

@@ -23,7 +23,7 @@ function [data, varargout] = csi_readSDAT(fpn, dim)
 if nargin == 1
       % READ SPAR AS STRUCT.
       spar_info = csi_readSPAR([fpn '.SPAR']); 
-      if isnan(spar_info), data = NaN; varargout{1} = NaN; return; end
+      if ~isstruct(spar_info), data = NaN; varargout{1} = NaN; return; end
       
       % Find dimension paragraphs
       dimi = 1; go = 1;

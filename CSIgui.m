@@ -309,7 +309,7 @@ try
          ['View noise data from list/data file. Use the show '...
           'CSI-button or plot in menu > CSI to display. ' ...
           'To revert back to the original data, click here again.'], ...
-         ['Set data domain of MRSI data to frequency or time.']};
+          'Set data domain of MRSI data to frequency or time.'};
         
         nMenus = size(fieldnames(gui.menubar.MRSI),1)-1; % Remove main CSI
         for kk = 0:nMenus-1 % Start indexin @ zero - Matlab vs Java.
@@ -339,7 +339,7 @@ catch err
 end
 
 % --- Outputs from this function are returned to the command line.
-function varargout = CSIgui_OutputFcn(hObject, eventdata, gui)
+function varargout = CSIgui_OutputFcn(~, ~, gui)
 % varargout  cell array for returning output args (see VARARGOUT);
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -514,10 +514,8 @@ elseif strcmpi(ext, '.txt')                                    % TEXT
 elseif strcmpi(ext,'userinput')                                % USER
     
     % Parse the userinput
-    parse_userinput(gui);
-    % LOG updated by parse function
-    success = 1;
-    
+    success = parse_userinput(gui);
+
 else                                                           % ERROR 
     % Update LOG and return
     CSI_Log({'Warning. File format not supported.'},{ext});
@@ -623,7 +621,7 @@ function success = parse_text(fp, fn, gui)
 % Check if loading succeeded.
 if isnan(csi.data.raw)
     CSI_Log({'Loading text-file failed.'},{''}); 
-    return; success = 0; 
+    success = 0; return; 
 else
     success = 1;
 end
@@ -725,43 +723,47 @@ end
 setappdata(gui.CSIgui_main,'csi',csi); 
       
 % --- Parse USERINPUT
-function parse_userinput(gui)
+function succes = parse_userinput(gui)
 % Analyse userinput file, parse the data and store it into CSIgui appdata.
 %
 % Created: csi-struct and/or mri-struct
 
+succes = 0;
+
+% Check if userinput is available.
+if ~isfield(gui,'inp'), CSI_Log({'No userinput available.'},{''}); return; end
+
                            % SOME INFORMATION %
-% Labels to expect  'data','list','csi','spec','image','mrs','labels'
+% Expected userinput labels: 
+% 'data','list','csi','spec','image','mrs','labels'
 % Filepath(i) labels are already excluded from processing here; 
-% NB: mrs = csi = spec;
 
 % Label DATA % ----------------------------------------------------- %
 % If data-struct is given (from csi_loadData)
 if isfield(gui.inp,'data')
     userInfo = 'Data-struct loaded.';
 
-    try
-        % Set data struct
-        csi.data = gui.inp.data;
-
-        % Add dimension info.
-        csi.data.dim = size(csi.data.raw);
-        % Add extension info + Save filename
-        csi.ext = '.data'; csi.filename = data.filename;
+    try        
+        csi.data = gui.inp.data;             % Set data struct       
+        csi.data.dim = size(csi.data.raw);   % Add dimension info.
+        csi.ext = '.data'; csi.filename = data.filename; % File nfo
 
         % Save CSI data in app-data
         setappdata(gui.CSIgui_main,'csi',csi);   
 
     catch err
-        CSI_Log({'Failed processing user input!'},...
-                       {err.message}); return;
+        CSI_Log({'Failed processing user input!'},{err.message});   
+        succes = 0; return;
     end
 
     % Update process info for user.
     CSI_Log({'User input processed: '},{userInfo});
 
     % Calculate xaxis from available data
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_calc_xaxis(hObj,[],1); 
+    
+    % Parse succes
+    succes = 1;
 end
 
 % Label LIST % ----------------------------------------------------- %
@@ -776,10 +778,13 @@ if isfield(gui.inp,'list')
 
     % Update process info for user.
     CSI_Log({'User input processed: '},{userInfo});
+    
+    % Parse succes
+    succes = 1;
 end
 
 % Label CSI/SPEC % ------------------------------------------------- %
-% If csi == spec is given (spectrum array)
+% If csi, spec or mrs is given (spectrum array)
 if isfield(gui.inp,'csi') || ...
         isfield(gui.inp,'spec') || ...
                 isfield(gui.inp, 'mrs')
@@ -815,6 +820,9 @@ if isfield(gui.inp,'csi') || ...
 
     % Calculate xaxis from available data
     CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+    
+    % Parse succes
+    succes = 1;
 end
 
 % Label LABELS % --------------------------------------------------- %
@@ -831,6 +839,9 @@ if isfield(gui.inp,'labels')
 
     % Update processed info to user.
     CSI_Log({'User input processed: '},{userInfo});
+    
+    % Pase succes
+    succes = 1;
 end
 
 % --- Parse DICOM file
@@ -1080,12 +1091,12 @@ y = ceil( ( scrsz(4)/2 ) - (0.5*h) );
 % Set figure position
 set(aboutfig, 'position', [x y w h],'Unit','Normalized');
 
-title_h = uicontrol(aboutfig, 'Style','Text','Unit', 'Normalized',...
+ uicontrol(aboutfig, 'Style','Text','Unit', 'Normalized',...
           'Position', [0.1 0.9 0.5 0.05], 'String', about_title,...
           'ForegroundColor', clr_hl, 'BackgroundColor', clr_bg,...
           'HorizontalAlignment','Left','FontWeight','Bold');
 
-text_h = uicontrol(aboutfig, 'Style', 'Listbox', 'Unit', 'Normalized',...
+ uicontrol(aboutfig, 'Style', 'Listbox', 'Unit', 'Normalized',...
         'position', [0.1 0.1 0.8 0.8], 'String', about_text,...
         'ForegroundColor', clr_tx, 'BackgroundColor', clr_bg,...
         'HorizontalAlignment','Left');
@@ -2091,7 +2102,64 @@ if strcmp(uans,'No'), filter_window = NaN; end
 % Close the figure
 close(fh);
 
+% --- Executes on button press in button_CSI_Linewidth.
+function button_CSI_Linewidth_Callback(~, ~, gui)
 
+% Get app data
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Create backup
+CSI_backupSet(gui, 'Before linew.');
+
+% Process data
+tmp = csi.data.raw;
+
+% Get data at peak of interest
+[doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+
+
+% % Maximum in this range
+[~,mi] = max(real(doi),[],1);
+
+% Set max as peak centre.
+peak_pos = mi+range(1);
+
+        
+% % Peak width 
+peak_width = ceil(csi.xaxis.N/100);
+if peak_width < 3, peak_width = 3; end
+    
+
+% Peak range used to find FWHM
+% poi_range_perVox = peak_pos + [-peak_width peak_width];
+peak_pLow = num2cell(peak_pos - peak_width);
+peak_pHig = num2cell(peak_pos + peak_width);
+poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
+
+
+% Input cell data
+sz = size(tmp); 
+cell_layout = ...
+arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+
+% Input axis
+ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
+
+
+plot_off = repmat({1},size(tmp));
+% plot_off{1,2,4,1} = 1;
+
+linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
+    plot_off,'Uniform',0);
+
+CSI_dataAsGraph(cell2mat(linewidth), gui, 'LineWidth')
+CSI_dataAsTable(cell2mat(linewidth), 'LineWidth')
+% 
+% std_ofa = std(cell2mat(a), [], 6);
+% 
+% CSI_dataAsTable(std_ofa, 'LineWidth STD');
 
 
 % --- Executes on button press in button_CSI_setFrequency.
@@ -2122,7 +2190,7 @@ setappdata(gui.CSIgui_main, 'csi',csi);
 
 % Update info
 CSI_Log({'New labels:','Previous labels:',},...
-               {strjoin(csi.data.labels,' | '),strjoin(old_labels,' | ')});
+         {strjoin(csi.data.labels,' | '),strjoin(old_labels,' | ')});
 
            
            
@@ -2243,6 +2311,68 @@ else
         {new_order});
 end
 
+% --- Executes on button press in button_CSI_Bin.
+function button_CSI_Bin_Callback(hObject, eventdata, gui)
+% Bin a specific dimension, splitting up the csi data.
+
+% Check if csi app data exists
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+
+
+% User Input % -------- %
+% Dimension to bin over and number of bins?
+uans = getUserInput({'Dimension to bin: ','Number of bins: '},{1,2});
+if isempty(uans{1}), return; end
+dim = str2double(uans{1}); nbin = str2double(uans{2});
+
+
+% Create backup
+CSI_backupSet(gui, 'Before binning.');
+% Get CSI data
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+
+% Process data
+tmp = csi.data.raw;  sz = size(tmp);
+
+stepsz = sz(dim)/ nbin;
+if ~(mod(sz(dim),nbin)==0) % BIN size does not fit the dimension
+    CSI_Log({'Number of bins does not fit the data. Bin size:'},{stepsz});
+    return;
+end
+% Calculate vector with index in tmp for each bin.
+bin_vec = 1:stepsz:sz(dim); bin_vec(1,end+1) = sz(dim)+1;
+% Index cell for all other dimensions
+dim_vec = cellfun(@(x) 1:x, num2cell(sz),'uniform',0);
+dim_vec{dim} = NaN;
+
+sz_temp = sz; sz_temp(dim) = stepsz;
+bin = NaN([sz_temp(:)',nbin]);
+for bi = 1:size(bin_vec,2)-1
+    
+     % Index to correct arrays
+     dim_vec_temp = dim_vec; 
+     dim_vec_temp{dim} = bin_vec(bi):bin_vec(bi+1)-1;
+     % Data
+     tmp_bin = tmp(dim_vec_temp{:});
+     % Store
+     dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:stepsz;
+     dim_vec_temp{end+1} = bi;
+     bin( dim_vec_temp{:} ) = tmp_bin; 
+    
+end
+
+% Store data
+csi.data.raw = bin; csi.data.labels = cat(2,csi.data.labels,'bin');
+csi.data.dim = size(csi.data.raw);
+
+% Save appdata.
+setappdata(gui.CSIgui_main, 'csi', csi);
+
+% Log
+msg = ...
+sprintf('Binned dimension "%s" over %i bins', csi.data.labels{dim}, nbin);
+CSI_Log({msg},{''});
 
 
 % --- Executes on button press in button_CSI_Sum.
@@ -6806,11 +6936,15 @@ uicontrol(CSI_1Dobj, 'Style','Text', 'String', ['Tag: ' data1D.tag],...
     'Fontsize', 8, 'FontWeight', 'Bold',...
     'HorizontalAlignment','Left');
 
+% Create panel button
 uicontrol(CSI_1Dobj, 'Style','pushbutton','String','Panel',...
     'Unit','Pixels','Position',[figsz(3)-50 figsz(4)-20 50 20],...
     'Fontsize', 8,'FontWeight','Bold','HorizontalAlignment', 'Center',...
     'Callback',@CSI_1D_movePanelToGUI,...
-'TooltipString','Show 1D-options panel linked to this CSIgui 1D instance.');
+    'TooltipString',...
+    'Show the 1D-options panel linked to this CSIgui 1D instance.',...
+    'Unit','normalized'); % Revert to normalized units!
+
 % CSIgui-1D: Clean up % ----------------------------------- %
 % ---------------------------------------------------------- %
 
@@ -6828,46 +6962,20 @@ CSI_1D_displayData(CSI_1Dobj);
 
 % Launch 1D control panel
 try   
-     CSI_1D_panel(instance);
+     CSI_1D_panel(instance); % Execute
+     CSI_1D_movePanelToGUI(CSI_1Dobj); % Position
 catch err
     CSI_Log({'Error: CSI 1D Panel could not open'},{err.message});
 end
 
-
-% try 
-%     figure(CSI_1Dobj); drawnow;
-%     CSI_1D_snap2fig_set(CSI_1Dobj, instance);
-% catch err
-%     err.message
-% end
-
-function CSI_1D_snap2fig_set(CSI_1Dobj, instance)
-
-% 1. Search for figure object.
-pause(0.25);
-jFig = get(CSI_1Dobj, 'JavaFrame');  % get JavaFrame. 
-jWindow = jFig.fHG2Client.getWindow;
-try 
-    jbh = handle(jWindow,'CallbackProperties'); % Prevent memory leak
-catch
-    pause(0.5);
-    jbh = handle(jWindow,'CallbackProperties');
-end
-% 2. Set function
-set(jbh,'ComponentMovedCallback',@CSI_1D_snap2fig);
-
-figure(CSI_1Dobj);
-
-function CSI_1D_snap2fig(~, ~)
-% Assume gcf is figure of interest as user move this figure!
-hObj.Parent = gcf;
-% Move panel to 1D gui figure
-CSI_1D_movePanelToGUI(hObj); drawnow;
-
+% --- Executed by panel-button in CSIgui_1D; panel to figure snap
 function CSI_1D_movePanelToGUI(hObj, ~)
+% Snap the panel to the current figure.
+% Pa = panel; obj1D = figure;
 
 % Get CSIgui 1D figure object
-obj1D = hObj.Parent; 
+if ~strcmp(hObj.Type,'figure'), obj1D = hObj.Parent; else, obj1D = hObj; end
+
 % Get its panel window
 objPa = panel_1D_getInstanceData(hObj,'CSIpanel_1D'); 
 if ~ishandle(objPa), return; end
@@ -6876,30 +6984,14 @@ if ~ishandle(objPa), return; end
 posPa = objPa.Position; pos1D = obj1D.Position;
 
 % Calculate new position
-szPa = posPa(3:4); sz1D = pos1D(3:4); 
-psPa = posPa(1:2); ps1D = pos1D(1:2);
+szPa = posPa(3:4); sz1D = pos1D(3:4); ps1D = pos1D(1:2);
 newYX = (sz1D + ps1D); 
 newYX(1) = newYX(1) + 5; newYX(2) = newYX(2) - sz1D(2);
-
- 
-% fob = findobj('Tag','ShowThis');
-% if isempty(fob)
-%     fob = figure('Tag','ShowThis');
-%     plot(psPa);
-% else
-%     ax = fob.Children;
-%     data = ax.Children(1).YData;
-%     data = [data psPa];
-%     ax.Children(1).YData = data;
-% end
 
 % Set new position of panel
 objPa.Position = [newYX szPa];
 
-% fprintf('%f\n',objPa.Position);
-
-figure(objPa);
-
+figure(objPa); % Figure to top.
 
 % --- Executed to close the 1D Plot GUI
 function CSI_1D_closeGUI(hObj, ~)
@@ -6995,7 +7087,7 @@ end
 % --- Panel with additional functions to enable 1D data editting.
 % All available function in 1D_panel found with panel_1D_[Func name];
 function CSI_1D_panel(instance)
-% Create a small dialog with specific functions applicable to the 1D
+% Create a small window with specific functions applicable to the 1D
 % spectrum. Processed data is stored in this 1D plot figure. Use
 % Replace_Voxel e.g. SaveToMain to store the data back into CSIgui-main.
 %
@@ -7097,7 +7189,11 @@ function obj1D  = panel_1D_getInstanceData(hObj,tag)
 if nargin == 1, tag = 'CSIgui_plot1D'; end
 
 % Get instance from object
-instance = getappdata(hObj.Parent,'instance');
+if ~strcmp(hObj.Type,'figure')
+    instance = getappdata(hObj.Parent,'instance');
+else
+    instance = getappdata(hObj,'instance');
+end
 
 % Get figures
 obj1D_act = findobj('Tag',tag); % Figure handles
@@ -7569,8 +7665,6 @@ setappdata(CSIgui_main_obj, 'csi', csi);
 % Replot the 2D plot!
 CSI_2D_initiate2D();
 
-
-
 % --- Executes when user presses "FFT" in panel_1D.
 function panel_1D_FFT(hObj, ~)
 % Time to frequency domain.
@@ -7924,6 +8018,10 @@ if val <= sz, str(val) = []; gui.listbox_CSIinfo.String = str; end
 function CSI_viewNoise(hObject, ~, ~)
 % Gui-data struct.
 gui = guidata(hObject);
+
+
+
+
 
 % End if no CSI data present
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -9064,7 +9162,7 @@ end
 
 
 % --------------------------------------------------------------------- %
-    % Everything below here is new and wrongly located positioned  %
+            %   Everything below here is new and in beta!  %
                         % Probably not finished %
 % --------------------------------------------------------------------- %
 
@@ -9630,7 +9728,7 @@ for kk = 1:nfig
 end
 
 
-%%% MERGE VOXELS % ------------------------------------------------------ %
+%%% ----------- % ------------------------------------------------------ %
 
 
 
@@ -9859,7 +9957,8 @@ function CSI_Normalize(gui)
 
 % Get userinput: normalize how?
 uans = getUserInput_Popup({'Normalize by: '},{{'Maximum per voxel',...
-                                               'Maximum in volume'}});
+                                               'Maximum in volume',...
+                                               'Specific peak per voxel'}});
 if isempty(uans), return; end
 
 % Create backup
@@ -9872,8 +9971,13 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % Get data-array
 data = csi.data.raw;
 
+
+
 % Split units: use real for normalization
 dataR = CSI_getUnit(data,'Real'); dataI = CSI_getUnit(data,'Imaginary');
+
+
+
 
 % Data as cell index layout
 sz = size(dataR); cell_layout = ...
@@ -9882,7 +9986,17 @@ arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
 % Create cell of data.
 datac = mat2cell(dataR, sz(1), cell_layout{:});
 
+
+
 switch uans{1}
+    case 'Specific peak per voxel'
+        % Get peak of interest
+        [doi, range] = CSI_getDataAtPeak(data, csi.xaxis);
+        if isnan(doi), return; end
+        % Maximum to normalize to.
+        max_val = max(real(doi),[],1); 
+        datac = cellfun(@(x,y) x./y, datac,repmat({max_val},size(datac)), 'Uniform', 0);
+        
     case 'Maximum per voxel'
         
         % Normalize to maximum of each voxel
@@ -9909,129 +10023,5 @@ function button_Normalize_Callback(~ , ~, gui)
 CSI_Normalize(gui);
 
 
-% --- Executes on button press in button_CSI_Bin.
-function button_CSI_Bin_Callback(hObject, eventdata, gui)
-% Bin a specific dimension, splitting up the csi data.
-
-% Check if csi app data exists
-if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 
 
-% User Input % -------- %
-% Dimension to bin over and number of bins?
-uans = getUserInput({'Dimension to bin: ','Number of bins: '},{1,2});
-if isempty(uans{1}), return; end
-dim = str2double(uans{1}); nbin = str2double(uans{2});
-
-
-% Create backup
-CSI_backupSet(gui, 'Before binning.');
-% Get CSI data
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-
-% Process data
-tmp = csi.data.raw;  sz = size(tmp);
-
-stepsz = sz(dim)/ nbin;
-if ~(mod(sz(dim),nbin)==0) % BIN size does not fit the dimension
-    CSI_Log({'Number of bins does not fit the data. Bin size:'},{stepsz});
-    return;
-end
-% Calculate vector with index in tmp for each bin.
-bin_vec = 1:stepsz:sz(dim); bin_vec(1,end+1) = sz(dim)+1;
-% Index cell for all other dimensions
-dim_vec = cellfun(@(x) 1:x, num2cell(sz),'uniform',0);
-dim_vec{dim} = NaN;
-
-sz_temp = sz; sz_temp(dim) = stepsz;
-bin = NaN([sz_temp(:)',nbin]);
-for bi = 1:size(bin_vec,2)-1
-    
-     % Index to correct arrays
-     dim_vec_temp = dim_vec; 
-     dim_vec_temp{dim} = bin_vec(bi):bin_vec(bi+1)-1;
-     % Data
-     tmp_bin = tmp(dim_vec_temp{:});
-     % Store
-     dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:stepsz;
-     dim_vec_temp{end+1} = bi;
-     bin( dim_vec_temp{:} ) = tmp_bin; 
-    
-end
-
-% Store data
-csi.data.raw = bin; csi.data.labels = cat(2,csi.data.labels,'bin');
-csi.data.dim = size(csi.data.raw);
-
-% Save appdata.
-setappdata(gui.CSIgui_main, 'csi', csi);
-
-% Log
-msg = ...
-sprintf('Binned dimension "%s" over %i bins', csi.data.labels{dim}, nbin);
-CSI_Log({msg},{''});
-
-
-% --- Executes on button press in button_CSI_Linewidth.
-function button_CSI_Linewidth_Callback(hobj, evt, gui)
-% Get app data
-if ~isappdata(gui.CSIgui_main, 'csi'),return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-% Create backup
-% CSI_backupSet(gui, 'Before linew.');
-
-% Process data
-tmp = csi.data.raw; sz = size(tmp);
-
-% range = CSI_getPeakOfInterest(csi.xaxis)
-
-
-% Get data at peak of interest
-[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
-
-
-% % Maximum in this range
-[~,mi] = max(real(doi),[],1);
-
-% Set max as peak centre.
-peak_pos = mi+range(1);
-
-        
-% % Peak width 
-peak_width = ceil(csi.xaxis.N/100);
-if peak_width < 3, peak_width = 3; end
-    
-
-sz = size(peak_pos); lw = NaN(sz); lwv = NaN(sz(1),2); lwp = NaN(sz(1),2);
-
-% Peak range used to find FWHM
-% poi_range_perVox = peak_pos + [-peak_width peak_width];
-peak_pLow = num2cell(peak_pos - peak_width);
-peak_pHig = num2cell(peak_pos + peak_width);
-poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
-
-
-% Input cell data
-sz = size(tmp); 
-cell_layout = ...
-arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
-
-% Input axis
-ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
-
-
-plot_off = repmat({0},size(tmp));
-plot_off{1,2,4,1} = 1;
-
-[a,b,c] = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
-    plot_off,'Uniform',0);
-
-CSI_dataAsGraph(cell2mat(a), gui, 'LineWidth')
-CSI_dataAsTable(cell2mat(a), 'LineWidth')
-
-std_ofa = std(cell2mat(a), [], 6);
-
-CSI_dataAsTable(std_ofa, 'LineWidth STD');
