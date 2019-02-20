@@ -5520,7 +5520,7 @@ if isfield(openFig,'grid_sz') && ...
     % Reuse figure %
     
     % Copy structs;
-    plot_par.fh = openFig.obj; plot_par = openFig.gui;
+    plot_par = openFig.gui; plot_par.fh = openFig.obj; 
 else 
     % Create figure %
     
@@ -5534,9 +5534,9 @@ else
     % Create figure and figure-options
     plot_par = CSI_2D_setFigure(plot_par, old_pos);
 
-end % End of "if create fig is yes"
+end % End of "if create fig yes/no"
 
-% ---- % Save xaxis to plot parameters: always as can be updated.
+% ---- % Save xaxis to plot parameters: every time as can be updated.
 plot_par.xaxis = csi.xaxis; 
 
 % ------- % Get data for plotting
@@ -5615,6 +5615,10 @@ end
 
 % Save figure object
 plot_par.fh = fh;
+
+% SNAP 2 PLOT % --------------------------------------- %
+% Add snapping of 2D panel to main plot figure.
+panel_2D_followPlot2D_initiate();
 
 % --- Executed by CSI_plot2D_initiate and other to get plot-data.
 function plot_par = CSI_2D_getData(plot_par, gui, data_volume)
@@ -6136,6 +6140,58 @@ else
      
 end
 
+function panel_2D_followPlot2D_initiate(hobj)
+% Initiate the panel2D to follow CSIgui2D plot figure if this screen is 
+% moved.
+%
+% Requires some javascript to work.
+
+% Master object
+if nargin ~= 1
+    hobj = findobj('Tag', 'CSIgui_plot2D', 'Type', 'Figure');
+    if isempty(hobj), return; end
+end
+
+try
+    % Just chill for a moment
+    pause(0.05); % Wait for the figure construction complete.
+
+    % Get JavaFrame: warnings
+    jFig = get(hobj, 'JavaFrame'); 
+    % Get Windowclient
+    jWindow = jFig.fHG2Client.getWindow; 
+    % Prevent memory leak
+    jbh = handle(jWindow,'CallbackProperties');
+    % Set new callback
+    set(jbh,'ComponentMovedCallback',@panel_2D_followPlot2D);
+catch err
+    CSI_Log({'Error in followPlot2D_initiate'},{err.Message});
+    return;
+end
+
+function panel_2D_followPlot2D(~,~)
+% Moves the 2D panel with sliders to the 2D plot figure automatically.
+% Executed when user moves the main 2D plot window.
+
+try 
+    % Master
+    mgui = findobj('Tag', 'CSIgui_plot2D', 'Type', 'Figure');
+    % Slave
+    sgui = findobj('Tag', 'CSIpanel_2D_DataToDisplay', 'Type', 'Figure');
+
+    % Master and slave position
+    mpos = mgui.Position; spos = sgui.Position;
+
+    % Calculate new position slave
+    spos_new = spos; spos_new(1:2) = mpos(1:2); 
+    spos_new(1) = spos_new(1) + mpos(3);
+    % Set new position of slave
+    sgui.Position = spos_new;
+
+catch err
+    CSI_Log({'Error in followPlot2D'},{err.Message});
+    return;
+end
 
 % PLOT 2D SCALING % ---------------------------------------------------- %
 
@@ -6653,6 +6709,9 @@ for sli = 1:numel(dim)
 end
 % Update figure with its sgui - subgui.
 guidata(fh, sgui);
+
+
+
 
 % --- Executes when user changes slider in CSIpanel_2D_DataToDisplay.
 function panel_2D_sliders(hObject, eventdata)
