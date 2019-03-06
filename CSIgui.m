@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 02-Feb-2019 16:09:59
+% Last Modified by GUIDE v2.5 22-Feb-2019 20:28:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -127,7 +127,7 @@ gui.menubar.file.close = ...
 % 2.MRSI % ------------------------------------------------------------- %
 gui.menubar.MRSI.main = uimenu(gui.CSIgui_main, 'Label', 'MRSI');
 
-% 2.MRSI > Plot
+% 2.MRSI > Undo
 gui.menubar.MRSI.undo = ...
     uimenu(gui.menubar.MRSI.main,'Label', 'Undo', 'Enable', 'on',...
     'Accelerator', 'z', 'Callback', @CSIgui_Undo);
@@ -136,6 +136,31 @@ gui.menubar.MRSI.undo = ...
 gui.menubar.MRSI.plot = ...
     uimenu(gui.menubar.MRSI.main,'Label', 'Plot', 'Enable', 'on',...
     'Callback', @CSI_2D_initiate2D);
+
+% 2.MRSI > Operators
+gui.menubar.MRSI.operations.main = ...
+    uimenu(gui.menubar.MRSI.main,'Label', 'Operators', 'Enable', 'on');
+
+% 2.MRSI > Operations >  Multiply
+gui.menubar.MRSI.operations.mul = ...
+    uimenu(gui.menubar.MRSI.operations.main,'Label', 'Multiply',...
+    'Enable', 'on','Callback', @button_CSI_Multiply_Callback);
+
+% 2.MRSI > Operations >  Divide
+gui.menubar.MRSI.operations.div = ...
+    uimenu(gui.menubar.MRSI.operations.main,'Label', 'Divide',...
+    'Enable', 'on','Callback', @button_CSI_Divide_Callback);
+
+% 2.MRSI > Operations >  Sum
+gui.menubar.MRSI.operations.sum = ...
+    uimenu(gui.menubar.MRSI.operations.main,'Label', 'Sum',...
+    'Enable', 'on','Callback', @button_CSI_Sum_Callback);
+
+% 2.MRSI > Operations >  Mean
+gui.menubar.MRSI.operations.avg = ...
+    uimenu(gui.menubar.MRSI.operations.main, 'Label', 'Average',...
+    'Enable', 'on','Callback', @button_CSI_Average_Callback);
+
 
 % 2.MRSI > Color Scaling (2D)
 gui.menubar.MRSI.ColorScale.main = ...
@@ -192,6 +217,8 @@ gui.menubar.MRSI.domain.time = ...
 gui.menubar.MRSI.domain.frequency = ...
     uimenu(gui.menubar.MRSI.domain.main,'Label', 'Frequency',...
     'Enable', 'on','Callback', @CSI_setDomain);
+
+
 
 % 2.MRSI > Noise
 gui.menubar.MRSI.noise = ...
@@ -1638,6 +1665,10 @@ function button_CSI_Average_Callback(~, ~, gui)
 
 % BACKUP + APPDATA % ------------------------------- %
 
+
+% If no GUI as input
+if nargin ~= 3, gui = guidata(hobj); end
+
 % Create backup
 CSI_backupSet(gui, 'Before averaging.');
 
@@ -2380,11 +2411,19 @@ function button_CSI_Sum_Callback(~, ~, gui)
 % Summate MRSI data over a specific dimensions
 
 % BACKUP + APPDATA % ------------------- %
+
+
+% If no GUI as input
+if nargin ~= 3, gui = guidata(hobj); end
+
 CSI_backupSet(gui, 'Before summation.'); 
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
+
+
+
 
 % FUNCTION % --------------------------- %
 
@@ -3079,15 +3118,21 @@ CSI_Log({'Rotated plane'},...
     {[csi.data.labels{rot_plane(2)} ' | ' csi.data.labels{rot_plane(1)}]});
 
 % --- Executes on button press in button_CSI_Multiply.
-function button_CSI_Multiply_Callback(hObject, eventdata, gui)
+function button_CSI_Multiply_Callback(hobj, ~, gui)
 % Multiply the MRS data
 
-% Get CSI data-structure
-if ~isappdata(gui.CSIgui_main,'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
+% If no GUI as input
+if nargin ~= 3, gui = guidata(hobj); end
+
 
 % Create backup
-CSI_backupSet(gui, 'Before multiplication');     
+CSI_backupSet(gui, 'Before multiplication'); 
+
+
+% Get CSI data
+if ~isappdata(gui.CSIgui_main,'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+    
 
 % Userinput % --------------------- %
 
@@ -3108,15 +3153,21 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 CSI_Log({'MRS data multiplied by '},{fac});
 
 % --- Executes on button press in button_CSI_Divide.
-function button_CSI_Divide_Callback(hObject, eventdata, gui)
+function button_CSI_Divide_Callback(hobj, ~, gui)
 % Divide the MRS data
+
+
+% If no GUI as input
+if nargin ~= 3, gui = guidata(hobj); end
+
+% Create backup
+CSI_backupSet(gui, 'Before dividing');   
+
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
-
-% Create backup
-CSI_backupSet(gui, 'Before dividing');     
+  
 
 % Userinput % --------------------- %
 
@@ -5618,7 +5669,7 @@ plot_par.fh = fh;
 
 % SNAP 2 PLOT % --------------------------------------- %
 % Add snapping of 2D panel to main plot figure.
-panel_2D_followPlot2D_initiate();
+panel_2D_followPlot2D_initiate(); panel_2D_followPlot2D();
 
 % --- Executed by CSI_plot2D_initiate and other to get plot-data.
 function plot_par = CSI_2D_getData(plot_par, gui, data_volume)
@@ -6140,6 +6191,7 @@ else
      
 end
 
+% --- % Executed by CSI_2D_setFigure.
 function panel_2D_followPlot2D_initiate(hobj)
 % Initiate the panel2D to follow CSIgui2D plot figure if this screen is 
 % moved.
@@ -6169,6 +6221,7 @@ catch err
     return;
 end
 
+% --- % Executed if user moves plot2D window
 function panel_2D_followPlot2D(~,~)
 % Moves the 2D panel with sliders to the 2D plot figure automatically.
 % Executed when user moves the main 2D plot window.
@@ -6187,9 +6240,10 @@ try
     spos_new(1) = spos_new(1) + mpos(3);
     % Set new position of slave
     sgui.Position = spos_new;
-
+    
+    figure(sgui);
 catch err
-    CSI_Log({'Error in followPlot2D'},{err.Message});
+    CSI_Log({'Error in followPlot2D'},{err.message});
     return;
 end
 
@@ -7656,7 +7710,8 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 % Baseline correction % ----------------- %
 
-[data_new, bline, blevel, best] = csi_baseline(data, 1, 0);
+% ... , bline, blevel, best
+data_new = csi_baseline(data, 1, 0);
 
 % Store in 1D app structure
 appdata1D.voxel.processed = data_new;
@@ -8039,14 +8094,14 @@ end
 
 
 % 3. CREATE NEW
-str_new = {stand_info{:} new_info{:} str_save{:}};
+str_new = cat(1, stand_info, new_info, str_save);
 
 try 
     % Print to info-box.
     set(gui.listbox_CSIinfo, 'Value', 1, 'String', str_new);
 catch 
     % Warn if something goes wrong.
-    warning('Something in CSI_Log went wrong. No listbox update!');
+    warning('Something in CSI_Log went wrong. No list box update!');
 end
 drawnow;
 
@@ -8079,9 +8134,6 @@ function CSI_viewNoise(hObject, ~, ~)
 gui = guidata(hObject);
 
 
-
-
-
 % End if no CSI data present
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
@@ -8096,7 +8148,7 @@ if isfield(csi.data, 'noise')
         % Message
         msg = 'Replaced noise data by backup of original.';
         % Set correct menu-label
-        gui.menubar.CSI_noise.Label = 'View Noise';
+        gui.menubar.MRSI.noise.Label = 'Import Noise..';
     else    
         % Create backup raw
         csi.data.backup_toview_noise = csi.data.raw;
@@ -8105,7 +8157,7 @@ if isfield(csi.data, 'noise')
         % Info for user
         msg = 'Noise data inserted. Backup of original created.';
         % Set correct menu-label
-        gui.menubar.CSI_noise.Label = 'Revert to Original';
+        gui.menubar.MRSI.noise.Label = 'Revert to Data..';
     end
     
     % Save appdata.
@@ -9885,7 +9937,8 @@ if plot_par.data_dim == 1, plot_par.dim(2) = 1; plot_par.data_dim = 2; end
               % -------- % Figure: Axis Grid % -------- %
 
 % Axes linewidth: One point == 1/72 inch.
-axlw_pt = 1;            
+% axlw_pt = 1;
+
 % Resolution without any correction of linewidth
 plot_par.res = 1./plot_par.dim(1:2); 
 
@@ -10030,12 +10083,8 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % Get data-array
 data = csi.data.raw;
 
-
-
 % Split units: use real for normalization
 dataR = CSI_getUnit(data,'Real'); dataI = CSI_getUnit(data,'Imaginary');
-
-
 
 
 % Data as cell index layout
@@ -10050,11 +10099,12 @@ datac = mat2cell(dataR, sz(1), cell_layout{:});
 switch uans{1}
     case 'Specific peak per voxel'
         % Get peak of interest
-        [doi, range] = CSI_getDataAtPeak(data, csi.xaxis);
+        doi = CSI_getDataAtPeak(data, csi.xaxis);
         if isnan(doi), return; end
         % Maximum to normalize to.
         max_val = max(real(doi),[],1); 
-        datac = cellfun(@(x,y) x./y, datac,repmat({max_val},size(datac)), 'Uniform', 0);
+        datac = cellfun(@(x,y) x./y, ...
+            datac,repmat({max_val},size(datac)), 'Uniform', 0);
         
     case 'Maximum per voxel'
         
@@ -10080,7 +10130,3 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % --- Executes on button press in button_Normalize.
 function button_Normalize_Callback(~ , ~, gui)
 CSI_Normalize(gui);
-
-
-
-
