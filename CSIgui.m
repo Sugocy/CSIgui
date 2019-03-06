@@ -3531,6 +3531,7 @@ if size(unique(csi.data.labels)) ~= size(csi.data.labels)
 end
 
 cur2prev_permv = csi_findDimLabel(tmp_label, csi.data.labels);
+
 csi.data.raw   = permute(tmp,cur2prev_permv);
 
 % Update csi.data.dim data.
@@ -3585,9 +3586,19 @@ if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
 % USERINPUT % --------------------------------- %
-uans = getUserInput_Popup({'Display type: '},{{'Graph', 'Table'}});
+uans = getUserInput_Popup({'Display type: ',...
+                           'Select peak: '},...
+                          {{'Graph', 'Table'},{'Yes','No'}});
 if isempty(uans), return; end
+
+% User requested data dsisplay
 dataDisp = lower(uans{1});
+
+% User requested peak selection
+switch uans{2}
+    case 'Yes', selectPeak = 1;
+    case 'No',  selectPeak = 0;
+end
 
 % FID & Echo detection
 combine_fe = 0;
@@ -3601,11 +3612,26 @@ if isfield(csi.data,'split')
     switch uans{1}, case 'Yes', combine_fe = 1; end
 end
 
-% MAX/VOXEL % -------------------------------- %
+
+
+
+% Data % -------------------------------- %
 
 % Get the data and apply data unit.
 data_unit = get(gui.popup_plotUnit,'String');
 data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
+
+% SELECT PEAK% -------------------------------- %
+
+if selectPeak
+    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+else
+    doi   = csi.data.raw;
+    range = [csi.xaxis.none(1) csi.xaxis.none(end)]; 
+end
+
+% MAX/VOXEL % -------------------------------- %
+
 
 if combine_fe
     
@@ -3629,7 +3655,7 @@ if combine_fe
     
 else
     % Get data in unit
-    data = CSI_getUnit(csi.data.raw, data_unit);
+    data = CSI_getUnit(doi, data_unit);
     % Calculate the maximum values/voxel.
     data_max = max(data,[],1);
 
@@ -4774,8 +4800,14 @@ for kk = 1:size(ind,1)
     selected(kk,1) = data(ind(kk,1),ind(kk,2));
 end
 
-date_str = datestr(now,'YYmmdd_HHMMSS');
-save([date_str '_SNR_Table.mat'],'data','selected','ind'); 
+% date_str = datestr(now,'YYmmdd_HHMMSS');
+% save([date_str '_SNR_Table.mat'],'data','selected','ind'); 
+
+[fn, fp, fi] = ...
+    uiputfile({'*.mat;*.txt','File (*.txt, *.mat)'},'Save table data...');
+if fi == 0, return; end
+
+save([fp  fn],'data','selected','ind'); 
 
 % COORDINATES % -------------------------------------------------------- %
 
@@ -5667,9 +5699,9 @@ end
 % Save figure object
 plot_par.fh = fh;
 
-% SNAP 2 PLOT % --------------------------------------- %
+% SNAP 2 PLOT % --------------------------------------- % DEV Experimental
 % Add snapping of 2D panel to main plot figure.
-panel_2D_followPlot2D_initiate(); panel_2D_followPlot2D();
+% panel_2D_followPlot2D_initiate(); panel_2D_followPlot2D();
 
 % --- Executed by CSI_plot2D_initiate and other to get plot-data.
 function plot_par = CSI_2D_getData(plot_par, gui, data_volume)
@@ -8094,7 +8126,8 @@ end
 
 
 % 3. CREATE NEW
-str_new = cat(1, stand_info, new_info, str_save);
+% str_new = cat(1, stand_info, new_info, str_save);
+str_new = {stand_info{:} new_info{:} str_save{:}};
 
 try 
     % Print to info-box.
