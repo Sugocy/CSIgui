@@ -1,23 +1,23 @@
-function data = CSIcoordinates(data, origin, vox_cor, fft_cor)
-%
-% WRITTEN FOR CSI - LIST/DATA
+function data = csi_coordinates(data, origin, vox_cor, fft_cor)
+% COMPATIBLE WITH CSI DATA LOADED FROM LIST/DATA FILES.
 %
 % Data:         Offcenter, dimensions, resolution.
 %
 % Origin:       Offcenter origin set to topleft (default) 
 %               or center of image volume.
 %
-% Optional - voxel correction: add 0.5 a voxel to offcenter. If you do not
-%                              know dont use.
+% Optional - voxel correction: subtract 0.5 a voxel to offcenter
+% Optional - fourier transform correction: add 0.5 voxel
 %
 % Offcenter: 1=LR; 2=AP; 3=FH;
 % Assume it describes the center of first top left voxel transmitted (equal
 % definition to dicom header def. of the offcenter tag). NOT TRUE..
 %
-% For CSI data be aware of the extra dimension in data.res and data.dim for
-% the samples itself. Remove them;)
+% NB Be aware of the extra dimension in data.res and data.dim for
+% the sample dimension itself. Clear this index. 
 %
-% WRITTEN FOR CSI - LIST/DATA
+% contact:
+% qhoutum2@umcutrecht.nl | quincyvanhoutum@gmail.com
 
 
 if     nargin == 1, origin = 'topleft'; vox_cor = 0; fft_cor = 0;

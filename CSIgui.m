@@ -2179,7 +2179,7 @@ tmp = mat2cell(tmp, sz(1), cell_layout{:});
 ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
 
 
-plot_off = repmat({1},size(tmp));
+plot_off = repmat({0},size(tmp));
 % plot_off{1,2,4,1} = 1;
 
 linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
@@ -4896,7 +4896,7 @@ if isfield(ori,'vox_cor')
     if strcmp(ori.vox_cor, 'Yes'), dans2{1} = {'Yes','No'};
     else,                          dans2{1} = {'No', 'Yes'};       
     end
-else, dans2{1} = {'No','Yes'}; 
+else, dans2{1} = {'Yes','No'}; 
 end
 
 if isfield(ori,'FFT_cor') 
@@ -4925,7 +4925,7 @@ ori.vox_cor = uans2{1}; ori.fft_cor = uans2{2};
 % Coordinates of CSI data.
 % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
 % volume limit (limit_vol).
-csi.ori = CSIcoordinates(ori,'center', vox_cor, fft_cor); 
+csi.ori = csi_coordinates(ori,'center', vox_cor, fft_cor); 
 
 
 % Calculate volume gird % ----------- %
