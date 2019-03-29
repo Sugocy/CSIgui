@@ -64,30 +64,34 @@ switch origin
             N = data.dim(kk); res = data.res(kk); 
             offc = data.offcenter(kk);
             
-%           vec_form = @(N) -1.* N/2 : 1 : (N-1)/2;
+            % Grid vector
             vec_form = @(N)   -1.*(N-1)/2 : 1 : (N)/2;
-            
-            if vox_cor      
-                % Grid points per voxel but correct if N equals odd
-                % E.g. there is no middle voxel.
-                
-                odd = mod(N,2);
-                if odd
-                    vec = vec_form(N);
-                else
-                    % Because no middle voxel, minus half a voxel.
-                    vec = vec_form(N) - 0.5; 
-                end
-                
-            else
-                % Grid points for each voxel
-                vec = vec_form(N) ; 
-            end
-            
+
+% 30032019 - Appears the vox-correction isnt necessary! Correct fourier
+% shifting is however!
+%             if vox_cor      
+%                 % Grid points per voxel but correct if N equals odd
+%                 % e.g. there is no center voxel.
+%                 
+%                 odd = mod(N,2);
+%                 if odd
+%                     vec = vec_form(N);
+%                 else
+%                     % Because no middle voxel, minus half a voxel.
+% %                     vec = vec_form(N) - 0.5; 
+%                     vec = vec_form(N);
+%                 end
+%                 
+%             else
+%                 % Grid points for each voxel
+%                 vec = vec_form(N) ; 
+%             end
+             vec = vec_form(N) ; 
+
             
             % Calculate coordinates per point and add offcenter.
             vec = (vec .* res) + offc;
-                
+               
             
             % Correct half a voxel shift due FFT method
             if fft_cor

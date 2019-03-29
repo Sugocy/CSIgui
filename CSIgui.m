@@ -1786,13 +1786,14 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % GET OPTION INPUT % ------------------- %
 
-quest = {'Circular shift (0) or Fourier shift (1)'};
-defan = {{'0','1'}};
-uans = getUserInput_Popup(quest,defan);
-if isempty(uans), return; end
-
-% Set option
-shift_opt = str2double(uans{1});
+% quest = {'Circular shift (0) or Fourier shift (1)'};
+% defan = {{'0','1'}};
+% uans = getUserInput_Popup(quest,defan);
+% if isempty(uans), return; end
+% 
+% % Set option
+% shift_opt = str2double(uans{1});
+shift_opt = 2; % SET TO AUTOMATIC
 
 % K-space index: find the spatial dimensions/indexes: ask if not found.
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -1808,7 +1809,7 @@ end
 % Raw data fourier - CSI specific. 1D K-space data does NOT require this. 
 % If FID to SPectra is required, use csi_fft
 csi.data.raw = csi_rawfft(csi.data.raw, spat_dim, shift_opt);
-
+% shift_opt
 
 % CLEAN UP % -------------------------- %
 
@@ -1816,12 +1817,24 @@ csi.data.raw = csi_rawfft(csi.data.raw, spat_dim, shift_opt);
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % After update info
+
+% Spatial info to user.
 if spat_dim <= size(csi.data.labels,2) 
     CSI_Log({'Applied FFT over spatial dimension(s)'},...
                     {strjoin(csi.data.labels(spat_dim), ' | ')});
 else
     CSI_Log({'Applied FFT over spatial dimension(s) '},{spat_dim});
 end
+
+% Shift method to user.
+if shift_opt == 1
+    tmp = 'FFT shift'; 
+elseif shift_opt == 2
+    tmp = 'Automatic (fft- circular- for odd/even dimensions)';
+else
+    tmp = 'Circular shift';
+end
+CSI_Log({'Used FFT shift method: '}, {tmp});
 
 % --- Executes on button press in button_CSI_FFT.
 function button_CSI_FFT_Callback(~, ~, gui)
@@ -2994,9 +3007,16 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 if isempty(poi), return; end
 
 % Get method of auto-phasing
-uans = getUserInput_Popup({'Auto phasing method:'},{{2,1}});
+uans = getUserInput_Popup({'Auto phasing method:'},...
+    {{'Match real part to maximum absolute signal.',...
+      'Maximize real part of signal.'}});
 if isempty(uans), return; end
-ph_meth = str2double(uans{1});
+
+switch uans{1}
+    case 'Match real part to maximum absolute signal.', phase_method = 2;
+    case 'Maximize real part of signal.',phase_method = 1;
+end
+
 
 % APPLY CORRECTION % ----------------------------- %
 
@@ -3016,10 +3036,10 @@ cell_mrsi = mat2cell(csi.data.raw, sz(1), cell_layout{:});
 % Apply auto zerophase to each cell
 cell_mrsi_phased = ...
 cellfun(@csi_autoZeroPhase, ...
-            cell_mrsi, ...                          % data
-            repmat({poi},    size(cell_mrsi)),...   % range
-            repmat({ph_meth},size(cell_mrsi)),...   % method
-            repmat({0},      size(cell_mrsi)),...   % plot
+            cell_mrsi, ...                              % data
+            repmat({poi},    size(cell_mrsi)),...       % range
+            repmat({phase_method},size(cell_mrsi)),...  % method
+            repmat({0},      size(cell_mrsi)),...       % plot
             'UniformOutput', 0);            
 
 % MRSI data to array        
@@ -3037,7 +3057,7 @@ if strcmp(domain,'time'), csi.data.raw = csi_ifft(csi.data.raw); end
 setappdata(gui.CSIgui_main,'csi',csi);
 
 % Update info to user.
-CSI_Log({'Applied automatic zero order phase correction:'},{poi});
+CSI_Log({'Applied automatic zero order phase correction:'},uans);
 
 % --- Executes on button press in button_CSI_Flip.
 function button_CSI_Flip_Callback(~, ~, gui)
@@ -4872,7 +4892,7 @@ end
 
 % Create default answers from previous input or header data
 if isfield(ori,'res'), dans{1} = ori.res; 
-else, dans{1} = '25 25 25';
+else, dans{1} = '20 20 20';
 end
 if isfield(ori,'offcenter'), dans{2} = ori.offcenter;
 else, dans{2} = '0 0 0';
@@ -4891,7 +4911,6 @@ qry2 = {'Apply odd/even size related half-voxel shift correction:'...
         'Apply FFT related half-voxel shift correction:'};
 
 % Default answers
-
 if isfield(ori,'vox_cor')
     if strcmp(ori.vox_cor, 'Yes'), dans2{1} = {'Yes','No'};
     else,                          dans2{1} = {'No', 'Yes'};       
