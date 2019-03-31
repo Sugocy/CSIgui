@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 31-Mar-2019 01:32:47
+% Last Modified by GUIDE v2.5 31-Mar-2019 03:46:16
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2201,7 +2201,9 @@ linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
 
 CSI_dataAsGraph(cell2mat(linewidth), gui, 'LineWidth')
 CSI_dataAsTable(cell2mat(linewidth), 'LineWidth')
-% 
+
+lw = cell2mat(linewidth); save('lw.mat','lw');
+
 % std_ofa = std(cell2mat(a), [], 6);
 % 
 % CSI_dataAsTable(std_ofa, 'LineWidth STD');
@@ -10373,3 +10375,25 @@ if backup, CSI_backupSet(gui, 'Before normalization.'); end
 
 % Normalize
 CSI_Normalize(gui);
+
+
+% --- Executes on button press in CSI_2D_Scaling_Ratio.
+function CSI_2D_Scaling_Ratio_Callback(hObject, eventdata, gui)
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+if ~isfield(csi,'ori'), return; end
+obj2D = findobj('Tag', 'CSIgui_plot2D');
+if isempty(obj2D), return; end
+
+res = csi.ori.res; scrsz = get(0,'screensize'); 
+ratio_vox = res(1)./res(2); ratio_pc = scrsz(3)./scrsz(4); % X/W div Y/H
+
+pos = obj2D.Position;
+% Figure to monitor ratio
+pos(3) = pos(4).*ratio_pc; obj2D.Position = pos; % Figure to screen ratio.
+
+% Figure to voxel ratio
+pos(3) = pos(4).*ratio_vox; obj2D.Position = pos;

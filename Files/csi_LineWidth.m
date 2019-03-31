@@ -34,20 +34,22 @@ doii = real(doii);
 
 % LEFT SIDE (to pos ppm) % ------------------------------------------ %
 % Find position closest to half-max / left side
+
 close_to_HM = abs( (doii(max_ind:end)) - (max_half) );
 xoii_left = xoii(max_ind:end);
 bool = islocalmin(close_to_HM); ind = find(bool == 1);
 if isempty(ind)
-%     figure();
-%     plot(doii(1:max_ind)); 
-fwhm_indl = max_ind;
+    fwhm_indl = 1;
 else
     fwhm_indl = ind(1);
 end
 
-fwhm_val(2) = doii(fwhm_indl + (max_ind -1) ); 
-fwhm_pos(2) = xoii(fwhm_indl + (max_ind -1) );
- 
+if max_ind == size(doii,2)
+    fwhm_val(2) = doii(max_ind); fwhm_pos(2) = xoii(max_ind);
+else
+    fwhm_val(2) = doii(fwhm_indl + (max_ind -1) ); 
+    fwhm_pos(2) = xoii(fwhm_indl + (max_ind -1) );
+end
 % RIGHT SIDE (negative) % ------------------------------------------ %
 % Find position closest to half-max / right side
 
@@ -59,9 +61,7 @@ xoii_right = xoii(1:max_ind);
 bool = islocalmin(close_to_HM); ind = find(bool == 1);
 % Take the first minimum e.g. first index to be half maximum from maximum
 if isempty(ind)
-%     figure();
-%     plot(doii(1:max_ind)); 
-fwhm_indr = max_ind;
+    fwhm_indr = 1;
 else
     fwhm_indr = ind(1);
 end
@@ -69,8 +69,14 @@ end
 % Correct for the flip we applied
 fwhm_indr = abs( size(doii(1:max_ind),2) - fwhm_indr ) + 1;
 
-fwhm_val(1) = doii(fwhm_indr); 
-fwhm_pos(1) = xoii(fwhm_indr);
+if max_ind == size(doii,2)
+    fwhm_val(1) = doii(max_ind); 
+    fwhm_pos(1) = xoii(max_ind);
+else
+  
+    fwhm_val(1) = doii(fwhm_indr); 
+    fwhm_pos(1) = xoii(fwhm_indr);
+end
 
 % Full Width at Half Maximum
 fwhm = abs(fwhm_pos(1) - fwhm_pos(2));
