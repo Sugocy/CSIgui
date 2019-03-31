@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 22-Feb-2019 20:28:51
+% Last Modified by GUIDE v2.5 31-Mar-2019 01:32:47
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -1028,7 +1028,7 @@ button_CSI_setCoordinates_Callback([], [], gui);
 success = 1;
 
 % --- Executes on button press (+) in button_CSI_ReadInfo.
-function button_CSI_ReadInfo_Callback(hObj, eventdata, gui)
+function button_CSI_ReadInfo_Callback(~, ~, gui)
 % Read the MRS protocol text file and set specific MRS parameters
 
 
@@ -1656,21 +1656,17 @@ uiresume(subobj);
 % ---------------------------------------------------------------------- %
 
 % --- Executes on button press in button_CSI_Average: 
-function button_CSI_Average_Callback(~, ~, gui)
+function button_CSI_Average_Callback(~, ~, gui, backup)
 % Average over a specific dimension in MRS data. If no aver or nsa index is
 % present, user input is required.
 % This functions aims to average over dimension "aver" or "nsa".
 %
 % Uses CSI_average();
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------------------- %
-
-
-% If no GUI as input
-if nargin ~= 3, gui = guidata(hobj); end
-
 % Create backup
-CSI_backupSet(gui, 'Before averaging.');
+if backup, CSI_backupSet(gui, 'Before averaging.'); end
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -1769,16 +1765,17 @@ data_averaged = mean(data,index);
 
 
 % --- Executes on button press in button_CSI_FFT_Kspace.
-function button_CSI_FFT_Kspace_Callback(~, ~, gui)
+function button_CSI_FFT_Kspace_Callback(~, ~, gui, backup)
 % Apply spatial FFT over MRSI data. If no spatial labeled dimensions e.g.
 % indexes are available user input is required.
 %
 % Uses csi_rawfft;
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before spatial FFT.');
+if backup, CSI_backupSet(gui, 'Before spatial FFT.'); end
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -1837,16 +1834,17 @@ end
 CSI_Log({'Used FFT shift method: '}, {tmp});
 
 % --- Executes on button press in button_CSI_FFT.
-function button_CSI_FFT_Callback(~, ~, gui)
+function button_CSI_FFT_Callback(~, ~, gui, backup)
 % Apply forward fourier to transform the MRSI data from the spatial domain
 % to the frequency domain.
 % 
 % Uses csi_fft();
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before forward FFT.');
+if backup, CSI_backupSet(gui, 'Before forward FFT.'); end
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -1874,16 +1872,17 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 CSI_Log({'Forward FFT applied.'},{''});
 
 % --- Executes on button press in button_CSI_iFFT.
-function button_CSI_iFFT_Callback(~, ~, gui)
+function button_CSI_iFFT_Callback(~, ~, gui, backup)
 % Apply inverse fourier to transform MRS data from the frequency domain to
 % the spatial domain.
 %
 % Uses csi_ifft();
+if nargin < 4 , backup= 1; end
 
 % BACKUP + APPDATA % ------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before inverse FFT.');
+if backup, CSI_backupSet(gui, 'Before inverse FFT.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -1905,15 +1904,16 @@ CSI_Log({'Inverse FFT applied.'},{''});
 
 
 % --- Executes on button press in button_CSI_Apodization_Kspace.
-function button_CSI_Apodization_Kspace_Callback(~, ~, gui)
+function button_CSI_Apodization_Kspace_Callback(~, ~, gui, backup)
 % Apodization: Apply a 3D filter over spatial dimensions (indexes) 
 %              of the data. 
 %
 % Uses csi_apodization3D();
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % --------------------------------- %
 % Create backup
-CSI_backupSet(gui, 'Before apodization.');
+if backup, CSI_backupSet(gui, 'Before apodization.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -1976,15 +1976,16 @@ else
 end
  
 % --- Executes on button press in button_CSI_Apodization_FID.
-function button_CSI_Apodization_FID_Callback(~, ~, gui)
+function button_CSI_Apodization_FID_Callback(~, ~, gui, backup)
 % Apply apodization to all spectra. Multiple methods are available:
 % Hamming, Hanning, Blackman, Exponential, Gaussian.
 % gaussmf(x, [std center]);
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % --------------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before 1D apodization.');
+if backup, CSI_backupSet(gui, 'Before 1D apodization.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -2356,8 +2357,15 @@ else
 end
 
 % --- Executes on button press in button_CSI_Bin.
-function button_CSI_Bin_Callback(hObject, eventdata, gui)
+function button_CSI_Bin_Callback(~, ~, gui, backup)
 % Bin a specific dimension, splitting up the csi data.
+
+if nargin < 4, backup = 1; end
+
+
+% BACKUP + APPDATA % ------------------------------- %
+% Create backup
+if backup, CSI_backupSet(gui, 'Before applying bins.'); end
 
 % Check if csi app data exists
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -2420,16 +2428,13 @@ CSI_Log({msg},{''});
 
 
 % --- Executes on button press in button_CSI_Sum.
-function button_CSI_Sum_Callback(~, ~, gui)
+function button_CSI_Sum_Callback(~, ~, gui, backup)
 % Summate MRSI data over a specific dimensions
 
 % BACKUP + APPDATA % ------------------- %
 
-
-% If no GUI as input
-if nargin ~= 3, gui = guidata(hobj); end
-
-CSI_backupSet(gui, 'Before summation.'); 
+if nargin < 4 , backup= 1; end
+if backup, CSI_backupSet(gui, 'Before summation.');  end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -2894,14 +2899,14 @@ save([ str_time '_T2Calc_' data_unit '.mat'], 'T2data');
 
 
 % --- Executes on button press in button_CSI_ZeroFill.
-function button_CSI_ZeroFill_Callback(hObject, eventdata, gui)
+function button_CSI_ZeroFill_Callback(~, ~, gui, backup)
 % Zero fill the data in the time domain. Requires userinput to get lentgh
 % of the FID after zero filling.
-
+if nargin < 4, backup = 1; end;
 % BACKUP + APPDATA % ------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before zero filling.');
+if backup, CSI_backupSet(gui, 'Before zero filling.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -2977,7 +2982,7 @@ if strcmp(domain,'freq'), csi.data.raw = csi_fft(csi.data.raw); end
 setappdata(gui.CSIgui_main,'csi',csi);
 
 % Recalculate xaxis data
-CSI_2D_Scaling_calc_xaxis(hObject,[],1);
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % adjwandkawdnawnd
 % if this si set to auto, it keeps wrong limits :O omg no... Needs some 
@@ -2987,13 +2992,14 @@ CSI_2D_Scaling_calc_xaxis(hObject,[],1);
 CSI_Log({'Applied zero filling. Sample size increased to'},{N});
 
 % --- Executes on button press in button_CSI_AutoPhase.
-function button_CSI_AutoPhase_Callback(hObject, eventdata, gui)
+function button_CSI_AutoPhase_Callback(hObject, eventdata, gui,backup)
 % Apply zero order phase correction to all voxels in the data set.
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ---------------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before auto phase correction.');
+if backup, CSI_backupSet(gui, 'Before auto phase correction.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -3062,10 +3068,13 @@ CSI_Log({'Applied automatic zero order phase correction:'},uans);
 % --- Executes on button press in button_CSI_Flip.
 function button_CSI_Flip_Callback(~, ~, gui)
 % Flip order of a specific dimension in the spectral data set. 
+if nargin < 4, backup = 1; end
 
 % Check for CSI data
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi'); 
+
+if backup, CSI_backupSet(gui, 'Before flipping.'); end
 
 % Get dimension to flip over
 useans = getUserInput({'Dimension:'}, {2});
@@ -3138,16 +3147,13 @@ CSI_Log({'Rotated plane'},...
     {[csi.data.labels{rot_plane(2)} ' | ' csi.data.labels{rot_plane(1)}]});
 
 % --- Executes on button press in button_CSI_Multiply.
-function button_CSI_Multiply_Callback(hobj, ~, gui)
+function button_CSI_Multiply_Callback(~, ~, gui, backup)
 % Multiply the MRS data
 
-% If no GUI as input
-if nargin ~= 3, gui = guidata(hobj); end
-
+if nargin < 4 , backup= 1; end
 
 % Create backup
-CSI_backupSet(gui, 'Before multiplication'); 
-
+if backup, CSI_backupSet(gui, 'Before multiplication.'); end
 
 % Get CSI data
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -3211,16 +3217,17 @@ CSI_Log({'MRS data divided by '},{fac});
 
 
 % --- Executes on button press in button_CSI_Combine.
-function button_CSI_Combine_Callback(~, ~, gui)
+function button_CSI_Combine_Callback(~, ~, gui, backup)
 % Combine the channels of all coils.
 % 1. Get CSI data
 % 2. Get requirements for channel combination from user.
 % 3. Process data and apply chosen algorithm or settings.
+if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % --------------------- %
 
 % Create backup
-CSI_backupSet(gui, 'Before combining channels.');
+if backup, CSI_backupSet(gui, 'Before combining channels.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -3879,14 +3886,13 @@ assignin('base', 'csi',csi.data);
 csi.data
 fprintf('Variable "csi" accessible from workspace.\n');
 
-% --- Executes on button press in button_CSI_frequencyShift.
-function button_CSI_frequencyShift_Callback(hObject, eventdata, gui)
+% --- Executes on button press in button_CSI_phaseShift.
+function button_CSI_phaseShift_Callback(hObject, eventdata, gui, backup)
 % Add function csi_frequencyShift
-
-% Only FIDS - option to exclude echo dimensions
+if nargin < 4, backup = 1; end
 
 % Create backup
-CSI_backupSet(gui, 'Before phase shift');
+if backup, CSI_backupSet(gui, 'Before phase shift'); end
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -3906,14 +3912,15 @@ csi.data.raw = csi_frequencyShift(csi.data.raw, dt);
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update LOG
-CSI_Log({['Applied a phase shifted to each FID of ' num2str(dt) 'ms']},{''});
+CSI_Log({['Applied a phase shift of ' num2str(dt) 'ms to each FID']},{''});
 
 % --- Executes on button press in button_CSI_VoxelShift.
-function button_CSI_VoxelShift_Callback(hObject, eventdata, gui)
+function button_CSI_VoxelShift_Callback(~, ~, gui, backup)
 % Shift CSI K-space to spatially shift the volume a number of voxels
 
+if nargin < 4 , backup= 1; end
 % Create backup
-CSI_backupSet(gui, 'Before voxel shift');
+if backup, CSI_backupSet(gui, 'Before voxel shift'); end
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -3963,7 +3970,6 @@ function button_CSI_FidOrEcho_Callback(hObject, eventdata, gui)
 % Split data to FID and Echo data, specially design for use with AMESING
 % data. Echoes and FIDs require different processing resulting in different
 % sample sizes.
-
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -6726,7 +6732,6 @@ setappdata(gui.CSIgui_main,'csi',csi);
 % --- Executes on button press in button_CSI_DisplayOptions.
 function button_CSI_DisplayOptions_Callback(~, ~, gui)
 % Set all scaling options for 2D plot using a GUI
-
 CSI_2D_Scaling_Options(gui);
 
 
@@ -9010,10 +9015,10 @@ if strcmp(day,'on')
     colors.grid       = [0.4 0.4 0.4];       % Grid color 2D plot
 elseif strcmp(night,'on')
     % GUI color palet: Night theme
-    colors.main       = [0 0 0];             % Backgrounds
+    colors.main       = [0.1 0.1 0.1];             % Backgrounds
     colors.text_main  = [0.94 0.94 0.94];    % Used for button text
     colors.text_title = [0.502 0.502 0.502]; % Used for descriptions/titles
-    colors.hilight1   = [1 0 0];             % Highlight text
+    colors.hilight1   = [0.8 0 0];             % Highlight text
     colors.hilight2   = [0.2 0 0.2];         % Highlight bg
     colors.lines1     = [1 1 1];             % Static line color
     colors.lines2     = [1 0 0];             % Second line color
@@ -10096,21 +10101,201 @@ setappdata(gui.CSIgui_main,'csi',csi);
 CSI_Log({'CSI data flipped. Dimension:'},{dim});
 
 
-% --- Executes on button press in button_CSI_AutoProcessing.
-function button_CSI_AutoProcessing_Callback(hObj, evt, gui)
-% Automatically press buttons...
+% --- Executes on button press in button_CSI_AutoProcessing_Initiate.
+function button_CSI_AutoProcessing_Initiate_Callback(hObj, ~, gui)
+% Automatically process data:
+%        'Average k-space.', ...                1
+%        'Apodize k-space.', ...                2
+%        'Spatial FFT.', ...                    3
+%        'Load protocol text- or spar-file.'    4 % OFF by default
+%        'Set parameters: frequency.', ...      5 
+%        'Set parameters: geometry.', ...       6 % OFF by default
+%        'Apodize FID.', ...                    7
+%        'Zero fill FID', ...                   8
+%        'FID to Spectrum (Forward FFT).', ...  9
+%        'Automatic zero-phasing', ...          10
+%        'Combine channels.', ...               11 
+%        'Automatic zero-phasing'               12
+%        'Convert MRI to CSI space.'            13 % OFF by default.
 
-% Average
-button_CSI_Average_Callback([], [], gui);
-% Apodization
-button_CSI_Apodization_Kspace_Callback([], [], gui);
-% FFT Spatial
-button_CSI_FFT_Kspace_Callback([], [], gui);
-% FFT time2spec
-button_CSI_FFT_Callback([], [], gui);
-% Autophase
-button_CSI_AutoPhase_Callback([], [], gui);
+% Backup.
+CSI_backupSet(gui,'Initiated auto-processing.');
 
+% The following options are executed automatically.
+str = {'Average k-space.', ...
+       'Apodize k-space.', ...
+       'Spatial FFT.', ...
+       'Load protocol text- or spar-file.',...
+       'Set parameters: frequency.', ...      
+       'Set parameters: geometry.', ...  
+       'Apodize FID.', ...
+       'Zero fill FID', ...
+       'FID to Spectrum (Forward FFT).', ...
+       'Automatic zero-phasing', ...
+       'Combine channels.', ...
+       'Automatic zero-phasing.',...
+       'Convert MRI to CSI space.'};
+%                 Do Not Edit Order              %
+% ---------------------------------------------- %
+   
+   
+% Find any open CSI_auto windows and close.
+obj = findobj('Type', 'Figure', 'Tag', 'CSI_Auto');
+if ~isempty(obj), delete(obj); end
+
+% Create CSI_Auto
+fh = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
+                      'NumberTitle', 'Off', 'Color', gui.colors.main,...
+                      'Name','CSIgui - Automatic Processing','Tag', 'CSI_Auto'); 
+gdat = guidata(fh); axis off;
+
+
+% FIGURE POSITION 
+% Based on nr of elements in str; e.g. every automatic processing step.
+
+% Each process stepp has 2x text heights which include a dh (offset)
+% per text and a line for seperation.
+dw = 5; dh = 4; szt = [230 18]; szl = round(dh/2); % DEFINES FIGURE SIZE
+
+% pos x and y and w h for each object in a single element
+% [txt; nfo; line];
+step = szt(2)*2 + dh*2 + szl; button_space = 15;
+w = szt(1) + dw*2; h = step*size(str,2) + button_space;
+szc = gui.CSIgui_main.Position; 
+
+% Set figure position
+figpos = round((szc(3:4)./2) - ([w h]./2)) + szc(1:2);
+figpos(1) = figpos(1) + szc(3)/2 + w/2;
+fh.Position = [figpos w h];
+
+% Add processing items % ---------------- %
+nelem = size(str,2);
+txt = cell(1,nelem);nfo = cell(1,nelem);
+rad = cell(1,nelem);lyn = cell(1,nelem);
+for kk = 1:nelem
+ 
+    % Text label
+    txt{kk} = uicontrol('Style', 'text', 'String', str{kk},...
+    'ForegroundColor',gui.colors.text_title,...
+    'BackgroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    % step = ((dh + szt(2)) * (kk)) + ((dh + szt(2))*(kk-1));
+    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
+    txt{kk}.Position = [ dw (h - step)  szt];
+    txt{kk}.FontWeight = 'Bold';txt{kk}.FontSize = 10;
+    
+    % Radio
+    rad{kk} = uicontrol('Style', 'radiobutton', 'String', '',...
+    'BackgroundColor',gui.colors.hilight2,...
+    'ForegroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
+    rad{kk}.Position =  [ w-18 (h - step)  18 18];
+    if kk == 4 || kk == 6 ||  kk == 13 % DEFAULT OFF OPTIONS
+        rad{kk}.Value = 0; 
+    else
+        rad{kk}.Value = 1;
+    end
+    
+    % Info label
+    nfo{kk} = uicontrol('Style', 'text',...
+    'String', '...',...
+    'ForegroundColor',gui.colors.text_main,...
+    'BackgroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Right');
+    step = (dh + szt(2))* 2 * (kk);
+    nfo{kk}.Position = [ dw (h - step)  szt];
+    
+    % Line
+    lyn{kk} = uicontrol('Style', 'text', 'String', '',...
+    'BackgroundColor',gui.colors.hilight2,...
+    'ForegroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    step = ((dh + szt(2))* 2 * (kk))+szl*2;
+    lyn{kk}.Position = [ dw (h - step)  szt(1) szl];
+
+end
+
+% Start button.
+uicontrol('style', 'pushbutton', 'string', 'Start',...
+    'Position', [dw dh 75 button_space],...
+    'BackgroundColor',gui.colors.main,...
+    'ForegroundColor',gui.colors.text_main,...
+    'Callback', @CSI_AutoProcessing_execute);
+
+% Store GUI stuff,.
+gdat.lyn = lyn; gdat.nfo = nfo; gdat.txt = txt; gdat.rad = rad;
+gdat.str = str; gdat.fh = fh;gdat.csigui = hObj;
+guidata(fh,gdat);
+
+function CSI_AutoProcessing_execute(hobj, ~)
+%        'Average k-space.', ...                1
+%        'Apodize k-space.', ...                2
+%        'Spatial FFT.', ...                    3
+%        'Load protocol text- or spar-file.'    4 % OFF by default
+%        'Set parameters: frequency.', ...      5 
+%        'Set parameters: geometry.', ...       6 % OFF by default
+%        'Apodize FID.', ...                    7
+%        'Zero fill FID', ...                   8
+%        'FID to Spectrum (Forward FFT).', ...  9
+%        'Automatic zero-phasing', ...          10
+%        'Combine channels.', ...               11 
+%        'Automatic zero-phasing'               12
+%        'Convert MRI to CSI space.'            13 % OFF by default.
+gdat = guidata(hobj); nfo = gdat.nfo; str = gdat.str; rad = gdat.rad;
+hObj = gdat.csigui; gui = guidata(hObj);
+
+bu = 0; nelem = size(str,2);
+for kk = 1:nelem
+    if rad{kk}.Value == 1
+        if     kk == 1
+            % Average k-space
+            button_CSI_Average_Callback([], [], gui, bu);
+        elseif kk == 2
+            % Apodization k-space
+            button_CSI_Apodization_Kspace_Callback([], [], gui, bu);
+        elseif kk == 3
+            % FFT Spatial
+            button_CSI_FFT_Kspace_Callback([], [], gui, bu);
+        elseif kk == 4
+            button_CSI_ReadInfo_Callback([], [], gui)
+        elseif kk == 5
+            % Set frequency parameters
+            CSI_2D_Scaling_calc_xaxis(hObj,[]);
+        elseif kk == 6
+            % Set geometry parameters
+            button_CSI_setCoordinates_Callback([], [], gui)
+        elseif kk == 7
+            % Apodization FID
+            button_CSI_Apodization_FID_Callback([],[], gui, bu);      
+        elseif kk == 8
+            % Zerofill
+            button_CSI_ZeroFill_Callback([], [], gui, bu);
+        elseif kk == 9
+            % FFT time2spec
+            button_CSI_FFT_Callback([], [], gui, bu);
+        elseif kk == 10
+            % Autophase
+            button_CSI_AutoPhase_Callback([], [], gui, bu);
+        elseif kk == 11
+            % Combine channels
+            CSI_Combine_WSVD;
+        elseif kk == 12
+            % Autophase
+            button_CSI_AutoPhase_Callback([], [], gui, bu);
+        elseif kk == 13
+            % Convert MRI to CSI space.
+            MRI_to_CSIspace(gui);
+        end
+    
+        % Show executed in window
+        nfo{kk}.String = 'Succesfully executed.';
+        nfo{kk}.ForegroundColor = [0 1 0];
+    else
+        nfo{kk}.String = 'Skipped.';
+        nfo{kk}.ForegroundColor = [0.65 0.1 0.1];
+    end
+end
 
 % --- Normalize CSI data.
 function CSI_Normalize(gui)
@@ -10120,13 +10305,11 @@ function CSI_Normalize(gui)
 % Additional: peak specific?
 
 % Get userinput: normalize how?
-uans = getUserInput_Popup({'Normalize by: '},{{'Maximum per voxel',...
-                                               'Maximum in volume',...
-                                               'Specific peak per voxel'}});
+uans = getUserInput_Popup({'Normalize by: '},...
+    {{'Maximum per voxel','Maximum in volume','Specific peak per voxel'}});
 if isempty(uans), return; end
 
-% Create backup
-CSI_backupSet(gui, 'Before normalization.');
+
 
 % Check if csi appdata is present
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -10180,5 +10363,13 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 
 
 % --- Executes on button press in button_Normalize.
-function button_Normalize_Callback(~ , ~, gui)
+function button_Normalize_Callback(~ , ~, gui, backup)
+% Normalize data to specific peak maximum: multiple methods available. See
+% CSI_Normalize();
+if nargin < 4 , backup = 1; end
+
+% Create backup
+if backup, CSI_backupSet(gui, 'Before normalization.'); end
+
+% Normalize
 CSI_Normalize(gui);
