@@ -5810,10 +5810,8 @@ gui = guidata(hObj);
 csi = getappdata(gui.CSIgui_main,'csi'); 
 if isempty(csi), CSI_Log({'No CSI data in memory.'},{''}); return; end
 
-disp('There is CSI data in memory! Wooh!');
 
 [~, img_all, soi_range] = MRI_matchSlices(hObj);
-
 
 panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay'); 
 if ~isempty(panelobj)
