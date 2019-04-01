@@ -2149,69 +2149,89 @@ close(fh);
 
 % --- Executes on button press in button_CSI_Linewidth.
 function button_CSI_Linewidth_Callback(~, ~, gui)
+% Calculate linewidth at FWHM of a specific peak.
+%
+% Uses: csi_LineWidth();
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% Create backup
-CSI_backupSet(gui, 'Before linew.');
+% Userinput % --------------------------------- %
+uans = getUserInput_Popup({'Display type: ',...
+                           'Save line width data (.txt): '},...
+                         {{'Table', 'Graph'},{'No','Yes'}});
+if isempty(uans), return; end
 
-% Process data
-tmp = csi.data.raw;
+% Display type
+dataDisp = uans{1};
+% Save data boolean
+switch uans{2}, case 'Yes', dataSave = 1; case 'No', dataSave = 0; end
 
 % Get data at peak of interest
 [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 
+% Prepare Data % --------------------------------- %
+tmp = csi.data.raw;
 
-% % Maximum in this range
+% Maximum in this range
 [~,mi] = max(real(doi),[],1);
 
-% Set max as peak centre.
+% Set maximum value as peak centre.
 peak_pos = mi+range(1);
 
-        
-% % Peak width 
+% Set peak width 
 peak_width = ceil(csi.xaxis.N/100);
 if peak_width < 3, peak_width = 3; end
     
-
 % Peak range used to find FWHM
-% poi_range_perVox = peak_pos + [-peak_width peak_width];
 peak_pLow = num2cell(peak_pos - peak_width);
 peak_pHig = num2cell(peak_pos + peak_width);
 poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
 
-
 % Input cell data
 sz = size(tmp); 
-cell_layout = ...
-arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+cell_layout = arrayfun(...
+    @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
 tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
 
 % Input axis
 ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
+% Set plotting off - Overload matlab otherwise!
+plot_off = repmat({0},size(tmp)); % plot_off{1,2,4,1} = 1;
 
 
-plot_off = repmat({0},size(tmp));
-% plot_off{1,2,4,1} = 1;
-
+% Calculate line width % --------------------------------- %
 linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
-    plot_off,'Uniform',0);
+    plot_off, 'Uniform',0);
 
-CSI_dataAsGraph(cell2mat(linewidth), gui, 'LineWidth')
-CSI_dataAsTable(cell2mat(linewidth), 'LineWidth')
 
-lw = cell2mat(linewidth); save('lw.mat','lw');
+% Data display % --------------------------------- %
+switch dataDisp
+    case 'Table'        
+        CSI_dataAsTable(cell2mat(linewidth), 'LineWidth')
+    case 'Graph'
+        CSI_dataAsGraph(cell2mat(linewidth), gui, 'LineWidth')
+end
 
-% std_ofa = std(cell2mat(a), [], 6);
-% 
-% CSI_dataAsTable(std_ofa, 'LineWidth STD');
+% Save data % --------------------------------- %
+if dataSave
+   % Default filepath to start UI in.
+    if isfield(csi.data,'filepath'), fp_def = csi.data.filepath; 
+    else, fp_def = []; 
+    end
+
+    % Get file path and extension from user
+    [fn, fp, fi] = ...
+        uiputfile({'*.txt', 'Text file'},'Save data...', fp_def);
+    if fi == 0, return; end
+    csi_writeText(cell2mat(linewidth), [fp fn]); 
+end
 
 
 % --- Executes on button press in button_CSI_setFrequency.
 function button_CSI_setFrequency_Callback(hObject, eventdata, gui)
-if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 CSI_2D_Scaling_calc_xaxis(hObject, eventdata);
 
 
@@ -2239,9 +2259,7 @@ setappdata(gui.CSIgui_main, 'csi',csi);
 CSI_Log({'New labels:','Previous labels:',},...
          {strjoin(csi.data.labels,' | '),strjoin(old_labels,' | ')});
 
-           
-           
-           
+                              
 % --- Executes on button press in button_CSI_ReorderDim.
 function button_CSI_ReorderDim_Callback(~, ~, gui)
 % Permute e.g. reorder csi.data.raw.
@@ -4816,9 +4834,6 @@ tgui = guidata(tfh); tgui.fig = tfh;
 % Tabgroup for all slices
 tgui.tabgp = uitabgroup(tgui.fig,'Unit','normalized','Position',[0 0 1 1]);
 
-
-
-
 % Loop each slice - expected at dimension 4
 for sl = 1:size(data,4)
 
@@ -4833,10 +4848,16 @@ for sl = 1:size(data,4)
     tgui.tab{sl}.table = uitable(tgui.tab{sl}.tabh,...
         'Position', [30 20 pos(3:4)-60]); 
     
-    % ADD BUTTONS HERE: To save selected data
+    % ADD BUTTONS HERE: To save all data
     tgui.tab{sl}.savebutton = uicontrol(tgui.tab{sl}.tabh,...
-        'Position', [30 2.5 50 15],'String','Save..',...
+        'Position', [30 2.5 100 15],'String','Save all',...
         'BackgroundColor','Black','ForegroundColor',[0.94 0.94 0.94],...
+        'Callback', @CSI_dataAsTable_SaveButton);
+    
+    % To save selected data
+    tgui.tab{sl}.savebutton_sel = uicontrol(tgui.tab{sl}.tabh,...
+        'Position', [132.5 2.5 100 15],'String','Save selected',...
+        'BackgroundColor', 'Black', 'ForegroundColor', [0.94 0.94 0.94],...
         'Callback', @CSI_dataAsTable_SaveButton);
     
     % DATA: prepare % -------------------------------------------------- %
@@ -5018,35 +5039,58 @@ else
 end
 
 % --- Executed by save button press in table
-function CSI_dataAsTable_SaveButton(hObj, ~)
-% Still in beta
-disp('You pressed save! This option is still in development.');
+function CSI_dataAsTable_SaveButton(hObj, evt)
+% Save data shown in table.
 
-tab_obj = hObj.Parent;
-tgui = guidata(tab_obj);
+% Get app-structs and parent of this function
+tab_obj = hObj.Parent; tgui = guidata(tab_obj); 
+fparent = evt.Source.String;
 
-% Tab index
-tab_title = tgui.tabgp.SelectedTab.Title;
-tab_title_space = strfind(tab_title,' ');
-tab_ind = str2double(tab_title(tab_title_space+1:end));
+% Get file destination from user.
+[fn, fp, fi] = ...
+    uiputfile({'*.txt', 'Text Files (*.txt)';...
+               '*.mat', 'MATLAB File (*.mat)'},...
+               'Save table data...');
+if fi == 0, return; end
+ext = fn(end-3:end);
 
-% Get data
-ind = tgui.selectedCells;
+% Save according to function-parent e.g. button.
+switch fparent
+    case 'Save all'
+        for sli = 1:size(tgui.tab,2)
+            data(:,:,sli) = ...
+                cellfun(@str2double, tgui.tab{sli}.table.Data);
+        end
+        data2exp = data; ind = [];
+        
+    case 'Save selected'
+         % Tab index
+        tab_title = tgui.tabgp.SelectedTab.Title;
+        tab_title_space = strfind(tab_title,' ');
+        tab_ind = str2double(tab_title(tab_title_space+1:end));
 
-data = cellfun(@str2double, tgui.tab{tab_ind}.table.Data);
-selected = [];
-for kk = 1:size(ind,1)
-    selected(kk,1) = data(ind(kk,1),ind(kk,2));
+        data = cellfun(@str2double, tgui.tab{tab_ind}.table.Data);
+        
+        % Get data
+        ind = tgui.selectedCells;
+
+        data = cellfun(@str2double, tgui.tab{tab_ind}.table.Data);
+        data2exp = NaN(size(ind,1),1);
+        for kk = 1:size(ind,1)
+            data2exp(kk,1) = data(ind(kk,1),ind(kk,2));
+        end
 end
 
-% date_str = datestr(now,'YYmmdd_HHMMSS');
-% save([date_str '_SNR_Table.mat'],'data','selected','ind'); 
+% Save to file.
+switch lower(ext)
+    case '.mat'
+        selected = data2exp; index = ind;
+        save([fp fn],'selected','data','index'); 
+    case '.txt'
+        csi_writeText(data2exp,[fp fn]);
+end
 
-[fn, fp, fi] = ...
-    uiputfile({'*.mat;*.txt','File (*.txt, *.mat)'},'Save table data...');
-if fi == 0, return; end
 
-save([fp  fn],'data','selected','ind'); 
 
 % COORDINATES % -------------------------------------------------------- %
 
@@ -6292,7 +6336,7 @@ end
 figure(plot_par.fh);
 
 % --- Executes on button press in Button_CSI_setFigure_ratio.
-function Button_CSI_setFigure_ratio_Callback(hObject, eventdata, gui)
+function Button_CSI_setFigure_ratio_Callback(~, ~, gui)
 CSI_2D_setFigure_ratio(gui);
  
 function CSI_2D_setFigure_ratio(gui)
@@ -7878,6 +7922,7 @@ if isempty(uans), return; end
 
 % SNR method
 method = getUserInput_Popup({'Signal unit: '},{{'Real','Magnitude'}});
+if isempty(method), return; end
 switch method{1}, case 'Real', method = 1; case 'Magnitude', method = 0; end
 
 % ----- % Calculate SNR  
@@ -8690,45 +8735,56 @@ if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi'); 
 
 if nargin <= 3
+    % Default filepath to start UI in.
+    if isfield(csi.data,'filepath'), fp_def = csi.data.filepath; 
+    else, fp_def = []; 
+    end
+
     % Get filepath destination
     % Get file path and extension from user
-    [fn, fp, fi] = uiputfile({'*.txt', 'Text file'},'Save MRSI data...');
+    [fn, fp, fi] = ...
+        uiputfile({'*.txt', 'Text file'},'Save MRSI data...',fp_def);
     if fi == 0, return; end
-    [~,fn,ext] = fileparts(fn);
+    [~, fn, ext] = fileparts(fn);
 else
     fp = varargin{1}; fn = varargin{2}; ext = varargin{3};
 end
+if ~strcmp(fp(end),'\'), fp = [fp '\']; end
 
 % Get data to export
 data2exp = csi.data.raw;
-% Convert to a two column array
-resh2exp = reshape(data2exp,[], 1); 
-% test = reshape(reshaped2exp, size(csi.data.raw));
-
-% Create complex and real part columns
-dataR = real(resh2exp); dataI = imag(resh2exp);
-% Create 2 column array with real and imaginary part.
-dataA = cat(2,dataR, dataI);
 
 % Display information to user.
 CSI_Log({'Writing to text file. Please be patient.'},{''});
 
-% Write array to file
-fid = fopen([fp fn ext],'wt');
-for ri = 1:size(dataA,1)
-    fprintf(fid,'%32.32f %32.32f\n', dataA(ri,:)); 
-end
-fclose(fid);
+% Write text file
+csi_writeText(data2exp, [fp fn ext]);
 
-% Also write away a size to reconstruct the data.
-fid = fopen([fp fn '_ArraySize' ext],'wt');
-fprintf(fid,'%32.32f ', size(csi.data.raw)); 
-fclose(fid);
+% % Convert to a two column array
+% resh2exp = reshape(data2exp,[], 1); 
+% % Create complex and real part columns
+% dataR = real(resh2exp); dataI = imag(resh2exp);
+% % Create 2 column array with real and imaginary part.
+% dataA = cat(2,dataR, dataI);
+%
+% % Write array to file
+% fid = fopen([fp fn ext],'wt');
+% for ri = 1:size(dataA,1)
+%     fprintf(fid,'%32.32f %32.32f\n', dataA(ri,:)); 
+% end
+% fclose(fid);
+% 
+% % Also write away a size to reconstruct the data.
+% fid = fopen([fp fn '_ArraySize' ext],'wt');
+% fprintf(fid,'%32.32f ', size(csi.data.raw)); 
+% fclose(fid);
 
 % Display information to user.
-CSI_Log({'MRSI data and array size written to text file:'},...
-               {[fp fn]});
-          
+CSI_Log({'MRSI data and array size written to text file:'}, {[fp fn]});
+        
+           
+           
+           
 % --- Save CSIgui main CSI data as MAT.
 function CSI_saveMAT(hObject, ~, ~,varargin)
 % varargin{1:3} expected as filepath, filename and extension.

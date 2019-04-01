@@ -64,12 +64,15 @@ if ischar(data_size)
 end
 
 %% Create output and reshape data
-data = complex(data_raw(:,1),data_raw(:,2));
+data = complex(data_raw(:,1), data_raw(:,2));
 try % Using try, output is guaranteed if wrong reshape size is given.
     if data_size ~= 0, data = reshape(data, data_size); end
 catch err
     fprintf('%s\n', err.message); % Display error message of the catch.
 end
+
+% If all imaginary parts are zero, remove imaginary part.
+if sum(imag(data)) == 0, data = real(data); end
 
 
 
