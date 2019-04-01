@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 31-Mar-2019 03:46:16
+% Last Modified by GUIDE v2.5 01-Apr-2019 16:20:45
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -4086,10 +4086,221 @@ CSI_Log_deleteLine(hObj);
 
 
 
+% --- Executes on button press in button_CSI_AutoProcessing
+function button_CSI_AutoProcessing_Callback(hObj, ~, gui)
+% Automatically process MRS data.
+CSI_AutoProcessing_initiate(gui);
+
+% --- Executes on button press in button_CSI_AutoProcessing
+function CSI_AutoProcessing_initiate(gui)
+% Automatically process data using the following methods
+%        'Average k-space.', ...                1
+%        'Apodize k-space.', ...                2
+%        'Spatial FFT.', ...                    3
+%        'Load protocol text- or spar-file.'    4 % OFF by default
+%        'Set parameters: frequency.', ...      5 
+%        'Set parameters: geometry.', ...       6 % OFF by default
+%        'Apodize FID.', ...                    7
+%        'Zero fill FID', ...                   8
+%        'FID to Spectrum (Forward FFT).', ...  9
+%        'Automatic zero-phasing', ...          10
+%        'Combine channels.', ...               11 
+%        'Automatic zero-phasing'               12
+%        'Convert MRI to CSI space.'            13 % OFF by default.
+% 
+% Before starting automatic processing, specific processing steps can be
+% enabled and/or disabled. Order shown is order applied.
+
+% Backup.
+CSI_backupSet(gui,'Initiated auto-processing.');
+
+% ---------------------------------------------- %
+%                 Do Not Edit Order              %
+% The following options are executed automatically.
+str = {'Average k-space.', ...
+       'Apodize k-space.', ...
+       'Spatial FFT.', ...
+       'Load protocol text- or spar-file.',...
+       'Set parameters: frequency.', ...      
+       'Set parameters: geometry.', ...  
+       'Apodize FID.', ...
+       'Zero fill FID', ...
+       'FID to Spectrum (Forward FFT).', ...
+       'Automatic zero-phasing', ...
+       'Combine channels.', ...
+       'Automatic zero-phasing.',...
+       'Convert MRI to CSI space.'};
+%                 Do Not Edit Order              %
+% ---------------------------------------------- %
+ 
+   
+% Find any open CSI_auto windows and close.
+obj = findobj('Type', 'Figure', 'Tag', 'CSI_Auto');
+if ~isempty(obj), delete(obj); end
+
+% Create CSI_Auto
+fh = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
+                      'NumberTitle', 'Off', 'Color', gui.colors.main,...
+                      'Name','CSIgui - Automatic Processing','Tag', 'CSI_Auto'); 
+gdat = guidata(fh); axis off;
+
+
+% FIGURE POSITION 
+% Based on nr of elements in str; e.g. every automatic processing step.
+
+% Each process stepp has 2x text heights which include a dh (offset)
+% per text and a line for seperation.
+dw = 5; dh = 4; szt = [230 18]; szl = round(dh/2); % DEFINES FIGURE SIZE
+
+% pos x and y and w h for each object in a single element
+% [txt; nfo; line];
+step = szt(2)*2 + dh*2 + szl; button_space = 15;
+w = szt(1) + dw*2; h = step*size(str,2) + button_space;
+szc = gui.CSIgui_main.Position; 
+
+% Set figure position
+figpos = round((szc(3:4)./2) - ([w h]./2)) + szc(1:2);
+figpos(1) = figpos(1) + szc(3)/2 + w/2;
+fh.Position = [figpos w h];
+
+% Add processing items % ---------------- %
+nelem = size(str,2);
+txt = cell(1,nelem);nfo = cell(1,nelem);
+rad = cell(1,nelem);lyn = cell(1,nelem);
+for kk = 1:nelem
+ 
+    % Text label
+    txt{kk} = uicontrol('Style', 'text', 'String', str{kk},...
+    'ForegroundColor',gui.colors.text_title,...
+    'BackgroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    % step = ((dh + szt(2)) * (kk)) + ((dh + szt(2))*(kk-1));
+    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
+    txt{kk}.Position = [ dw (h - step)  szt];
+    txt{kk}.FontWeight = 'Bold';txt{kk}.FontSize = 10;
+    
+    % Radio
+    rad{kk} = uicontrol('Style', 'radiobutton', 'String', '',...
+    'BackgroundColor',gui.colors.hilight2,...
+    'ForegroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
+    rad{kk}.Position =  [ w-18 (h - step)  18 18];
+    if kk == 4 || kk == 6 ||  kk == 13 % DEFAULT OFF OPTIONS
+        rad{kk}.Value = 0; 
+    else
+        rad{kk}.Value = 1;
+    end
+    
+    % Info label
+    nfo{kk} = uicontrol('Style', 'text',...
+    'String', '...',...
+    'ForegroundColor',gui.colors.text_main,...
+    'BackgroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Right');
+    step = (dh + szt(2))* 2 * (kk);
+    nfo{kk}.Position = [ dw (h - step)  szt];
+    
+    % Line
+    lyn{kk} = uicontrol('Style', 'text', 'String', '',...
+    'BackgroundColor',gui.colors.hilight2,...
+    'ForegroundColor',gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+    step = ((dh + szt(2))* 2 * (kk))+szl*2;
+    lyn{kk}.Position = [ dw (h - step)  szt(1) szl];
+
+end
+
+% Start button.
+uicontrol('style', 'pushbutton', 'string', 'Start',...
+    'Position', [dw dh 75 button_space],...
+    'BackgroundColor',gui.colors.main,...
+    'ForegroundColor',gui.colors.text_main,...
+    'Callback', @CSI_AutoProcessing_execute);
+
+% Store GUI stuff,.
+gdat.lyn = lyn; gdat.nfo = nfo; gdat.txt = txt; gdat.rad = rad;
+gdat.str = str; gdat.fh = fh;gdat.csigui = gui.CSIgui_main;
+guidata(fh,gdat);
+
+% --- Executes by Start-button in CSI_AutoProcessing
+function CSI_AutoProcessing_execute(hobj, ~)
+%        'Average k-space.', ...                1
+%        'Apodize k-space.', ...                2
+%        'Spatial FFT.', ...                    3
+%        'Load protocol text- or spar-file.'    4 % OFF by default
+%        'Set parameters: frequency.', ...      5 
+%        'Set parameters: geometry.', ...       6 % OFF by default
+%        'Apodize FID.', ...                    7
+%        'Zero fill FID', ...                   8
+%        'FID to Spectrum (Forward FFT).', ...  9
+%        'Automatic zero-phasing', ...          10
+%        'Combine channels.', ...               11 
+%        'Automatic zero-phasing'               12
+%        'Convert MRI to CSI space.'            13 % OFF by default.
+gdat = guidata(hobj); nfo = gdat.nfo; str = gdat.str; rad = gdat.rad;
+hObj = gdat.csigui; gui = guidata(hObj);
+
+bu = 0; nelem = size(str,2);
+for kk = 1:nelem
+    if rad{kk}.Value == 1
+        if     kk == 1
+            % Average k-space
+            button_CSI_Average_Callback([], [], gui, bu);
+        elseif kk == 2
+            % Apodization k-space
+            button_CSI_Apodization_Kspace_Callback([], [], gui, bu);
+        elseif kk == 3
+            % FFT Spatial
+            button_CSI_FFT_Kspace_Callback([], [], gui, bu);
+        elseif kk == 4
+            button_CSI_ReadInfo_Callback([], [], gui)
+        elseif kk == 5
+            % Set frequency parameters
+            CSI_2D_Scaling_calc_xaxis(hObj,[]);
+        elseif kk == 6
+            % Set geometry parameters
+            button_CSI_setCoordinates_Callback([], [], gui)
+        elseif kk == 7
+            % Apodization FID
+            button_CSI_Apodization_FID_Callback([],[], gui, bu);      
+        elseif kk == 8
+            % Zerofill
+            button_CSI_ZeroFill_Callback([], [], gui, bu);
+        elseif kk == 9
+            % FFT time2spec
+            button_CSI_FFT_Callback([], [], gui, bu);
+        elseif kk == 10
+            % Autophase
+            button_CSI_AutoPhase_Callback([], [], gui, bu);
+        elseif kk == 11
+            % Combine channels
+            CSI_Combine_WSVD;
+        elseif kk == 12
+            % Autophase
+            button_CSI_AutoPhase_Callback([], [], gui, bu);
+        elseif kk == 13
+            % Convert MRI to CSI space.
+            MRI_to_CSIspace(gui);
+        end
+    
+        % Show executed in window
+        nfo{kk}.String = 'Succesfully executed.';
+        nfo{kk}.ForegroundColor = [0 1 0];
+    else
+        nfo{kk}.String = 'Skipped.';
+        nfo{kk}.ForegroundColor = [0.65 0.1 0.1];
+    end
+end
+
+
 % Display data functions % --------------------------------------------- %
-% Specific function to display calculated data for all slices in a
-% figure with a tab for each slice.
 % Data can be visualized either as a graph or as a table.
+% Specific function to display calculated data for all slices, in a
+% single figure, with a tab for each slice in the array. 
+% 
+% E.g. Visualize data wrt spatial information.
+
 
 % ---- Executed by functions to graphically display data/slice
 % Uses cell input to overlay multiple lines
@@ -4982,7 +5193,6 @@ CSI_Log({   'CSI-parameters ---------------------',...
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
 
-
 % --- Executes on button press in button_MRIcoordinates.
 function button_MRIcoordinates_Callback(~, ~, gui)
 %
@@ -5020,9 +5230,9 @@ CSI_Log({'MRI-parameters ---------------------', ...
     sprintf(' %3.2f',mri.ori.offcenter(mid_slice,:)),...
     '----------------------------------------',' '});
 
-
 % --- Executes on button press in button_CSI_setCoordinates.
 function MRI_coordinates_DCM(gui, mri)
+% Calculate MRI coordinates for DICOM files.
 
 imgori = struct;
 
@@ -5137,10 +5347,9 @@ imgori.mesh.z = opts.mesh.z;
 mri.ori = imgori;
 setappdata(gui.CSIgui_main, 'mri', mri);
 
- 
 % --- Executes on button press in button_IMGcoordinates.
 function MRI_coordinates_PAR(gui, mri)
-% Calculate coordinates for PARREC-data MR images.
+% Calculate MRI coordinates for Par/Rec-files.
 
 
 imgori = struct; % Struct with orienation details.
@@ -5248,14 +5457,13 @@ CSI_Log({'MRI-parameters order','Dimensions','Resolution',...
 CSI_Log({'Image coordinates calculated.'},...
                {'Conversion MR images to MRSI space enabled.'});
 
-
 % --- Executes on button press in button_MRIconvert2csi.
 function button_MRIconvert2csi_Callback(~, ~, gui)
 %
 % Convert MRI images to CSI data and create appdata CONV.
 %
 % Requires:
-%       image data and its coordinates meshgrid
+%       image data and the coordinates meshgrid, 
 %       csi limit, resolution and dimensions.
 
 MRI_to_CSIspace(gui);
@@ -5320,7 +5528,6 @@ for sli = 1:nSlices              % For every CSI slice
 end % End of slice loop
 
 img_all = conv.data;
-
 
 % --- Executed by MRIconvert2csi button callback
 function MRI_to_CSIspace(gui)
@@ -5494,7 +5701,6 @@ CSI_Log({'Converted Images -------------------',...
          conv.lim_vol(:,1)',conv.lim_vol(:,2)',...
          '----------------------------------------',''});
 
-     
 % --- Save MRI and/or converted images
 function MRI_saveIMG(hObj,~)
 % Save the converted images to mat-file
@@ -5547,7 +5753,40 @@ switch uans{1}
         save([fp fn ext], 'img');
 end
 
+% --- Executes on button press in button_IMGinCSI.
+function button_IMGinCSI_Callback(hobj, evt, gui);
+% Show image in current displayed MRS array.
+MRI_plot_images_in_CSI_array(hobj);
 
+% --- Plot images in CSI slice
+function MRI_plot_images_in_CSI_array(hObj)
+
+gui = guidata(hObj);
+% Get app-data
+csi = getappdata(gui.CSIgui_main,'csi'); 
+if isempty(csi), CSI_Log({'No CSI data in memory.'},{''}); return; end
+
+disp('There is CSI data in memory! Wooh!');
+
+[~, img_all, soi_range] = MRI_matchSlices(hObj);
+
+
+panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay'); 
+if ~isempty(panelobj)
+    % If it exists get guidata panel 2D.
+    pan2D_gui = guidata(panelobj);
+    % Get values from panel
+    plotindex = cell(1,size(pan2D_gui.sliders,2));
+    for kk = 1:size(pan2D_gui.sliders,2)
+        plotindex{kk} = get(pan2D_gui.sliders{kk}, 'Value');
+    end
+else, plotindex = {1}; % Slice and other indices set to 1.
+end
+
+soi = soi_range(plotindex{1},:);
+img_in_slice = img_all(:,:,soi(1):soi(2));
+
+display3D(img_in_slice, 'limit',[0 max(img_in_slice(:))*0.75]);
 
 
           
@@ -5660,6 +5899,9 @@ plot_par = CSI_2D_plotImages(plot_par, csgui_main_obj);
 
 % ------- % Plot datat using options from plot_par
 CSI_2D_plotVoxels(plot_par,gui);
+
+% ------ % Set the figure ratio to voxel size
+CSI_2D_setFigure_ratio(gui);
 
 % --- % Executed to create a plot2D figure.
 function plot_par = CSI_2D_setFigure(plot_par, init_pos, fig_tag)
@@ -6048,6 +6290,32 @@ end
 
 % Bring figure to front.
 figure(plot_par.fh);
+
+% --- Executes on button press in Button_CSI_setFigure_ratio.
+function Button_CSI_setFigure_ratio_Callback(hObject, eventdata, gui)
+CSI_2D_setFigure_ratio(gui);
+ 
+function CSI_2D_setFigure_ratio(gui)
+% Calculate ratio of screen and voxels; set figure ratio to voxel ratio.
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+if ~isfield(csi,'ori'), return; end
+obj2D = findobj('Tag', 'CSIgui_plot2D');
+if isempty(obj2D), return; end
+
+% Calculate ratio difference
+res = csi.ori.res; scrsz = get(0,'screensize'); 
+ratio_vox = res(1)./res(2); ratio_pc = scrsz(3)./scrsz(4); % X/W div Y/H
+pos = obj2D.Position;
+
+% Figure to monitor ratio
+pos(3) = pos(4).*ratio_pc; obj2D.Position = pos; % Figure to screen ratio.
+
+% Figure to voxel ratio
+pos(3) = pos(4).*ratio_vox; obj2D.Position = pos;
 
 
 % PLOT 2D FUNCTIONS % -------------------------------------------------- %
@@ -6668,12 +6936,13 @@ csi.xaxis = xaxis; % Contains frequency details of MRS data
 % Save in appdata
 setappdata(gui.CSIgui_main,'csi',csi);
 
-% --- Executed to set various 2D-plot scaling & display options
+% --- Executed to manually set various 2D-plot scaling & display options
 function CSI_2D_Scaling_Options(gui)
-% Set display options: x-axis control, y-axis control and data color
-% scaling.
+% Set display options: x-axis control, y-axis control, data color
+% scaling and figure ratio.
 %
 % Uses CSI_Scaling2D_Axis; CSI_Scaling2D_Color
+% Button_CSI_setFigure_ratio
 
 
 % Get CSI app data
@@ -9905,42 +10174,9 @@ end
 
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, eventdata, gui)
-% Normalize data to maximum in a spectrum or a specific peak of the
-% spectrum.
-
-% --- Executes on button press in button_IMGinCSI.
-function button_IMGinCSI_Callback(hobj, evt, gui)
-MRI_plotImage_inCSIslice(hobj);
-
-% --- Plot images in CSI slice
-function MRI_plotImage_inCSIslice(hObj)
-
-gui = guidata(hObj);
-% Get app-data
-csi = getappdata(gui.CSIgui_main,'csi'); 
-if isempty(csi), CSI_Log({'No CSI data in memory.'},{''}); return; end
-
-disp('There is CSI data in memory! Wooh!');
-
-[~, img_all, soi_range] = MRI_matchSlices(hObj);
+disp('Nothing to Test ATM')
 
 
-panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay'); 
-if ~isempty(panelobj)
-    % If it exists get guidata panel 2D.
-    pan2D_gui = guidata(panelobj);
-    % Get values from panel
-    plotindex = cell(1,size(pan2D_gui.sliders,2));
-    for kk = 1:size(pan2D_gui.sliders,2)
-        plotindex{kk} = get(pan2D_gui.sliders{kk}, 'Value');
-    end
-else, plotindex = {1}; % Slice and other indices set to 1.
-end
-
-soi = soi_range(plotindex{1},:);
-img_in_slice = img_all(:,:,soi(1):soi(2));
-
-display3D(img_in_slice, 'limit',[0 max(img_in_slice(:))*0.75]);
 
 % --- Executes on button press in button_MRI_plotImage_Grid.
 function button_MRI_plotImage_Grid_Callback(hObj, ~, gui)
@@ -10082,7 +10318,6 @@ end
 
 end
 
-
 % --- Executes on button press in button_Flip092.
 function button_Flip092_Callback(~, ~, gui)
 
@@ -10101,203 +10336,6 @@ setappdata(gui.CSIgui_main,'csi',csi);
 
 % Display information to user.
 CSI_Log({'CSI data flipped. Dimension:'},{dim});
-
-
-% --- Executes on button press in button_CSI_AutoProcessing_Initiate.
-function button_CSI_AutoProcessing_Initiate_Callback(hObj, ~, gui)
-% Automatically process data:
-%        'Average k-space.', ...                1
-%        'Apodize k-space.', ...                2
-%        'Spatial FFT.', ...                    3
-%        'Load protocol text- or spar-file.'    4 % OFF by default
-%        'Set parameters: frequency.', ...      5 
-%        'Set parameters: geometry.', ...       6 % OFF by default
-%        'Apodize FID.', ...                    7
-%        'Zero fill FID', ...                   8
-%        'FID to Spectrum (Forward FFT).', ...  9
-%        'Automatic zero-phasing', ...          10
-%        'Combine channels.', ...               11 
-%        'Automatic zero-phasing'               12
-%        'Convert MRI to CSI space.'            13 % OFF by default.
-
-% Backup.
-CSI_backupSet(gui,'Initiated auto-processing.');
-
-% The following options are executed automatically.
-str = {'Average k-space.', ...
-       'Apodize k-space.', ...
-       'Spatial FFT.', ...
-       'Load protocol text- or spar-file.',...
-       'Set parameters: frequency.', ...      
-       'Set parameters: geometry.', ...  
-       'Apodize FID.', ...
-       'Zero fill FID', ...
-       'FID to Spectrum (Forward FFT).', ...
-       'Automatic zero-phasing', ...
-       'Combine channels.', ...
-       'Automatic zero-phasing.',...
-       'Convert MRI to CSI space.'};
-%                 Do Not Edit Order              %
-% ---------------------------------------------- %
-   
-   
-% Find any open CSI_auto windows and close.
-obj = findobj('Type', 'Figure', 'Tag', 'CSI_Auto');
-if ~isempty(obj), delete(obj); end
-
-% Create CSI_Auto
-fh = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
-                      'NumberTitle', 'Off', 'Color', gui.colors.main,...
-                      'Name','CSIgui - Automatic Processing','Tag', 'CSI_Auto'); 
-gdat = guidata(fh); axis off;
-
-
-% FIGURE POSITION 
-% Based on nr of elements in str; e.g. every automatic processing step.
-
-% Each process stepp has 2x text heights which include a dh (offset)
-% per text and a line for seperation.
-dw = 5; dh = 4; szt = [230 18]; szl = round(dh/2); % DEFINES FIGURE SIZE
-
-% pos x and y and w h for each object in a single element
-% [txt; nfo; line];
-step = szt(2)*2 + dh*2 + szl; button_space = 15;
-w = szt(1) + dw*2; h = step*size(str,2) + button_space;
-szc = gui.CSIgui_main.Position; 
-
-% Set figure position
-figpos = round((szc(3:4)./2) - ([w h]./2)) + szc(1:2);
-figpos(1) = figpos(1) + szc(3)/2 + w/2;
-fh.Position = [figpos w h];
-
-% Add processing items % ---------------- %
-nelem = size(str,2);
-txt = cell(1,nelem);nfo = cell(1,nelem);
-rad = cell(1,nelem);lyn = cell(1,nelem);
-for kk = 1:nelem
- 
-    % Text label
-    txt{kk} = uicontrol('Style', 'text', 'String', str{kk},...
-    'ForegroundColor',gui.colors.text_title,...
-    'BackgroundColor',gui.colors.main,...
-    'HorizontalAlignment', 'Left');
-    % step = ((dh + szt(2)) * (kk)) + ((dh + szt(2))*(kk-1));
-    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
-    txt{kk}.Position = [ dw (h - step)  szt];
-    txt{kk}.FontWeight = 'Bold';txt{kk}.FontSize = 10;
-    
-    % Radio
-    rad{kk} = uicontrol('Style', 'radiobutton', 'String', '',...
-    'BackgroundColor',gui.colors.hilight2,...
-    'ForegroundColor',gui.colors.main,...
-    'HorizontalAlignment', 'Left');
-    step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
-    rad{kk}.Position =  [ w-18 (h - step)  18 18];
-    if kk == 4 || kk == 6 ||  kk == 13 % DEFAULT OFF OPTIONS
-        rad{kk}.Value = 0; 
-    else
-        rad{kk}.Value = 1;
-    end
-    
-    % Info label
-    nfo{kk} = uicontrol('Style', 'text',...
-    'String', '...',...
-    'ForegroundColor',gui.colors.text_main,...
-    'BackgroundColor',gui.colors.main,...
-    'HorizontalAlignment', 'Right');
-    step = (dh + szt(2))* 2 * (kk);
-    nfo{kk}.Position = [ dw (h - step)  szt];
-    
-    % Line
-    lyn{kk} = uicontrol('Style', 'text', 'String', '',...
-    'BackgroundColor',gui.colors.hilight2,...
-    'ForegroundColor',gui.colors.main,...
-    'HorizontalAlignment', 'Left');
-    step = ((dh + szt(2))* 2 * (kk))+szl*2;
-    lyn{kk}.Position = [ dw (h - step)  szt(1) szl];
-
-end
-
-% Start button.
-uicontrol('style', 'pushbutton', 'string', 'Start',...
-    'Position', [dw dh 75 button_space],...
-    'BackgroundColor',gui.colors.main,...
-    'ForegroundColor',gui.colors.text_main,...
-    'Callback', @CSI_AutoProcessing_execute);
-
-% Store GUI stuff,.
-gdat.lyn = lyn; gdat.nfo = nfo; gdat.txt = txt; gdat.rad = rad;
-gdat.str = str; gdat.fh = fh;gdat.csigui = hObj;
-guidata(fh,gdat);
-
-function CSI_AutoProcessing_execute(hobj, ~)
-%        'Average k-space.', ...                1
-%        'Apodize k-space.', ...                2
-%        'Spatial FFT.', ...                    3
-%        'Load protocol text- or spar-file.'    4 % OFF by default
-%        'Set parameters: frequency.', ...      5 
-%        'Set parameters: geometry.', ...       6 % OFF by default
-%        'Apodize FID.', ...                    7
-%        'Zero fill FID', ...                   8
-%        'FID to Spectrum (Forward FFT).', ...  9
-%        'Automatic zero-phasing', ...          10
-%        'Combine channels.', ...               11 
-%        'Automatic zero-phasing'               12
-%        'Convert MRI to CSI space.'            13 % OFF by default.
-gdat = guidata(hobj); nfo = gdat.nfo; str = gdat.str; rad = gdat.rad;
-hObj = gdat.csigui; gui = guidata(hObj);
-
-bu = 0; nelem = size(str,2);
-for kk = 1:nelem
-    if rad{kk}.Value == 1
-        if     kk == 1
-            % Average k-space
-            button_CSI_Average_Callback([], [], gui, bu);
-        elseif kk == 2
-            % Apodization k-space
-            button_CSI_Apodization_Kspace_Callback([], [], gui, bu);
-        elseif kk == 3
-            % FFT Spatial
-            button_CSI_FFT_Kspace_Callback([], [], gui, bu);
-        elseif kk == 4
-            button_CSI_ReadInfo_Callback([], [], gui)
-        elseif kk == 5
-            % Set frequency parameters
-            CSI_2D_Scaling_calc_xaxis(hObj,[]);
-        elseif kk == 6
-            % Set geometry parameters
-            button_CSI_setCoordinates_Callback([], [], gui)
-        elseif kk == 7
-            % Apodization FID
-            button_CSI_Apodization_FID_Callback([],[], gui, bu);      
-        elseif kk == 8
-            % Zerofill
-            button_CSI_ZeroFill_Callback([], [], gui, bu);
-        elseif kk == 9
-            % FFT time2spec
-            button_CSI_FFT_Callback([], [], gui, bu);
-        elseif kk == 10
-            % Autophase
-            button_CSI_AutoPhase_Callback([], [], gui, bu);
-        elseif kk == 11
-            % Combine channels
-            CSI_Combine_WSVD;
-        elseif kk == 12
-            % Autophase
-            button_CSI_AutoPhase_Callback([], [], gui, bu);
-        elseif kk == 13
-            % Convert MRI to CSI space.
-            MRI_to_CSIspace(gui);
-        end
-    
-        % Show executed in window
-        nfo{kk}.String = 'Succesfully executed.';
-        nfo{kk}.ForegroundColor = [0 1 0];
-    else
-        nfo{kk}.String = 'Skipped.';
-        nfo{kk}.ForegroundColor = [0.65 0.1 0.1];
-    end
-end
 
 % --- Normalize CSI data.
 function CSI_Normalize(gui)
@@ -10363,7 +10401,6 @@ csi.data.raw = data;
 % Save appdata.
 setappdata(gui.CSIgui_main, 'csi', csi);
 
-
 % --- Executes on button press in button_Normalize.
 function button_Normalize_Callback(~ , ~, gui, backup)
 % Normalize data to specific peak maximum: multiple methods available. See
@@ -10376,24 +10413,3 @@ if backup, CSI_backupSet(gui, 'Before normalization.'); end
 % Normalize
 CSI_Normalize(gui);
 
-
-% --- Executes on button press in CSI_2D_Scaling_Ratio.
-function CSI_2D_Scaling_Ratio_Callback(hObject, eventdata, gui)
-
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
-if ~isfield(csi,'ori'), return; end
-obj2D = findobj('Tag', 'CSIgui_plot2D');
-if isempty(obj2D), return; end
-
-res = csi.ori.res; scrsz = get(0,'screensize'); 
-ratio_vox = res(1)./res(2); ratio_pc = scrsz(3)./scrsz(4); % X/W div Y/H
-
-pos = obj2D.Position;
-% Figure to monitor ratio
-pos(3) = pos(4).*ratio_pc; obj2D.Position = pos; % Figure to screen ratio.
-
-% Figure to voxel ratio
-pos(3) = pos(4).*ratio_vox; obj2D.Position = pos;
