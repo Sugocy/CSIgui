@@ -41,7 +41,7 @@ function CSIgui_OpeningFcn(hObject, eventdata, gui, varargin)
 if exist([cd '\Files'],'dir') == 7
     addpath(cd); addpath([cd '\Files']);
 else
-    warndlg('Missing directory "File" in CSIgui root', 'CSIgui error');
+    warndlg('Missing directory "File" in CSIgui root.', 'CSIgui - error');
 end
 
 
