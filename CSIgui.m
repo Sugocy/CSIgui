@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 01-Apr-2019 16:20:45
+% Last Modified by GUIDE v2.5 02-Apr-2019 18:26:09
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -10475,4 +10475,34 @@ if backup, CSI_backupSet(gui, 'Before normalization.'); end
 
 % Normalize
 CSI_Normalize(gui);
+
+
+
+% --- Executes on button press in button_CSI_Peak_Map.
+function button_CSI_Peak_Map_Callback(hObject, eventdata, gui)
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+
+% Get peak of interest
+[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+doir = real(doi); doim = imag(doi);
+
+% Maximum positions and values --> Map
+[map, xaxis_pos_in_spectrum] = max(doir, [], 1);
+
+% Convert maximum to a map
+
+% Normalize
+nfac =  max(map(:)); 
+nmap = map./nfac;
+
+display3D(nmap,'Colormap', 'Jet','Limit', [0 1], 'Tag', 'Peak Map');
+
+
+figure();
+
+
 
