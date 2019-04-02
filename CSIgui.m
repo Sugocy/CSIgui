@@ -36,6 +36,15 @@ function CSIgui_OpeningFcn(hObject, eventdata, gui, varargin)
 % This function has no output args, see OutputFcn.
 % Time ID is created here. Defines GUI its own ID.
 
+
+% Add CSIgui path to Matlab path-root.
+if exist([cd '\Files'],'dir') == 7
+    addpath(cd); addpath([cd '\Files']);
+else
+    warndlg('Missing directory "File" in CSIgui root', 'CSIgui error');
+end
+
+
 % Choose default command line output for CSIgui
 gui.output = hObject;
 % This field create ID for this CSIgui-instance.
