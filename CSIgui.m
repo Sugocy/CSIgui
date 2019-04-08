@@ -44,7 +44,7 @@ fpn_csigui = mfilename('fullpath'); froot = fileparts([fpn_csigui '.m']);
 
 % Add CSIgui path to Matlab path-root.
 if exist([froot '\Files'],'dir') == 7
-    addpath(froot); addpath([froot '\Files']);
+    addpath(froot); addpath([froot '\Files']); savepath;
 else
     % Disable this when compiling to executable. 
     warndlg('Missing directory "File" in CSIgui root.', 'CSIgui - error');
@@ -97,8 +97,7 @@ for inpi = 2:2:size(varargin,2)
         if strcmp(varargin{inpi}, 'fpi'), varargin{inpi} = 'filepathi'; end
         
         % Save input argument as field in inp-struct;
-        inp.(lower(varargin{inpi})) = varargin{inpi-1};
-        
+        inp.(lower(varargin{inpi})) = varargin{inpi-1};       
     end
 end
 
@@ -10306,6 +10305,9 @@ nSlices = size(csi.data.raw,4);
 % GUI Colors
 clr_bg = gui.colors.main;
 clr_tx = gui.colors.text_main; clr_tb = gui.colors.text_title;
+
+% PLOT_PAR: STRUCT WITH ALLL 2D PLOT OPTIONS
+plot_par.colors = gui.colors;
                    % -------- % Figure: create window % -------- %
 
 % Create figure
@@ -10332,6 +10334,7 @@ set(fh, 'Position', [fig_ps fig_sz])
 plot_par.dim      = size(csi.data.raw);   % Data dimensions
 plot_par.dim(1)   = [];                   % Remove time index e.g. 1
 plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
+
 
 
 % 1D Correction
@@ -10549,16 +10552,10 @@ nfac =  max(map(:)); nmap = map./nfac;
 
 
 % FIGURE wIMAGES % --- %
-MRI_plotImage_tabbed(gui,'CSI_Map');
-
+tmp = MRI_plotImage_tabbed(gui,'CSI_Map');
+obj = tmp.fig;
 
 % ADD VOXELS % --- %
-
-% Find CSI_map figure.
-obj = findobj('Tag', 'CSI_Map');
-if isempty(obj), return; 
-elseif size(obj,2)>1, obj = obj{1}; 
-end
 
 % Get GUI data of figure
 tgui = guidata(obj);
