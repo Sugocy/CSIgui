@@ -36,12 +36,15 @@ function CSIgui_OpeningFcn(hObject, eventdata, gui, varargin)
 % This function has no output args, see OutputFcn.
 % Time ID is created here. Defines GUI its own ID.
 
+% Add CSIgui root and Files-folder to search path Matlab.
+fpn_csigui = mfilename('fullpath'); froot = fileparts([fpn_csigui '.m']);
 
 % Add CSIgui path to Matlab path-root.
-if exist([cd '\Files'],'dir') == 7
-    addpath(cd); addpath([cd '\Files']);
+if exist([froot '\Files'],'dir') == 7
+    addpath(froot); addpath([froot '\Files']);
 else
-    % warndlg('Missing directory "File" in CSIgui root.', 'CSIgui - error');
+    % Disable this when compiling to executable. 
+    warndlg('Missing directory "File" in CSIgui root.', 'CSIgui - error');
 end
 
 
@@ -10258,25 +10261,24 @@ disp('Nothing to Test ATM')
 
 
 % --- Executes on button press in button_MRI_plotImage_Grid.
-function button_MRI_plotImage_Grid_Callback(hObj, ~, gui)
+function button_MRI_plotImage_Grid_Callback(~, ~, gui)
 % Plot converted images with the grid superposed on the images. No spectra
 % are shown.
 
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
 % Plot.
-MRI_plotImage_tabbed(gui)
+MRI_plotImage_tabbed(gui);
 
 
-function MRI_plotImage_tabbed(gui, tag)
+function tgui_data = MRI_plotImage_tabbed(gui, tag)
 % Plot each image in csi-space and overlay a grid. The spectra are NOT
 % shown. Each slice/array2D is plotted in a TAB. 
 %
 % Returns a figure: CSIgui - tabs with tag "tag" or CSIgui_tabs (default);
 %
-% Use:
+% OUTPUT: tgui_data. Includes figure object: tgui_data.fig;
+%                    and tab-objects are stored in tgui.tabh;
+% 
+% Without output use:
 % obj = figure('Tag', 'CSIgui_tabs'); if isempty(obj), return; end
 % if size(obj,2)>1, obj = obj{1}; end
 
@@ -10311,8 +10313,7 @@ fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
 fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
 % 5. Apply
 set(fh, 'Position', [fig_ps fig_sz])        
-  
-plot_par.fh = fh; % Store figure handles
+ 
 
 
               % -------- % Data: Dimensions % -------- %
@@ -10362,13 +10363,13 @@ img = MRI_matchSlices(gui.CSIgui_main);
 
               % --------- % Loop all slices % --------- %
 
-save_data = struct;
+tgui_data = struct;
 for sli = 1:nSlices 
     
 plot_par.plotindex = {sli};
     
 % Create a tab for this slice in in tabgroup   
-save_data.tabh{sli} = uitab(tabg, 'Title',int2str(sli),...
+tgui_data.tabh{sli} = uitab(tabg, 'Title',int2str(sli),...
     'BackgroundColor', clr_bg, 'ForegroundColor',clr_tb);
 
                  % ------ % Plot Images % ------- %
@@ -10380,7 +10381,7 @@ if isappdata(gui.CSIgui_main, 'conv')
     
     % Create axis for image
     hold on; 
-    imax = axes('parent',save_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
+    imax = axes('parent',tgui_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
     
     % Plot Images
     if (sum(img2plot(:)) == 0) % Image is only zeroes.
@@ -10405,20 +10406,15 @@ if isappdata(gui.CSIgui_main, 'conv')
 end
 
             % ------ %  PLOT GRID: Overlay of the axis. % ------ % 
-% Why: Due to a axis linewidth error in Matlab, the ancor point of position
-% of the axis is not the bottom left point but the middle of the axis
-% linewidth. This create descripancies in the plot layout due to
-% pixel/normalized/inches conversion on the screen - especially when saving
-% figures. Using seperate grids, this error is not visible.
-% (target, target_sz, dim, range, grid_clr)
-CSI_2D_grid(save_data.tabh{sli},...
+CSI_2D_grid(tgui_data.tabh{sli},...
     fh.Position(3:4), plot_par.dim, plot_par.range, gui.colors.grid);
 
 end
-save_data.plot_par = plot_par;
+tgui_data.plot_par = plot_par; % add plot-par to output.
+tgui_data.fig = fh;
 
-% Save data
-guidata(plot_par.fh, save_data);
+% Save tgui-data to gui
+guidata(fh, tgui_data);
 
 
 % --- Executes on button press in button_Flip092.
@@ -10451,7 +10447,6 @@ function CSI_Normalize(gui)
 uans = getUserInput_Popup({'Normalize by: '},...
     {{'Maximum per voxel','Maximum in volume','Specific peak per voxel'}});
 if isempty(uans), return; end
-
 
 
 % Check if csi appdata is present
@@ -10519,81 +10514,81 @@ CSI_Normalize(gui);
 
 
 % --- Executes on button press in button_CSI_Peak_Map.
-function button_CSI_Peak_Map_Callback(hObj, eventdata, gui)
+function button_CSI_Peak_Map_Callback(~, ~, gui)
+% Plot a map of a specific peak maximum including images and voxel grid.
+
+
+% INITIATE % --- %
 
 % Check if csi appdata is present
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-
 % Get peak of interest
 [doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 doir = real(doi); doim = imag(doi);
 
-% Maximum positions and values --> Map
-[map, xaxis_pos_in_spectrum] = max(doir, [], 1);
 
-% Convert maximum to a map
+% MAP % --- %
 
-% Normalize
-nfac =  max(map(:)); 
-nmap = map./nfac;
+% Maximum positions and values: e.g. Map
+map = max(doir, [], 1);
+% Normalize map
+nfac =  max(map(:)); nmap = map./nfac;
 
-% Plot
-% display3D(nmap,'Colormap', 'Jet','Limit', [0 1], 'Tag', 'Peak Map');
 
-% With image and overlay
-MRI_plotImage_tabbed(gui,'CSI_Map'); drawnow;
+% FIGURE wIMAGES % --- %
+MRI_plotImage_tabbed(gui,'CSI_Map');
 
-% FInd map.
+
+% ADD VOXELS % --- %
+
+% Find CSI_map figure.
 obj = findobj('Tag', 'CSI_Map');
-if isempty(obj), return; end
-if size(obj,2)>1, obj = obj{1}; end
-
-
-tgui = guidata(obj);
-
-plot_par = tgui.plot_par;
-
-set(obj,'Unit', 'Normalized')
-
-% Calculate map range
-clr_map = jet(256);
-clr_val = linspace(0,1,size(clr_map,1));
-
-% LOOP EACH TAB
-for sli = 1:size(tgui.tabh,2)
-    
-  % Plot csi voxel per axis in plot_par.grid
-for ci = 1:plot_par.dim(1)                  % Col loop.
-    for ri = 1:plot_par.dim(2)              % Row loop.
-        
-        % AXIS DETAILS % -------------- %
-        
-        % X and Y position in the figure of the axis to plot.
-        x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
-        % Position of axis to plot
-        pos = [x y plot_par.res(1) plot_par.res(2)];
-        % Create axis with pos(3,4) size at pos(1,2) position
-        if ~ishandle(tgui.tabh{sli}), return; end
-        ax{ri,ci,sli} = axes('parent',tgui.tabh{sli},'position',pos);
-        
-        vox_val = nmap(:,ci,ri,sli);
-        [~, clr_ind]= min(abs(clr_val-vox_val));
-        ax{ri,ci,sli}.Color = [clr_map(clr_ind,:) 0.25];
-         
-        % AXIS COSMETICS % -------------- %
-        set(ax{ri,ci,sli},...
-               'XColor', plot_par.colors.main,'YColor',...
-               plot_par.colors.main,...
-               'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
-               'TickLength',[0 0.00001],'Box', 'off');             
-        
-    end 
+if isempty(obj), return; 
+elseif size(obj,2)>1, obj = obj{1}; 
 end
 
+% Get GUI data of figure
+tgui = guidata(obj);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
 
-    
+% Map 2 Colors: Calculate map range
+clr_map = jet(128);
+clr_val = linspace(0,1,size(clr_map,1));
+
+
+ax = cell([plot_par.dim, size(tgui.tabh,2)]);
+% Loop each tab of figure
+for sli = 1:size(tgui.tabh,2)                   % Sli loop.
+    % Plot csi voxel per axis in plot_par.grid
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % AXIS DETAILS 
+            % X and Y position in the figure of the axis to plot.
+            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
+            % Position of axis to plot
+            pos = [x y plot_par.res(1) plot_par.res(2)];
+            % Create axis with pos(3,4) size at pos(1,2) position
+            if ~ishandle(tgui.tabh{sli}), return; end
+            ax{ri,ci,sli} = axes('parent',tgui.tabh{sli},'position',pos);
+            
+            % VOXEL VALUE
+            vox_val = nmap(:,ci,ri,sli);
+            [~, clr_ind]= min(abs(clr_val-vox_val));
+            ax{ri,ci,sli}.Color = [clr_map(clr_ind,:) 0.25];
+
+            % AXIS COSMETICS
+            set(ax{ri,ci,sli},...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off');             
+
+        end 
+    end 
 end
 
 % Plot colorbar
