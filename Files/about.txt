@@ -1,18 +1,14 @@
-This is a text test and there will be more information in the future. 
+For updates check: www.csigui.tk\n
 \n
-Thus just to be sure I will keep on blabbing about totally nothing and 
-see if you keep on reading. Banana Ice-Cream and some Pina Colada 
-would make life more pleasant. Now some annoying intergers like 5 
-and dont forget about the weird 3.14 which equals pie. I like pie, do 
-you like pie? Sincerly a tired programmer. \n
-A space it required at the end of sentence to make if flow nice
-like I am not doing now, the words clunck, is clunck a word?, together. 
-This is better, used space character after together.\n
-This should be a new paragraph/line, is it true? \n
-What happens if I talk too much and try to divide by zero?
-Will something cool happen?
-Dunno
-Lets find out now by just rambling on about totally
-nothing
-or 
-someting 
+A viewer and processing tool for raw X-nuclei MRSI data. \n
+- View a mutli-dimensional data volume per specific dimension attribute. \n
+- Merge MRI and MRSI space for localization.\n
+- Process data: from k-space to individual spectra.\n
+- Calculate maps or specific spectrum properties.\n
+- Edit and save a single spectrum from bulk data.\n
+\n
+Supports list/data files (Philips), spar/sdat files (Philips), \n
+dicom files (Philips) and par/rec files.\n
+\n
+Q. van Houtum\n
+quincyvanhoutum@gmail.com\n

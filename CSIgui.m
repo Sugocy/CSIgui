@@ -36,6 +36,9 @@ function CSIgui_OpeningFcn(hObject, eventdata, gui, varargin)
 % This function has no output args, see OutputFcn.
 % Time ID is created here. Defines GUI its own ID.
 
+ 
+%% ROOT CSIGUI
+
 % Add CSIgui root and Files-folder to search path Matlab.
 fpn_csigui = mfilename('fullpath'); froot = fileparts([fpn_csigui '.m']);
 
@@ -48,14 +51,18 @@ else
 end
 
 
+%% CSIGUI VERSION
+
 % Choose default command line output for CSIgui
 gui.output = hObject;
 % This field create ID for this CSIgui-instance.
 gui.ID = sprintf('%.0f', now.*10^10);
 % Define CSIgui version here.
-gui.version = '1.1';
+gui.version = '2.0';
 
-%% Add menu bar to figure.
+
+
+%% Add menu-bar
 
 loadBar(0.1, 'Creating menubar...');
 gui = CSIgui_setMenuBar(gui);
@@ -1133,7 +1140,7 @@ about_title = 'About CSIgui';
 
 % Figure: CSIgui About
 aboutfig = figure('Tag', 'CSIgui_About',...
-               'Name', ['CSIgui v' gui.version ' - About'],...
+               'Name', ['CSIgui v' gui.version ],...
                'Color', clr_bg, 'MenuBar','none', 'Toolbar', 'none', ...
                'resize', 'off','numbertitle', 'off'); 
 
@@ -4999,11 +5006,15 @@ end
 
 % --- Executes by slice2rowArray.
 function indArray = slice2rowIndex(ndimCell)
-% Given a cell array with a cell per index/dimension with the corresponding
-% length vector of that dimension, an array with the corresponding indexing 
-% returned.
+% Input:
+% A cell array (1,N) with a 1 to "index size" vector ...
+% 
+% Outout:
+% ...will return an array with the corresponding indexing for all elements
+% in the initial array.
 %
-% E.g. {{1:2}, {1:3}} returns: [1 1; 1 2; 1 3; 2 1; 2 2; 2 3]
+% E.g. Array of size (2,3):
+% ndumCell = {{1:2}, {1:3}} --> returns: [1 1; 1 2; 1 3; 2 1; 2 2; 2 3]
 
 % Get nr of linear vector dimension index cells to process
 dims_sz   = size(ndimCell);
