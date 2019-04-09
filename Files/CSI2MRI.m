@@ -35,5 +35,9 @@ nMz_per_Cz_step = floor(nMz_per_Cz/2);
 min_of_slice = (close_ind - nMz_per_Cz_step);
 max_of_slice = (close_ind + nMz_per_Cz_step);
 % MRI slices in range.
+if min_of_slice <0, min_of_slice = 1; end
+if (max_of_slice < min_of_slice) || (max_of_slice < 0)
+    max_of_slice = min_of_slice+1;
+end
 mz_range = [min_of_slice max_of_slice];
     

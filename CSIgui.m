@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 02-Apr-2019 18:26:09
+% Last Modified by GUIDE v2.5 09-Apr-2019 21:52:19
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2059,7 +2059,7 @@ switch uanstype{1}
 end
 
 % Set options if applicable
-if exist('uansopts', 'var')
+if exist('uopts', 'var')
     if isempty(uopts), CSI_Log({'Skipped apodization.'},{''}); return; end
     opts = str2double(strsplit(uopts{1},' '));
 else, uopts = {''}; opts(1) = 0; 
@@ -2092,6 +2092,72 @@ if  (size(win,1) > 1) % No apodization if window size equals 1.
     CSI_Log({['Filter ' uanstype{1} ' applied. Possible opts:']},...
                uopts);
 end
+
+
+% --- Normalize CSI data.
+function CSI_Normalize(gui)
+% Normalize data to maximum in a spectrum or the volume.
+% The real-part of the spectrum is used.
+%
+% Additional: peak specific?
+
+% Get userinput: normalize how?
+uans = getUserInput_Popup({'Normalize by: '},...
+    {{'Maximum per voxel','Maximum in volume','Specific peak per voxel'}});
+if isempty(uans), CSI_Log({'Skipped normalize data.'},{''}); return; 
+end  
+
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Get data-array
+data = csi.data.raw;
+
+% Split units: use real for normalization
+dataR = CSI_getUnit(data,'Real'); dataI = CSI_getUnit(data,'Imaginary');
+
+
+% Data as cell index layout
+sz = size(dataR); cell_layout = ...
+arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+
+% Create cell of data.
+datac = mat2cell(dataR, sz(1), cell_layout{:});
+
+
+
+switch uans{1}
+    case 'Specific peak per voxel'
+        % Get peak of interest
+        doi = CSI_getDataAtPeak(data, csi.xaxis);
+        if isnan(doi), return; end
+        % Maximum to normalize to.
+        max_val = max(real(doi),[],1); 
+        datac = cellfun(@(x,y) x./y, ...
+            datac,repmat({max_val},size(datac)), 'Uniform', 0);
+        
+    case 'Maximum per voxel'
+        
+        % Normalize to maximum of each voxel
+        datac = cellfun(@(x) x./max(x(:)), datac, 'Uniform', 0);
+        
+    case 'Maximum in volume'
+        
+        % Normalize to maximum in volume
+        datac = cellfun(@(x,y) x./max(y), ...
+            datac, repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
+        
+end
+
+% Replace with original data
+dataR = cell2mat(datac); data = complex(dataR, dataI); % Complex data set
+csi.data.raw = data;
+
+% Save appdata.
+setappdata(gui.CSIgui_main, 'csi', csi);
+
 
 % --- Executed by Apodization FID button
 function [data, window] = CSI_filterSpectra(data, ftype, opts)
@@ -3246,6 +3312,19 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 CSI_Log({'MRS data divided by '},{fac});
 
 
+% --- Executes on button press in button_Normalize.
+function button_Normalize_Callback(~ , ~, gui, backup)
+% Normalize data to specific peak maximum: multiple methods available. See
+% CSI_Normalize();
+if nargin < 4 , backup = 1; end
+
+% Create backup
+if backup, CSI_backupSet(gui, 'Before normalization.'); end
+
+% Normalize
+CSI_Normalize(gui);
+
+
 
 
 % --- Executes on button press in button_CSI_Combine.
@@ -3925,6 +4004,101 @@ csi.data.log = char(log);
 assignin('base', 'csi',csi.data);
 csi.data
 fprintf('Variable "csi" accessible from workspace.\n');
+
+
+% --- Executes on button press in button_CSI_Peak_Map.
+function button_CSI_Peak_Map_Callback(~, ~, gui)
+% Plot a map of a specific peak maximum including images and voxel grid.
+
+
+% INITIATE % --- %
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Get peak of interest
+[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+doir = real(doi); doim = imag(doi);
+
+
+% MAP % --- %
+
+% Maximum positions and values: e.g. Map
+map = max(doir, [], 1);
+% Normalize map
+nfac =  max(map(:)); nmap = map./nfac;
+
+
+% FIGURE wIMAGES % --- %
+tmp = MRI_plotImage_tabbed(gui,'CSI_Map');
+obj = tmp.fig;
+
+% ADD VOXELS % --- %
+MRI_plotImage_tabbed_addVoxels(obj);
+tgui = guidata(obj); plot_par = tgui.plot_par;
+
+% Map 2 Colors: Calculate map range
+clr_map = jet(128);
+clr_val = linspace(0,1,size(clr_map,1));
+
+% Loop each tab of figure
+for sli = 1:size(tgui.tabh,2)                   % Sli loop.
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % VOXEL VALUE
+            vox_val = nmap(:,ci,ri,sli);
+            [~, clr_ind]= min(abs(clr_val-vox_val));
+            plot_par.ax{ri,ci,sli}.Color = [clr_map(clr_ind,:) 0.33];            
+
+        end 
+    end 
+end
+
+% Plot colorbar
+colorbarQ(clr_map, clr_val);
+
+
+function MRI_plotImage_tabbed_addVoxels(obj)
+% Use MRI_plotImage_tabbed(gui,tag) to create the appriopriate
+% figure and allow this function to add an axis for each voxel in all tabs.
+
+% ADD VOXELS % --- %
+
+% Get GUI data of figure
+tgui = guidata(obj);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
+
+ax = cell([plot_par.dim, size(tgui.tabh,2)]);
+% Loop each tab of figure
+for sli = 1:size(tgui.tabh,2)                   % Sli loop.
+    % Plot csi voxel per axis in plot_par.grid
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % AXIS DETAILS 
+            % X and Y position in the figure of the axis to plot.
+            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
+            % Position of axis to plot
+            pos = [x y plot_par.res(1) plot_par.res(2)];
+            % Create axis with pos(3,4) size at pos(1,2) position
+            if ~ishandle(tgui.tabh{sli}), return; end
+            ax{ri,ci,sli} = axes('parent',tgui.tabh{sli},'position',pos);           
+
+            % AXIS COSMETICS
+            set(ax{ri,ci,sli},...
+                   'Color','None',...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off');             
+
+        end 
+    end 
+end
+plot_par.ax = ax; tgui.plot_par = plot_par; guidata(obj,tgui);
 
 % --- Executes on button press in button_CSI_phaseShift.
 function button_CSI_phaseShift_Callback(hObject, eventdata, gui, backup)
@@ -5122,7 +5296,7 @@ end
 
 
 % COORDINATES % -------------------------------------------------------- %
-
+% MRI and CSI
 
 % --- Executes on button press in button_CSI_setCoordinates.
 function button_CSI_setCoordinates_Callback(~, ~, gui)
@@ -5271,8 +5445,8 @@ CSI_Log({   'CSI-parameters ---------------------',...
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
 
-% --- Executes on button press in button_MRIcoordinates.
-function button_MRIcoordinates_Callback(~, ~, gui)
+% --- Executes on button press in button_MRI_setCoordinates.
+function button_MRI_setCoordinates_Callback(~, ~, gui)
 %
 % Calculate MRI coordinates for PAR and DCM files.
 % Using the appropriate functions.
@@ -5307,6 +5481,33 @@ CSI_Log({'MRI-parameters ---------------------', ...
     sprintf(' %3.2f',mri.ori.lim(:,2)),...
     sprintf(' %3.2f',mri.ori.offcenter(mid_slice,:)),...
     '----------------------------------------',' '});
+
+% --- Executes on button press in button_MRI_plotImage_Grid.
+function button_MRI_plotImage_Grid_Callback(~, ~, gui)
+% Plot converted images with the grid superposed on the images. No spectra
+% are shown.
+
+% Plot.
+MRI_plotImage_tabbed(gui);
+
+% --- Executes on button press in button_IMGinCSI.
+function button_IMGinCSI_Callback(hobj, evt, gui)
+% Show image in current displayed MRS array.
+MRI_plotImage_current_CSI(hobj);
+
+% --- Executes on button press in button_MRI_convert.
+function button_MRI_convert_Callback(~, ~, gui)
+%
+% Convert MRI images to CSI data and create appdata CONV.
+%
+% Requires:
+%       image data and the coordinates meshgrid, 
+%       csi limit, resolution and dimensions.
+
+MRI_to_CSIspace(gui);
+
+
+% MRI Functions % ------------------------------------------------------ %
 
 % --- Executes on button press in button_CSI_setCoordinates.
 function MRI_coordinates_DCM(gui, mri)
@@ -5540,17 +5741,6 @@ CSI_Log({'MRI-parameters order','Dimensions','Resolution',...
 % Display information to user.
 CSI_Log({'Image coordinates calculated.'},...
                {'Conversion MR images to MRSI space enabled.'});
-
-% --- Executes on button press in button_MRIconvert2csi.
-function button_MRIconvert2csi_Callback(~, ~, gui)
-%
-% Convert MRI images to CSI data and create appdata CONV.
-%
-% Requires:
-%       image data and the coordinates meshgrid, 
-%       csi limit, resolution and dimensions.
-
-MRI_to_CSIspace(gui);
 
 % --- Calculate images matching CSI slices
 function [img, img_all, img_all_slice_range] = MRI_matchSlices(hObj)
@@ -5837,11 +6027,6 @@ switch uans{1}
         save([fp fn ext], 'img');
 end
 
-% --- Executes on button press in button_IMGinCSI.
-function button_IMGinCSI_Callback(hobj, evt, gui);
-% Show image in current displayed MRS array.
-MRI_plotImage_current_CSI(hobj);
-
 % --- Plot images in CSI slice
 function MRI_plotImage_current_CSI(hObj)
 
@@ -5870,8 +6055,159 @@ img_in_slice = img_all(:,:,soi(1):soi(2));
 
 display3D(img_in_slice, 'limit',[0 max(img_in_slice(:))*0.75]);
 
+% --- Plot images/tab and include voxel grid.
+function tgui_data = MRI_plotImage_tabbed(gui, tag)
+% Plot each image in csi-space and overlay a grid. The spectra are NOT
+% shown. Each slice/array2D is plotted in a TAB. 
+%
+% Returns a figure: CSIgui - tabs with tag "tag" or CSIgui_tabs (default);
+%
+% OUTPUT: tgui_data. Includes figure object: tgui_data.fig;
+%                    and tab-objects are stored in tgui.tabh;
+% 
+% Without output use:
+% obj = figure('Tag', 'CSIgui_tabs'); if isempty(obj), return; end
+% if size(obj,2)>1, obj = obj{1}; end
 
-          
+if nargin<2, tag = 'CSIgui - tabs'; end
+
+% Check if csi appdata is present
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+
+% Size of data
+nSlices = size(csi.data.raw,4);
+
+% GUI Colors
+clr_bg = gui.colors.main;
+clr_tx = gui.colors.text_main; clr_tb = gui.colors.text_title;
+
+% PLOT_PAR: STRUCT WITH ALLL 2D PLOT OPTIONS
+plot_par.colors = gui.colors;
+                   % -------- % Figure: create window % -------- %
+
+% Create figure
+fh = figure('Tag', tag ,'Name', 'CSIgui - Tabs',...
+            'Color', clr_bg, 'Toolbar', 'None', 'MenuBar', 'None',...
+            'NumberTitle', 'Off');                   
+
+% Create tab group
+tabg = uitabgroup(fh); tabh = cell(1,nSlices);
+
+% 1. Default figure size and screen pixel size
+def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
+% 2. Ratio to define figure height to def_size
+fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
+% 4. Position of figure.
+fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
+% 5. Apply
+set(fh, 'Position', [fig_ps fig_sz])        
+ 
+
+
+              % -------- % Data: Dimensions % -------- %
+              
+plot_par.dim      = size(csi.data.raw);   % Data dimensions
+plot_par.dim(1)   = [];                   % Remove time index e.g. 1
+plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
+
+
+
+% 1D Correction
+% Set in plot_par the 1D dimension to the second index e.g. column. This 
+% adds a y-dimension/height.
+if plot_par.data_dim == 1, plot_par.dim(2) = 1; plot_par.data_dim = 2; end
+
+              % -------- % Figure: Axis Grid % -------- %
+
+% Axes linewidth: One point == 1/72 inch.
+% axlw_pt = 1;
+
+% Resolution without any correction of linewidth
+plot_par.res = 1./plot_par.dim(1:2); 
+
+% Loop X Y and Z
+% X, Y and Z == csi-space. Position in figure starts at
+% point zero (0). Resolution equals the nr of CSI-voxels to plot in the row 
+% (y in image)and column (x in image) dimension of the figure. 
+for kk = 1:numel(plot_par.res)
+    plot_par.range{kk} = ...
+    0 : plot_par.res(kk) : ...
+       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
+end
+% Caluclate a grid for each axis in the figure representing the voxels in
+% CSI data.
+[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
+plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
+
+
+% 1D Correction 
+% Transpose x/col and y/row. Creats Nx1 vs 1xN lists of the
+% axis grid coordinates.
+if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
+
+
+              % --------- % Prepare images % --------- %
+              
+img = MRI_matchSlices(gui.CSIgui_main);
+
+              % --------- % Loop all slices % --------- %
+
+tgui_data = struct;
+for sli = 1:nSlices 
+    
+plot_par.plotindex = {sli};
+    
+% Create a tab for this slice in in tabgroup   
+tgui_data.tabh{sli} = uitab(tabg, 'Title',int2str(sli),...
+    'BackgroundColor', clr_bg, 'ForegroundColor',clr_tb);
+
+                 % ------ % Plot Images % ------- %
+                
+if isappdata(gui.CSIgui_main, 'conv')
+    
+    conv_data = getappdata(gui.CSIgui_main,'conv'); % Conv data
+    img2plot = img(:,:,sli);                        % Get image to plot.
+    
+    % Create axis for image
+    hold on; 
+    imax = axes('parent',tgui_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
+    
+    % Plot Images
+    if (sum(img2plot(:)) == 0) % Image is only zeroes.
+        colormap(gray(255)); set(imax,'Color', 'Black'); alpha(1); 
+    else
+        % Image plotting:
+        % Imscale as it plots over the entire figure and does not
+        % imply any border issues as with imshow-function.
+        imagesc(img2plot, 'parent', imax); 
+
+        % Image Contrast.
+        if isfield(conv_data, 'contrast')
+            caxis(imax, conv_data.contrast);
+        else
+            caxis(imax,[min(img2plot(:)) max(img2plot(:))*0.5]);
+        end
+        colormap(gray(255));
+    end 
+    
+    plot_par.colors.main = [0 0 0];
+    
+end
+
+            % ------ %  PLOT GRID: Overlay of the axis. % ------ % 
+CSI_2D_grid(tgui_data.tabh{sli},...
+    fh.Position(3:4), plot_par.dim, plot_par.range, gui.colors.grid);
+
+end
+tgui_data.plot_par = plot_par; % add plot-par to output.
+tgui_data.fig = fh;
+
+% Save tgui-data to gui
+guidata(fh, tgui_data);
+
+
 % PLOT 2D CSI % -------------------------------------------------------- %
 
 
@@ -6373,8 +6709,8 @@ end
 % Bring figure to front.
 figure(plot_par.fh);
 
-% --- Executes on button press in Button_CSI_setFigure_ratio.
-function Button_CSI_setFigure_ratio_Callback(~, ~, gui)
+% --- Executes on button press in button_CSI_setFigure_ratio.
+function button_CSI_setFigure_ratio_Callback(~, ~, gui)
 CSI_2D_setFigure_ratio(gui);
  
 function CSI_2D_setFigure_ratio(gui)
@@ -7023,10 +7359,9 @@ setappdata(gui.CSIgui_main,'csi',csi);
 % --- Executed to manually set various 2D-plot scaling & display options
 function CSI_2D_Scaling_Options(gui)
 % Set display options: x-axis control, y-axis control, data color
-% scaling and figure ratio.
+% scaling 
 %
 % Uses CSI_Scaling2D_Axis; CSI_Scaling2D_Color
-% Button_CSI_setFigure_ratio
 
 
 % Get CSI app data
@@ -7055,6 +7390,7 @@ inp_clr = {'Voxel', 'Volume', 'Static'};
 ind = contains(inp_clr, current_clr);inp_clr = {inp_clr{ind} inp_clr{~ind}};
 inp_axs = {'Voxel','Slice','Volume'};
 ind = contains(inp_axs, current_axs);inp_axs = {inp_axs{ind} inp_axs{~ind}};
+
 % Ask user.
 yaxis_ans = getUserInput_Popup({'Color scaling:','Y-axis scaling:'},...
                           {inp_clr,inp_axs});
@@ -7085,6 +7421,9 @@ CSI_2D_Scaling_Axis_Set(gui.CSIgui_main, evt);
 
 % Process x-axis range answer
 csi.xaxis.xlimit = str2double(strsplit(xaxis_ans{1},' '));
+
+% Figure ratio
+button_CSI_setFigure_ratio_Callback([], [], gui);
 
 % Save appdata.
 setappdata(gui.CSIgui_main,'csi',csi); 
@@ -9267,8 +9606,8 @@ if isappdata(gui.CSIgui_main, 'conv')
     display3D(conv.data,'tag','Converted');
 end
 
-% --- Executes on button press in button_MRIcontrast.
-function button_MRIcontrast_Callback(hObject, eventdata, gui)
+% --- Executes on button press in button_MRI_setContrast.
+function button_MRI_setContrast_Callback(hObject, eventdata, gui)
 % Set the contrast for plotting the image behind the CSI data
 
 % Get data.
@@ -9598,115 +9937,6 @@ gui.menubar.View.theme.day.Checked    = 'Off';
 gui.menubar.View.theme.night.Checked  = 'Off';
 gui.menubar.View.theme.custom.Checked = 'On';
 setGUIcolor(csigui_obj);
-
-% --------------------------------------------------------------------- %
-% --------------------------------------------------------------------- %
-
-                            % MISCELLANEOUS %
-
-% --- Load bar
-function loadBar(perc, info)
-% Opens a load bar if not existant and sets the load-bar percentage to
-% perc. If perc equals NaN, the bar is closed.
-%
-% Input info, a string, is optional and can be used to set text in the
-% window of the loadbar. 
-% 
-% Mainly used for launching of CSIgui
-
-% If no info string is given
-if nargin == 1, info = 'Busy...'; end
-
-% Normalize percentage
-if ~isnan(perc) && perc > 1, perc = perc/100; end
-
-% Check for bar-figure
-barObj = findobj('Type','Figure','Tag','loadBar');
-
-                % ------- % Create loadBar % ------- %
-if isempty(barObj)
-    % Create figure
-    figh = figure('Tag', 'loadBar','Name', ['CSIgui: ' info],...
-           'Color', 'Black','Toolbar', 'None', 'MenuBar', 'None',...
-           'NumberTitle', 'Off','Resize','off');  
-      
-    % Set figure position
-    w = 480; h = 20;
-    scrsz = get(0,'Screensize'); 
-    figpos = round(scrsz(3:4)./2) - ([w h]./2);
-    set(figh,'Position', [figpos w h]);
-    
-    % GUI data
-    bgui = guidata(figh); bgui.fig = figh;
-    
-    % Set a (text) bar
-    bgui.bar = uicontrol('style','text', ...
-                'units','normalized','position',[0 0 0 1],...
-                'BackgroundColor', [0.9 0.0 0.0]);
-            
-    % Save guidata
-    guidata(bgui.fig, bgui);
-else
-    % Get loadbar guidata
-    bgui = guidata(barObj);
-end
-
-                % ------- % UPDATING loadBAR % ------- %
-
-% Close if NaN
-if isnan(perc), delete(bgui.fig); return; end
-
-% Set bar progress
-bgui.bar.Position = [0 0 perc 1];
-
-% Set info string
-bgui.fig.Name = ['CSIgui: ' info];
-
-% Flush
-drawnow;                            
-                            
-                            
-% --- Executes on selection change in listbox_CSIinfo.
-function listbox_CSIinfo_Callback(hObject, eventdata, gui)
-% --- Executes during object creation, after setting all properties.
-function listbox_CSIinfo_CreateFcn(hObject, eventdata, gui)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-% --- Executes on selection change in listbox_MRIinfo.
-function listbox_MRIinfo_Callback(hObject, eventdata, gui)
-% --- Executes during object creation, after setting all properties.
-function listbox_MRIinfo_CreateFcn(hObject, eventdata, gui)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-% --- Executes on selection change in popup_plotUnit.
-function popup_plotUnit_Callback(hObject, eventdata, gui)
-% --- Executes during object creation, after setting all properties.
-function popup_plotUnit_CreateFcn(hObject, eventdata, gui)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-% --- Executes on selection change in popup_plotIMG.
-function popup_plotIMG_Callback(hObject, eventdata, gui)
-% --- Executes during object creation, after setting all properties.
-function popup_plotIMG_CreateFcn(hObject, eventdata, gui)
-% hObject    handle to popup_plotIMG (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --------------------------------------------------------------------- %
-            %   Everything below here is new and in beta!  %
-                        % Probably not finished %
-% --------------------------------------------------------------------- %
-
 
 
 
@@ -10276,354 +10506,119 @@ for kk = 1:nfig
 end
 
 
+% --------------------------------------------------------------------- %
+% --------------------------------------------------------------------- %
+
+                            % MISCELLANEOUS %
+
+% --- Load bar
+function loadBar(perc, info)
+% Opens a load bar if not existant and sets the load-bar percentage to
+% perc. If perc equals NaN, the bar is closed.
+%
+% Input info, a string, is optional and can be used to set text in the
+% window of the loadbar. 
+% 
+% Mainly used for launching of CSIgui
+
+% If no info string is given
+if nargin == 1, info = 'Busy...'; end
+
+% Normalize percentage
+if ~isnan(perc) && perc > 1, perc = perc/100; end
+
+% Check for bar-figure
+barObj = findobj('Type','Figure','Tag','loadBar');
+
+                % ------- % Create loadBar % ------- %
+if isempty(barObj)
+    % Create figure
+    figh = figure('Tag', 'loadBar','Name', ['CSIgui: ' info],...
+           'Color', 'Black','Toolbar', 'None', 'MenuBar', 'None',...
+           'NumberTitle', 'Off','Resize','off');  
+      
+    % Set figure position
+    w = 480; h = 20;
+    scrsz = get(0,'Screensize'); 
+    figpos = round(scrsz(3:4)./2) - ([w h]./2);
+    set(figh,'Position', [figpos w h]);
+    
+    % GUI data
+    bgui = guidata(figh); bgui.fig = figh;
+    
+    % Set a (text) bar
+    bgui.bar = uicontrol('style','text', ...
+                'units','normalized','position',[0 0 0 1],...
+                'BackgroundColor', [0.9 0.0 0.0]);
+            
+    % Save guidata
+    guidata(bgui.fig, bgui);
+else
+    % Get loadbar guidata
+    bgui = guidata(barObj);
+end
+
+                % ------- % UPDATING loadBAR % ------- %
+
+% Close if NaN
+if isnan(perc), delete(bgui.fig); return; end
+
+% Set bar progress
+bgui.bar.Position = [0 0 perc 1];
+
+% Set info string
+bgui.fig.Name = ['CSIgui: ' info];
+
+% Flush
+drawnow;                            
+                            
+                            
+% --- Executes on selection change in listbox_CSIinfo.
+function listbox_CSIinfo_Callback(hObject, eventdata, gui)
+% --- Executes during object creation, after setting all properties.
+function listbox_CSIinfo_CreateFcn(hObject, eventdata, gui)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+% --- Executes on selection change in listbox_MRIinfo.
+function listbox_MRIinfo_Callback(hObject, eventdata, gui)
+% --- Executes during object creation, after setting all properties.
+function listbox_MRIinfo_CreateFcn(hObject, eventdata, gui)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+% --- Executes on selection change in popup_plotUnit.
+function popup_plotUnit_Callback(hObject, eventdata, gui)
+% --- Executes during object creation, after setting all properties.
+function popup_plotUnit_CreateFcn(hObject, eventdata, gui)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+% --- Executes on selection change in popup_plotIMG.
+function popup_plotIMG_Callback(hObject, eventdata, gui)
+% --- Executes during object creation, after setting all properties.
+function popup_plotIMG_CreateFcn(hObject, eventdata, gui)
+% hObject    handle to popup_plotIMG (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --------------------------------------------------------------------- %
+            %   Everything below here is new OR beta!  %
+                        % Probably not finished %
+% --------------------------------------------------------------------- %
+
+
 %%% ----------- % ------------------------------------------------------ %
-
-
-
 
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, eventdata, gui)
-disp('Nothing to Test ATM')
-
-
-
-% --- Executes on button press in button_MRI_plotImage_Grid.
-function button_MRI_plotImage_Grid_Callback(~, ~, gui)
-% Plot converted images with the grid superposed on the images. No spectra
-% are shown.
-
-% Plot.
-MRI_plotImage_tabbed(gui);
-
-
-function tgui_data = MRI_plotImage_tabbed(gui, tag)
-% Plot each image in csi-space and overlay a grid. The spectra are NOT
-% shown. Each slice/array2D is plotted in a TAB. 
-%
-% Returns a figure: CSIgui - tabs with tag "tag" or CSIgui_tabs (default);
-%
-% OUTPUT: tgui_data. Includes figure object: tgui_data.fig;
-%                    and tab-objects are stored in tgui.tabh;
-% 
-% Without output use:
-% obj = figure('Tag', 'CSIgui_tabs'); if isempty(obj), return; end
-% if size(obj,2)>1, obj = obj{1}; end
-
-if nargin<2, tag = 'CSIgui - tabs'; end
-
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
-
-% Size of data
-nSlices = size(csi.data.raw,4);
-
-% GUI Colors
-clr_bg = gui.colors.main;
-clr_tx = gui.colors.text_main; clr_tb = gui.colors.text_title;
-
-% PLOT_PAR: STRUCT WITH ALLL 2D PLOT OPTIONS
-plot_par.colors = gui.colors;
-                   % -------- % Figure: create window % -------- %
-
-% Create figure
-fh = figure('Tag', tag ,'Name', 'CSIgui - Tabs',...
-            'Color', clr_bg, 'Toolbar', 'None', 'MenuBar', 'None',...
-            'NumberTitle', 'Off');                   
-
-% Create tab group
-tabg = uitabgroup(fh); tabh = cell(1,nSlices);
-
-% 1. Default figure size and screen pixel size
-def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
-% 2. Ratio to define figure height to def_size
-fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
-% 4. Position of figure.
-fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
-% 5. Apply
-set(fh, 'Position', [fig_ps fig_sz])        
- 
-
-
-              % -------- % Data: Dimensions % -------- %
-              
-plot_par.dim      = size(csi.data.raw);   % Data dimensions
-plot_par.dim(1)   = [];                   % Remove time index e.g. 1
-plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
-
-
-
-% 1D Correction
-% Set in plot_par the 1D dimension to the second index e.g. column. This 
-% adds a y-dimension/height.
-if plot_par.data_dim == 1, plot_par.dim(2) = 1; plot_par.data_dim = 2; end
-
-              % -------- % Figure: Axis Grid % -------- %
-
-% Axes linewidth: One point == 1/72 inch.
-% axlw_pt = 1;
-
-% Resolution without any correction of linewidth
-plot_par.res = 1./plot_par.dim(1:2); 
-
-% Loop X Y and Z
-% X, Y and Z == csi-space. Position in figure starts at
-% point zero (0). Resolution equals the nr of CSI-voxels to plot in the row 
-% (y in image)and column (x in image) dimension of the figure. 
-for kk = 1:numel(plot_par.res)
-    plot_par.range{kk} = ...
-    0 : plot_par.res(kk) : ...
-       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
-end
-% Caluclate a grid for each axis in the figure representing the voxels in
-% CSI data.
-[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
-plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
-
-
-% 1D Correction 
-% Transpose x/col and y/row. Creats Nx1 vs 1xN lists of the
-% axis grid coordinates.
-if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
-
-
-              % --------- % Prepare images % --------- %
-              
-img = MRI_matchSlices(gui.CSIgui_main);
-
-              % --------- % Loop all slices % --------- %
-
-tgui_data = struct;
-for sli = 1:nSlices 
-    
-plot_par.plotindex = {sli};
-    
-% Create a tab for this slice in in tabgroup   
-tgui_data.tabh{sli} = uitab(tabg, 'Title',int2str(sli),...
-    'BackgroundColor', clr_bg, 'ForegroundColor',clr_tb);
-
-                 % ------ % Plot Images % ------- %
-                
-if isappdata(gui.CSIgui_main, 'conv')
-    
-    conv_data = getappdata(gui.CSIgui_main,'conv'); % Conv data
-    img2plot = img(:,:,sli);                        % Get image to plot.
-    
-    % Create axis for image
-    hold on; 
-    imax = axes('parent',tgui_data.tabh{sli},'Position',[0 0 1 1], 'Color', 'None');
-    
-    % Plot Images
-    if (sum(img2plot(:)) == 0) % Image is only zeroes.
-        colormap(gray(255)); set(imax,'Color', 'Black'); alpha(1); 
-    else
-        % Image plotting:
-        % Imscale as it plots over the entire figure and does not
-        % imply any border issues as with imshow-function.
-        imagesc(img2plot, 'parent', imax); 
-
-        % Image Contrast.
-        if isfield(conv_data, 'contrast')
-            caxis(imax, conv_data.contrast);
-        else
-            caxis(imax,[min(img2plot(:)) max(img2plot(:))*0.5]);
-        end
-        colormap(gray(255));
-    end 
-    
-    plot_par.colors.main = [0 0 0];
-    
-end
-
-            % ------ %  PLOT GRID: Overlay of the axis. % ------ % 
-CSI_2D_grid(tgui_data.tabh{sli},...
-    fh.Position(3:4), plot_par.dim, plot_par.range, gui.colors.grid);
-
-end
-tgui_data.plot_par = plot_par; % add plot-par to output.
-tgui_data.fig = fh;
-
-% Save tgui-data to gui
-guidata(fh, tgui_data);
-
-
-% --- Executes on button press in button_Flip092.
-function button_Flip092_Callback(~, ~, gui)
-
-% Check for CSI data
-if ~isappdata(gui.CSIgui_main,'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi'); 
-
-% Flip over this dimension 
-dim = [4 2 3];
-csi.data.raw = flip(csi.data.raw,dim(1));
-csi.data.raw = flip(csi.data.raw,dim(2));
-csi.data.raw = flip(csi.data.raw,dim(3));
-
-% Update appdata
-setappdata(gui.CSIgui_main,'csi',csi); 
-
-% Display information to user.
-CSI_Log({'CSI data flipped. Dimension:'},{dim});
-
-% --- Normalize CSI data.
-function CSI_Normalize(gui)
-% Normalize data to maximum in a spectrum or the volume.
-% The real-part of the spectrum is used.
-%
-% Additional: peak specific?
-
-% Get userinput: normalize how?
-uans = getUserInput_Popup({'Normalize by: '},...
-    {{'Maximum per voxel','Maximum in volume','Specific peak per voxel'}});
-if isempty(uans), CSI_Log({'Skipped normalize data.'},{''}); return; 
-end  
-
-
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
-% Get data-array
-data = csi.data.raw;
-
-% Split units: use real for normalization
-dataR = CSI_getUnit(data,'Real'); dataI = CSI_getUnit(data,'Imaginary');
-
-
-% Data as cell index layout
-sz = size(dataR); cell_layout = ...
-arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-
-% Create cell of data.
-datac = mat2cell(dataR, sz(1), cell_layout{:});
-
-
-
-switch uans{1}
-    case 'Specific peak per voxel'
-        % Get peak of interest
-        doi = CSI_getDataAtPeak(data, csi.xaxis);
-        if isnan(doi), return; end
-        % Maximum to normalize to.
-        max_val = max(real(doi),[],1); 
-        datac = cellfun(@(x,y) x./y, ...
-            datac,repmat({max_val},size(datac)), 'Uniform', 0);
-        
-    case 'Maximum per voxel'
-        
-        % Normalize to maximum of each voxel
-        datac = cellfun(@(x) x./max(x(:)), datac, 'Uniform', 0);
-        
-    case 'Maximum in volume'
-        
-        % Normalize to maximum in volume
-        datac = cellfun(@(x,y) x./max(y), ...
-            datac, repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
-        
-end
-
-% Replace with original data
-dataR = cell2mat(datac); data = complex(dataR, dataI); % Complex data set
-csi.data.raw = data;
-
-% Save appdata.
-setappdata(gui.CSIgui_main, 'csi', csi);
-
-% --- Executes on button press in button_Normalize.
-function button_Normalize_Callback(~ , ~, gui, backup)
-% Normalize data to specific peak maximum: multiple methods available. See
-% CSI_Normalize();
-if nargin < 4 , backup = 1; end
-
-% Create backup
-if backup, CSI_backupSet(gui, 'Before normalization.'); end
-
-% Normalize
-CSI_Normalize(gui);
-
-
-
-% --- Executes on button press in button_CSI_Peak_Map.
-function button_CSI_Peak_Map_Callback(~, ~, gui)
-% Plot a map of a specific peak maximum including images and voxel grid.
-
-
-% INITIATE % --- %
-
-% Check if csi appdata is present
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main,'csi');
-
-% Get peak of interest
-[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
-doir = real(doi); doim = imag(doi);
-
-
-% MAP % --- %
-
-% Maximum positions and values: e.g. Map
-map = max(doir, [], 1);
-% Normalize map
-nfac =  max(map(:)); nmap = map./nfac;
-
-
-% FIGURE wIMAGES % --- %
-tmp = MRI_plotImage_tabbed(gui,'CSI_Map');
-obj = tmp.fig;
-
-% ADD VOXELS % --- %
-
-% Get GUI data of figure
-tgui = guidata(obj);
-% Plot data for each tab: voxel grid and more plot settings.
-plot_par = tgui.plot_par;
-
-% Map 2 Colors: Calculate map range
-clr_map = jet(128);
-clr_val = linspace(0,1,size(clr_map,1));
-
-
-ax = cell([plot_par.dim, size(tgui.tabh,2)]);
-% Loop each tab of figure
-for sli = 1:size(tgui.tabh,2)                   % Sli loop.
-    % Plot csi voxel per axis in plot_par.grid
-    for ci = 1:plot_par.dim(1)                  % Col loop.
-        for ri = 1:plot_par.dim(2)              % Row loop.
-
-            % AXIS DETAILS 
-            % X and Y position in the figure of the axis to plot.
-            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
-            % Position of axis to plot
-            pos = [x y plot_par.res(1) plot_par.res(2)];
-            % Create axis with pos(3,4) size at pos(1,2) position
-            if ~ishandle(tgui.tabh{sli}), return; end
-            ax{ri,ci,sli} = axes('parent',tgui.tabh{sli},'position',pos);
-            
-            % VOXEL VALUE
-            vox_val = nmap(:,ci,ri,sli);
-            [~, clr_ind]= min(abs(clr_val-vox_val));
-            ax{ri,ci,sli}.Color = [clr_map(clr_ind,:) 0.25];
-
-            % AXIS COSMETICS
-            set(ax{ri,ci,sli},...
-                   'XColor', plot_par.colors.main,...
-                   'YColor', plot_par.colors.main,...
-                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
-                   'TickLength',[0 0.00001], 'Box', 'off');             
-
-        end 
-    end 
-end
-
-% Plot colorbar
-colorbarQ(clr_map, clr_val);
-
-
-
-
-
-
+warndlg('Developers testing button :)');
 
 
