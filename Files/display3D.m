@@ -160,7 +160,11 @@ gui.txt.String = sprintf('%i/%i',sl,size(gui.data,3));
 if ~isfield(gui.opt,'limit')
     gui.opt.limit = getContrast(gui.data);
 end
-caxis(gui.ax, gui.opt.limit); 
+if gui.opt.limit(1) >= gui.opt.limit(2)
+    gui.opt.limit(2) = gui.opt.limit(1)+1;
+end
+gui.ax.CLim =  gui.opt.limit;
+    
 
 % Colormap type
 if isfield(gui.opt,'colormap')
