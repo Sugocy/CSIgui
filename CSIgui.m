@@ -3197,43 +3197,24 @@ function button_CSI_Rotate_Callback(~, ~ , gui)
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% USERINPUT % ---------------------------------------------- %
+% USERINPUT % ------------------ %
+
 % Ask user which axis to rotate over
 uans = getUserInput({'Dimensional plane to rotate?'},{'2 3'});
 if isempty(uans), CSI_Log({'Skipped rotating data.'},{''}) ; return; end
+% Plane to rotate.
+rotpl = str2double(strsplit(uans{1},' ')); 
 
-% ROTATE % ------------------------------------------------- %
+% ROTATE % --------------------- %
+% Rot90 works only if rotating plane is on index 1 and 2.
 
-% 1. Permute
-% For rotate, the rotating plane requires to be index 1 and 2.
+% Rotate
+csi.data.raw = CSI_rotate(csi.data.raw, rotpl, 1);
 
-% Plane dimensions which rotate
-rot_plane = str2double(strsplit(uans{1},' ')); 
-% Total permute vector of nr of dims in csi data
-tot_vec   = 1:numel(size(csi.data.raw)); 
-% Find which dimensions remain.
-lia = ismember(tot_vec, rot_plane); 
-% Add to permute vector after the rotate plane.
-perm_vec = [rot_plane tot_vec(lia == 0)];
-% Permute
-tmp = permute(csi.data.raw,perm_vec);
-
-% 2. Rotate: CSI + Labels + DIMS
-% rot90 rotates in the plane formed by the first and second dimensions.
-% Rotating of dims and labels is equal to swapping rot_dim(1) and 
-% rot_dim(2) in these variables;
-
-% Data
-tmp = rot90(tmp);
-% Labels
-csi.data.labels([rot_plane]) =  ...
-    csi.data.labels([rot_plane(2) rot_plane(1)]);
-% Dims
-csi.data.dim(rot_plane) = csi.data.dim([rot_plane(2) rot_plane(1)]);
-
-% 3. Permute
-% Revert to original index order;
-csi.data.raw = ipermute(tmp, perm_vec);
+% Apply rotation to labels
+csi.data.labels(rotpl) =  csi.data.labels(fliplr(rotpl));
+% And dimensions
+csi.data.dim(rotpl) = csi.data.dim(fliplr(rotpl));
 
 % 4. Save appdata
 setappdata(gui.CSIgui_main, 'csi', csi);
@@ -3242,7 +3223,34 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Display information to user.
 CSI_Log({'Rotated plane'},...
-    {[csi.data.labels{rot_plane(2)} ' | ' csi.data.labels{rot_plane(1)}]});
+    {[csi.data.labels{rotpl(2)} ' | ' csi.data.labels{rotpl(1)}]});
+
+
+function [spec, permv] = CSI_rotate(spec, plane, nturns)
+% Rotates the MRS plane by 90 degrees counter clockwise for every turn.
+% permv = the permute vector to make rot90 to work.
+
+if nargin < 3, nturns = 1; end
+
+
+% Plane dimensions which rotate
+rot_plane = plane;
+
+% Create permute vector: plane to index 1 and2.
+tot_vec = 1:numel(size(spec)); lia = ismember(tot_vec, rot_plane);
+permv = [rot_plane tot_vec(lia == 0)];
+
+% Permute
+spec = permute(spec, permv);
+
+% Rotate 
+spec = rot90(spec, nturns);
+
+% Permute back
+spec = ipermute(spec, permv);
+
+
+
 
 % --- Executes on button press in button_CSI_Multiply.
 function button_CSI_Multiply_Callback(~, ~, gui, backup)
@@ -5330,10 +5338,6 @@ end
 % Read Header Data % ----------- %
 % For SPAR and SDAT data
 
-% akdnbdkawndakndakwndalkwdnwaldnawndldnawl
-% Add read-protocol here too!? --> Resolution + Offcenter.
-% dwnkadnawlndlandlakdnlwkandlnakdnwandkajw
-
 if ~isfield(ori,'res') % Only if not already read the header file.
     if strcmp(csi.ext,'spar') || strcmp(csi.ext,'sdat')
         % Get from header file: Offcenter, slicethickness, slicegfov, fov 
@@ -5759,6 +5763,7 @@ else
 end
 
 if ~isappdata(gui.CSIgui_main,'csi') img = NaN; return; end
+
 csi = getappdata(gui.CSIgui_main,'csi');
 if ~isfield(csi,'ori'), img = NaN; return; end
 
@@ -5834,7 +5839,7 @@ end
 
 % Check for required orientation data field: MRI
 if ~isfield(mri, 'ori')
-    button_MRIcoordinates_Callback([], [], gui); 
+    button_MRI_setCoordinates_Callback([], [], gui); 
     mri = getappdata(gui.CSIgui_main, 'mri');
     if ~isfield(mri, 'ori'), return; end
 end    
@@ -6553,9 +6558,9 @@ if isappdata(csiguiObj, 'conv')
         
         % hold(plot_par.imax, 'on'); 
         if (sum(plot_par.img(:)) == 0) % Image is only zeroes.
-             
+            imagesc(plot_par.imax,plot_par.img); 
             colormap(plot_par.imax,gray(255)); 
-            set(plot_par.imax,'Color', 'Black'); alpha(1); 
+            set(plot_par.imax,'Color', 'Black'); alpha(plot_par.imax,0); 
         else
             % Image plotting
             % Imscale as it plots over the entire figure and does not
@@ -6582,6 +6587,8 @@ if isappdata(csiguiObj, 'conv')
             end
             colormap(plot_par.imax, gray(255));
         end
+        
+        
         
         uistack(plot_par.imax,'bottom')
         plot_par.colors.main = [0 0 0];
@@ -10619,6 +10626,105 @@ end
 
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, eventdata, gui)
-warndlg('Developers testing button :)');
+% warndlg('Watch out! Developers testing button. Panic!');
+
+% Get csi data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get image data
+if ~isappdata(gui.CSIgui_main, 'conv'), return; end
+conv = getappdata(gui.CSIgui_main, 'conv');
+
+mri = getappdata(gui.CSIgui_main,'mri');
+
+% Tra to Sagital % ---------------------- %
+% A (top) L (right) to R (top) A(right)
+% Current: kx rl = x = 2;  To  rl to z = 4;
+%          ky ap = y = 3;      ap to x = 2; 
+%          kz fh = z = 4;      fh to y = 3;
+
+
+plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
+% For no-time index data use plane-1;
+
+
+
+% ROTATE MRS
+[csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
+
+
+
+% ROTATE MRS RELATED
+% Apply rotation to labels
+csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
+% And dimensions
+csi.data.dim(plane) = csi.data.dim(fliplr(plane));
+
+
+
+% ROTATE IMG
+conv.data = CSI_rotate(conv.data, plane-1, 1);
+
+
+
+% ROTATE SPATIAL INFORMATION  MRS
+
+% Orientation info.
+ori = csi.ori;
+ori.res(plane-1)       = ori.res(fliplr(plane-1));       
+ori.offcenter(plane-1) = ori.offcenter(fliplr(plane-1));  
+ori.dim(plane-1)       = ori.dim(fliplr(plane-1));       
+
+% Coordinates of CSI data.
+% Adds fields: coordinate vector (vector) & coordinate limits (limit) &
+% volume limit (limit_vol).
+csi.ori = csi_coordinates(ori,'center', ori.vox_cor, ori.fft_cor); 
+
+% Meshgrid
+[csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
+    meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
+
+
+% ROTATE SPATIAL INFORMATION CONVERTED IMG
+
+% Swap resolutions.
+% conv.res = mri.ori.res;
+conv.res(plane-1) = conv.res(fliplr(plane-1)); % Initial... May change!
+
+% % Calculate a resolution fitting the CSI space such that there is a integer
+% % amount of image pixels fitted in each CSI direction of space.
+% res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
+% res_rem = res_fit - floor(res_fit);     % Pixel change
+% res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
+% 
+% % New resolution for each direction
+% conv.res = res_new;
+
+% Volume limits of CSI but with half a voxel distance for voxel limits e.g.
+% a total voxel (MRI res) vs the volume.
+conv.fov       = csi.ori.fov;     % Does not change regards to CSI
+conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
+conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
+conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
+
+% Range of volume/grid of MRSI for MRI
+for kk = 1:size(conv.lim,1)    
+    % Number of pixels in kk-direction
+    N = (conv.fov(kk)./conv.res(kk));
+    % Grid vector defining volume
+    conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
+end
+
+% Image grid in MRSI space 
+% This grid lays in the CSI-space e.g. within limits of CSI FOV but is
+% sampled in x, y and z as close to the resolution of the image as possible
+[x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
+conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
+
+% Store data
+setappdata(gui.CSIgui_main, 'csi',csi);
+setappdata(gui.CSIgui_main, 'conv',conv);
+CSI_Log({'Done testing.'},{''});
 
 

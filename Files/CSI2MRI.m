@@ -1,5 +1,5 @@
 function mz_range = CSI2MRI(cz, mz, sz_cz, sz_mz)
-% Returns min and max index of MRI-slices which lay around the CSI slice
+% Returns min and max index of MRI-slices located in the CSI slice
 % coordinate given.
 
 
@@ -33,11 +33,15 @@ nMz_per_Cz_step = floor(nMz_per_Cz/2);
 [~, close_ind] = min(abs(mz-cz));
 
 min_of_slice = (close_ind - nMz_per_Cz_step);
+if min_of_slice <= 0, min_of_slice = 1; end
+
 max_of_slice = (close_ind + nMz_per_Cz_step);
+if max_of_slice > size(mz,1), max_of_slice = size(mz,1); end
+
 % MRI slices in range.
-if min_of_slice <0, min_of_slice = 1; end
 if (max_of_slice < min_of_slice) || (max_of_slice < 0)
-    max_of_slice = min_of_slice+1;
+    max_of_slice = min_of_slice + 1;
 end
+
 mz_range = [min_of_slice max_of_slice];
     
