@@ -5932,7 +5932,7 @@ if isfield(mri,'contrast'), conv.contrast = mri.contrast; end
 % Apply required rotations or flips.
 
 % % Apply additional rotation if it is list/data file
-% if strcmp(csi.ext,'.list') || strcmp(csi.ext,'.data')
+if strcmp(csi.ext,'.list') || strcmp(csi.ext,'.data')
 %     % Patient position: HFS and FFS
 %     ppos = mri.par.(imtoi){1}.PrivatePerFrameSq.Item_1.PatientPosition;
 %     
@@ -5948,13 +5948,16 @@ if isfield(mri,'contrast'), conv.contrast = mri.contrast; end
 %         spat_ind = str2double(strsplit(uans{1},' '));
 %     end
 %     
-%     % Get, if available, unflipped original data.
-%     if isfield(conv,'Original_MRSI')
-%         mrsi_to_flip = conv.Original_MRSI;
-%     else
-%         mrsi_to_flip = csi.data.raw; conv.Original_MRSI = mrsi_to_flip;
-%     end
-% 
+    % Get, if available, unflipped original data.
+    if isfield(conv,'Original_MRSI')
+        mrsi_to_flip = conv.Original_MRSI;
+    else
+        mrsi_to_flip = csi.data.raw; conv.Original_MRSI = mrsi_to_flip;
+    end
+    spat_ind = csi_findDimLabel(csi.data.labels,...
+                               {'kx','ky','kz','x','y','z'});
+    csi.data.raw = flip(csi.data.raw, spat_ind(3));
+        
 %     % Rotate according to HFS/FFS?
 %     switch ppos
 %         case 'HFS'
@@ -5963,7 +5966,7 @@ if isfield(mri,'contrast'), conv.contrast = mri.contrast; end
 %         case 'FFS'
 %         csi.data.raw = flip(flip(mrsi_to_flip,spat_ind(1)),spat_ind(3));
 %     end
-% end
+end
 
 % Save data: CONV CREATED - IMAGE data in CSI-space.
 setappdata(gui.CSIgui_main,'conv', conv);
@@ -10434,7 +10437,7 @@ for kk = 1:size(sel.voxels,2)
 end
 
 % --- % Executed by CSI_MergeVoxels_Button_Align
-function sel = CSI_MergeVoxels_Align(sel)
+function sel = CSI_MergeVoxels_Align2(sel)
 % Align voxels before averaging.
 %
 % Sel-structure requires field voxels and peak of interest poi.
@@ -10499,6 +10502,87 @@ for kk = 1:nfig
         plV.Parent.XDir = 'reverse';
         
         axh.XLim = [-16 8];
+    end
+    
+    str = ['Slice ' num2str(nsli(kk)) ...
+           ' | Avg shift: ' num2str(mean(voi_shifts(vox_ind_all)))];
+       
+    uicontrol(fh, 'Style','text','Units','Normalized',...
+        'Position',[0.35 0.925 0.3 0.05],...
+        'string', str);
+        % 'ForegroundColor','White','BackgroundColor','Black',...
+
+    
+end
+
+
+
+function sel = CSI_MergeVoxels_Align(sel)
+% Align voxels before averaging.
+%
+% Sel-structure requires field voxels and peak of interest poi.
+
+% Undress the input structure:
+voxels = sel.voxels; poi = sel.poi; 
+
+                   % ---- % Aligning voxels % ---- %
+                    
+% Spectrum with maximum signal at peak of interest (POI)
+[voi_poi_max , voi_poi_max_pos] = max( real( voxels(poi(1):poi(2),:)), [], 1);
+[~,template_ind] = max(voi_poi_max);
+
+
+template = voxels(:,template_ind);
+for si = 1:size(voxels,2)
+    [corval, lags] = xcorr(template, voxels(:,si));
+    [max_corr, ind] = max(corval);
+     voi_shifts(si) = lags(ind);
+end
+
+% Shift each voxel by its voi_shift amount
+voi_cell = mat2cell(voxels, size(voxels,1), ones(1,size(voxels,2)));
+voi_aligned_cell = ...
+    cellfun(@circshift, voi_cell, num2cell(voi_shifts), 'uniform',0);
+voi_aligned = cell2mat(voi_aligned_cell);
+
+% ---- % Set Output
+sel.voxels = voi_aligned;
+
+
+% Additional plots
+
+nsli = unique(sel.index(:,3));
+nfig = numel(nsli);
+
+for kk = 1:nfig
+    
+    % N voxels for this figure.
+    nvox_perfig{kk} = find(sel.index(:,3) == nsli(kk));
+    vox_ind_all = nvox_perfig{kk};
+    
+    fh = figure();
+    nvox = size(nvox_perfig{kk},1);
+    for vi = 1:nvox
+        subplot(nvox,1,vi);
+        
+        vox_ind = vox_ind_all(vi);
+        
+        if isfield(sel.xaxis,'ppm'), xax = sel.xaxis.ppm;
+        else,                        xax = sel.xaxis.none;
+        end
+
+        % Plot aligned
+        plA = plot(xax, real(voi_aligned(:,vox_ind)),'-r');hold on;
+        % Plot voxel
+        plV = plot(xax, real(voxels(:,vox_ind)),'--b'); 
+
+        
+        % Axis cosmetics
+        
+
+        axh = plV.Parent;
+        plV.Parent.XDir = 'reverse';
+       
     end
     
     str = ['Slice ' num2str(nsli(kk)) ...
