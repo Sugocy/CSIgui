@@ -1817,14 +1817,14 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % GET OPTION INPUT % ------------------- %
 
-% quest = {'Circular shift (0) or Fourier shift (1)'};
-% defan = {{'0','1'}};
-% uans = getUserInput_Popup(quest,defan);
-% if isempty(uans), return; end
-% 
-% % Set option
-% shift_opt = str2double(uans{1});
-shift_opt = 2; % SET TO AUTOMATIC
+quest = {'Automatic (2), Circular shift (0) or Fourier shift (1)'};
+defan = {{'2', '0','1'}};
+uans = getUserInput_Popup(quest,defan);
+if isempty(uans), return; end
+
+% Set option
+shift_opt = str2double(uans{1});
+% shift_opt = 2; % SET TO AUTOMATIC
 
 % K-space index: find the spatial dimensions/indexes: ask if not found.
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -10733,11 +10733,8 @@ plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
 % For no-time index data use plane-1;
 
 
-
 % ROTATE MRS
 [csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
-
-
 
 % ROTATE MRS RELATED
 % Apply rotation to labels
@@ -10746,10 +10743,8 @@ csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
 csi.data.dim(plane) = csi.data.dim(fliplr(plane));
 
 
-
 % ROTATE IMG
 conv.data = CSI_rotate(conv.data, plane-1, 1);
-
 
 
 % ROTATE SPATIAL INFORMATION  MRS

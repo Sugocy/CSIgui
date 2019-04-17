@@ -77,34 +77,54 @@ elseif shift_method == 1
     
 % CIRC/FFTSHIFT based on odd/even    
 elseif shift_method == 2
-    
-    
     % odd even bool
-    ind_sz = sz(dim); odd_bool = mod(ind_sz,2);
+    odd_bool = mod(dim,2);    
     
-    % SHIFT 1/2
-    for kk = 1:size(dim,2)
-        if odd_bool(kk) % Odd
-            fft_data =  ifftshift(fft_data, dim(kk));
-        else % Even
-            fft_data = circshift(fft_data,ceil(sz(dim(kk))/2+1), dim(kk)); 
-        end
-    end
-     
-    % FFT
-    for kk = 1:size(dim,2)
-            fft_data = ifft(fft_data,[], dim(kk));
-    end
+    if ~loop
     
-    % SHIFT 2/2
-    for kk = 1:size(dim,2)
-        if odd_bool(kk) % Odd
-            fft_data =  fftshift(fft_data, dim(kk));
-        else % Even
-            fft_data = circshift(fft_data,-1.*ceil(sz(dim(kk))/2+1), dim(kk)); 
-        end
-    end
+        % odd even bool
+        odd_bool = mod(dim,2);
 
+        % SHIFT 1/2
+        for kk = 1:size(dim,2)
+            if odd_bool(kk) % Odd
+                fft_data =  ifftshift(fft_data, dim(kk));
+            else % Even
+                fft_data = circshift(fft_data,ceil(sz(dim(kk))/2+1), dim(kk)); 
+            end
+        end
+
+        % FFT
+        for kk = 1:size(dim,2)
+                fft_data = ifft(fft_data,[], dim(kk));
+        end
+
+        % SHIFT 2/2
+        for kk = 1:size(dim,2)
+            if odd_bool(kk) % Odd
+                fft_data =  fftshift(fft_data, dim(kk));
+            else % Even
+                fft_data = circshift(fft_data,-1.*ceil(sz(dim(kk))/2+1), dim(kk)); 
+            end
+        end
+
+    else
+        % Loop each dimension
+        for kk = 1:size(dim,2)
+            % If odd use fft-shift
+            if odd_bool(kk)
+                fft_data = ...
+                fftshift( ifft( ifftshift( fft_data, dim(kk) ),[],dim(kk)), dim(kk));
+            else
+            % If even use circ-shift
+                fft_data = ...
+                    circshift(fft_data,ceil(sz(dim(kk))/2+1), dim(kk)); 
+                fft_data = ifft(fft_data,[],dim(kk));
+                fft_data = ...
+                    circshift(fft_data,-1.*ceil(sz(dim(kk))/2+1), dim(kk));
+            end
+        end
+    end
     
 end
 
