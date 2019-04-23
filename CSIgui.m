@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 09-Apr-2019 21:52:19
+% Last Modified by GUIDE v2.5 23-Apr-2019 17:13:53
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -976,22 +976,23 @@ regexp(nfo.Nucleus,'\d*','Match'), regexp(nfo.Nucleus,'[A-Z]','Match'));
 csi.xaxis.nucleus = cat(2,nucleus{:});
 csi.xaxis.BW = nfo.SpectralBW_Hz;
 
-% Res AP
-if isfield(nfo,'VoxAP_mm')
-    csi.ori.res(1) = nfo.VoxAP_mm;
-    csi.ori.offcenter(1) = [nfo.SliceOffc_AP_P__mm]; 
-end
 
-% Res RL
+% Res RL - INDEX 1
 if isfield(nfo,'VoxRL_mm') 
-   csi.ori.res(2) = nfo.VoxRL_mm;     
-   csi.ori.offcenter(2) = [nfo.RL_L__mm]; 
+   csi.ori.res(1) = nfo.VoxRL_mm;     
+   csi.ori.offcenter(1) = [nfo.RL_L__mm]; 
 end
 if isfield(nfo, 'VoxelSizeRL_mm')
-   csi.ori.res(2) = nfo.VoxelSizeRL_mm;
+   csi.ori.res(1) = nfo.VoxelSizeRL_mm;
 end
 
-% Res FH
+% Res AP - INDEX 2
+if isfield(nfo,'VoxAP_mm')
+    csi.ori.res(2) = nfo.VoxAP_mm;
+    csi.ori.offcenter(2) = [nfo.SliceOffc_AP_P__mm]; 
+end
+
+% Res FH - INDEX 3
 if isfield(nfo,'VoxFH_mm')
    csi.ori.res(3) = nfo.VoxFH_mm;
    csi.ori.offcenter(3) = [nfo.FH_H__mm]; 
@@ -1696,6 +1697,10 @@ function button_CSI_Average_Callback(~, ~, gui, backup)
 % This functions aims to average over dimension "aver" or "nsa".
 %
 % Uses CSI_average();
+if nargin < 3
+    obj = findobj('Type', 'Figure','Tag', 'CSIgui_main');
+    gui = guidata(obj);
+end
 if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------------------- %
@@ -10806,4 +10811,104 @@ setappdata(gui.CSIgui_main, 'csi',csi);
 setappdata(gui.CSIgui_main, 'conv',conv);
 CSI_Log({'Done testing.'},{''});
 
+
+
+
+% --- Executes on button press in button_TestSomething2.
+function button_TestSomething2_Callback(hObject, eventdata, gui)
+
+CSI_backupSet(gui,'Test2');
+
+% Get csi data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+if ~isfield(csi, 'ori'), return; end
+
+% For subtracting or adding a voxel shift... to CSI grid. in a specific
+% direction.
+
+% Get data
+ori = csi.ori;
+
+uans = getUserInput({'Voxel shift for each direction?'},{'0 0 0'});
+if isempty(uans), return; end
+
+shft = str2double(strsplit(uans{1}));
+
+% Edit offcenter by X-voxels in X-directions
+for kk = 1:3
+    ori.offcenter(kk) = ori.offcenter(kk) + (ori.res(kk).*shft(kk));
+end
+
+% Get shift options.
+opts.fft_cor = ori.fft_cor; opts.vox_cor = ori.vox_cor;
+
+% Calculate coordinates.
+csi.ori = CSI_coordinates_process(ori.res, ori.offcenter, ori.dim, opts);
+
+% Save to appdata
+setappdata(gui.CSIgui_main,'csi',csi);   
+gui = guidata(gui.CSIgui_main);
+
+% Recalculate all.
+MRI_to_CSIspace(gui);
+
+
+% ADD ALL -1 TO VOXEL...WUAW?
+
+function ori = CSI_coordinates_process(res, offcenter, dim, opts)
+% Creates output structure ORI with coordinate information for CSI grid.
+% Dim = k-space or spatial index size: csi.data.dim((k-)space index);
+% opts.vox_cor 
+% opts.fft_cor --> If not given, default is off.
+
+% Set resolution
+ori.res = res; ori.offcenter = offcenter; ori.dim = dim;
+
+% Correction factors saved.
+if isfield(opts, 'vox_cor'), ori.vox_cor = opts.vox_cor; end
+if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
+    
+
+% Coordinates of CSI data. % ------------------------ %
+% Fields: 
+%   Coordinate vector (vector) 
+%   Coordinate limits (limit) 
+%   Volume limit      (limit_vol)
+ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor); 
+
+
+% Calculate volume gird % ----------- %
+% Meshgrid
+[ori.mesh.x, ori.mesh.y, ori.mesh.z] = ...
+    meshgrid(ori.vector{1} , ori.vector{2}, ori.vector{3});
+
+% Clean up % ------------------------ %
+
+% Update LOG
+CSI_Log({   'CSI-parameters ---------------------',...
+            'Direction:', 'Dimensions:', 'Resolution:',...
+            'Offcenter:', 'FOV:', ...
+            'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
+            'Voxel limit (Min):', 'Voxel limit (Max):', ...
+            'Volume limit (Min):', 'Volume limit (Max)', '',''},...
+           { '',                      '[AP/LR/FH]',...
+             ori.dim,             ori.res,...
+             ori.offcenter(1,:),  ori.fov,...
+             ori.vox_cor,         ori.fft_cor,...
+             ori.lim(:,1)',       ori.lim(:,2)',...
+             ori.lim_vol(:,1)',   ori.lim_vol(:,2)',...
+             '----------------------------------------',''});
+
+
+% --- Executes on button press in button_MRI_clear_image_data.
+function button_MRI_clear_image_data_Callback(~, ~, gui)
+
+% Delete MRI and CONV appdata
+if isappdata(gui.CSIgui_main, 'mri')
+    rmappdata(gui.CSIgui_main, 'mri'); 
+end
+if isappdata(gui.CSIgui_main, 'conv')
+    rmappdata(gui.CSIgui_main, 'conv');
+end
 
