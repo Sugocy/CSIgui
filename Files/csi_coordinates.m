@@ -53,9 +53,9 @@ switch origin
         end
 
         
-    case 'center'       % Offcenter defined at center of volume.
+    case 'center'     % Offcenter defined at center of volume.
         
-        
+        disp 'NEWNEWNEWNEW'
 
         negfac = [1 1 1];
         for kk = 1:size(data.dim,2) 
@@ -65,7 +65,33 @@ switch origin
             offc = data.offcenter(kk);
             
             % Grid vector
-            vec_form = @(N)   -1.*(N-1)/2 : 1 : (N)/2;
+%             vec_form = @(N)   -1.*(N-1)/2 : 1 : (N)/2;
+            vec_form = @(N) ceil((N/2)*-1 : 1 : (N-1)/2);
+% -
+% -
+            vec = vec_form(N) ; 
+            
+            % Calculate coordinates per point and add offcenter.
+            vec = (vec .* res) + offc;
+               
+            
+            % Correct half a voxel shift due FFT method
+            if fft_cor
+                vec = vec + negfac(kk).* (0.5 .* res); 
+            end
+
+            % Store the vector
+            data.vector{kk} = vec; 
+            % Limits of voxel
+            data.lim(kk,1:2) = data.vector{kk}([1 end]);
+            % Limits of volume
+            data.lim_vol(kk,1:2) = data.lim(kk,1:2) + (0.5*[-res res]);
+        end
+
+    otherwise
+        disp('Wrong orientation given.');
+end
+
 
 % 30032019 - Appears the vox-correction isnt necessary! Correct fourier
 % shifting is however!
@@ -86,26 +112,3 @@ switch origin
 %                 % Grid points for each voxel
 %                 vec = vec_form(N) ; 
 %             end
-             vec = vec_form(N) ; 
-
-            
-            % Calculate coordinates per point and add offcenter.
-            vec = (vec .* res) + offc;
-               
-            
-            % Correct half a voxel shift due FFT method
-            if fft_cor
-                vec = vec + negfac(kk).* (0.5 * res); 
-            end
-
-            % Store the vector
-            data.vector{kk} = vec; 
-            % Limits of voxel
-            data.lim(kk,1:2) = data.vector{kk}([1 end]);
-            % Limits of volume
-            data.lim_vol(kk,1:2) = data.lim(kk,1:2) + (0.5*[-res res]);
-        end
-
-    otherwise
-        disp('Wrong orientation given.');
-end

@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 23-Apr-2019 17:13:53
+% Last Modified by GUIDE v2.5 26-Apr-2019 13:15:06
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2046,7 +2046,10 @@ switch uanstype{1}
         % ((1/(1/BW x nSamples) * (ans/nSamples)) / pi) == (bw/ans)/pi 
         % Hz = bw / (N*pi) && N = (Hz * Pi)/BW
         if isfield(csi.xaxis,'BW')
-            uopts = getUserInput({'Apodization factor: (Hz)'},{20});            
+            uopts = getUserInput({'Apodization factor: (Hz)'},{20});    
+            if isempty(uopts)
+                CSI_Log({'Skipped apodization.'},{''}); return; 
+            end
             hz = str2double(uopts{1});
             uopts{1} = num2str(csi.xaxis.BW ./ (hz * pi));
         else
@@ -5313,36 +5316,44 @@ end
 
 % --- Executes on button press in button_CSI_setCoordinates.
 function button_CSI_setCoordinates_Callback(~, ~, gui)
-% Calculate coordinate of the CSI-volume
+% Calculate coordinates of the CSI-volume
+%
+% First all input is requested by user if not present. 
+% Second all input is used to calculate coordinates for each voxel.
+%
 % Requires: resolution, #samples, offcenter, dimensions, fov.
 
 % Return if no csi data present
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-% Get possible ori struct
+% Get possibly available ori-struct
 if isfield(csi,'ori'), ori = csi.ori; else, ori = struct; end
 
 
-% Spatial Index % ----------- %
+% ----------------------------------------------------------------------- %
+% USERINPUT % ----------------------------------------------------------- %
 
-space_str = {'kx', 'ky', 'kz','x','y','z'};
-space_dim = csi_findDimLabel(csi.data.labels,space_str);  
+
+% SPATIAL INDEX % ----------- %
+space_str = {'kx','ky','kz','x','y','z'};
+space_dim = csi_findDimLabel(csi.data.labels, space_str);  
 space_dim(isnan(space_dim)) = []; 
+
 % Ask user if no kx/ky/kz are found
 if isempty(space_dim)
     uans = getUserInput({'Spatial dimensions MRS data? (x/y/z)'},...
                         {[2 3 4]});
-    if isempty(uans), CSI_Log({'Skipped FID & Echo split.'},{''}); return; 
+    if isempty(uans), CSI_Log({'Skipped MRS coordinates.'},{''}); return; 
     end
     % Convert userans to double
     space_dim = str2double(strsplit(uans{1},' '));
 end
     
 
-% Read Header Data % ----------- %
-% For SPAR and SDAT data
+% HEADER DATA % ----------------- %
 
+% SPAR-INFO
 if ~isfield(ori,'res') % Only if not already read the header file.
     if strcmp(csi.ext,'spar') || strcmp(csi.ext,'sdat')
         % Get from header file: Offcenter, slicethickness, slicegfov, fov 
@@ -5351,9 +5362,11 @@ if ~isfield(ori,'res') % Only if not already read the header file.
         ori.offcenter(1) = csi.list.si_ap_off_center;
         ori.offcenter(2) = csi.list.si_lr_off_center;
         ori.offcenter(3) = csi.list.si_cc_off_center;
+        
         % FOV
         ori.fov(3) = csi.list.slice_thickness;
         ori.fov(2) = csi.list.phase_encoding_fov;
+        
         % RES
         ori.res(2) = ori.fov(2)./csi.data.dim(2);
         ori.res(3) = csi.list.slice_distance;
@@ -5362,10 +5375,9 @@ if ~isfield(ori,'res') % Only if not already read the header file.
     end
 end
 
-% UserInput % ----------- %
+% USERINPUT  - SPATIAL % ----------------- %
 
                     % RESOLUTION  +   OFFCENTER %
-
 % Create default answers from previous input or header data
 if isfield(ori,'res'), dans{1} = ori.res; 
 else, dans{1} = '20 20 20';
@@ -5377,41 +5389,44 @@ end
 % Offset and coordinates
 qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: '};
 uans = getUserInput(qry, dans);
-if isempty(uans), CSI_Log({'Skipped calculating coordinates.'},{''}); return; 
+if isempty(uans)
+    CSI_Log({'Skipped calculating coordinates.'},{''}); 
+    return; 
 end
 
+% USERINPUT - CORRECTIONS % ----------------- %
+                        
+% % Default questions
+% qry2 = {'Apply odd/even size related half-voxel shift correction:'...
+%         'Apply FFT related half-voxel shift correction:'};
+% 
+% % Default answers
+% if isfield(ori,'vox_cor')
+%     if (ori.vox_cor == 1), dans2{1} = {'Yes','No'};
+%     else,                          dans2{1} = {'No', 'Yes'};       
+%     end
+% else, dans2{1} = {'Yes','No'}; 
+% end
+% 
+% if isfield(ori,'FFT_cor') 
+%     if strcmp(ori.FFT_cor == 'Yes'), dans2{2} = {'Yes','No'};
+%     else,                          dans2{2} = {'No', 'Yes'};       
+%     end
+% else, dans2{2} = {'No','Yes'}; 
+% end
+% uans2 = getUserInput_Popup(qry2, dans2); 
+% if isempty(uans2)
+%     CSI_Log({'Skipped calculating CSI coorindates.'},{''}); return; 
+% end
+% switch uans2{1}, case 'Yes', vox_cor = 1; case 'No', vox_cor = 0; end
+% switch uans2{2}, case 'Yes', fft_cor = 1; case 'No', fft_cor = 0; end
+vox_cor = 1; fft_cor = 0; % Default for now.
 
-                        % CORRECTION FACTORS %
+% USERINPUT % ----------------------------------------------------------- %
+% ----------------------------------------------------------------------- %
 
-% Default questions
-qry2 = {'Apply odd/even size related half-voxel shift correction:'...
-        'Apply FFT related half-voxel shift correction:'};
-
-% Default answers
-if isfield(ori,'vox_cor')
-    if strcmp(ori.vox_cor, 'Yes'), dans2{1} = {'Yes','No'};
-    else,                          dans2{1} = {'No', 'Yes'};       
-    end
-else, dans2{1} = {'Yes','No'}; 
-end
-
-if isfield(ori,'FFT_cor') 
-    if strcmp(ori.FFT_cor, 'Yes'), dans2{2} = {'Yes','No'};
-    else,                          dans2{2} = {'No', 'Yes'};       
-    end
-else, dans2{2} = {'No','Yes'}; 
-end
-
-% Ask user for corrections
-uans2 = getUserInput_Popup(qry2, dans2);
-if isempty(uans2)
-    CSI_Log({'Skipped calculating CSI coorindates.'},{''}); return; 
-end
-
-switch uans2{1}, case 'Yes',vox_cor = 1; case 'No', vox_cor = 0; end
-switch uans2{2}, case 'Yes',fft_cor = 1; case 'No', fft_cor = 0; end
-
-% Calculate Coordinates % ----------- %
+% ----------------------------------------------------------------------- %
+% Calculate Coordinates % ----------------------------------------------- %
 
 % Prep misc. parameters
 ori.res       = str2double(strsplit(uans{1},' '));
@@ -5419,40 +5434,41 @@ ori.offcenter = str2double(strsplit(uans{2},' '));
 ori.dim       = csi.data.dim(space_dim);
 
 % Correction factors saved.
-ori.vox_cor = uans2{1}; ori.fft_cor = uans2{2};       
+ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;       
 
-% Coordinates of CSI data.
+% Coordinates of CSI data. % ------------------------- %
 % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
 % volume limit (limit_vol).
-csi.ori = csi_coordinates(ori,'center', vox_cor, fft_cor); 
+opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
+csi.ori = CSI_coordinates_calculate(...
+    ori.res, ori.offcenter, ori.dim, [0.5 0.5 0.5], opts);
+% ---------------------------------------------------- %
 
-
-% Calculate volume gird % ----------- %
-
-% Meshgrid
-[csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
-    meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
+% % Update LOG
+% CSI_Log({'',...
+%         'CSI-parameters -------------------------------------------',...
+%         'Direction:', 'Dimensions:', 'Resolution:',...
+%         'Offcenter:', 'FOV:', ...
+%         'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
+%         'Voxel limit (Min):', 'Voxel limit (Max):', ...
+%         'Volume limit (Min):', 'Volume limit (Max)', '',''},...
+%        { '','', '[AP/LR/FH]',...
+%          csi.ori.dim,             csi.ori.res,...
+%          csi.ori.offcenter(1,:),  csi.ori.fov,...
+%          csi.ori.vox_cor,         csi.ori.fft_cor,...
+%          csi.ori.lim(:,1)',       csi.ori.lim(:,2)',...
+%          csi.ori.lim_vol(:,1)',   csi.ori.lim_vol(:,2)',...
+%          '--------------------------------------------------------',''});
 
 
 % Clean up % ------------------------ %
 
-% Update LOG
-CSI_Log({   'CSI-parameters ---------------------',...
-            'Direction:', 'Dimensions:', 'Resolution:',...
-            'Offcenter:', 'FOV:', ...
-            'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
-            'Voxel limit (Min):', 'Voxel limit (Max):', ...
-            'Volume limit (Min):', 'Volume limit (Max)', '',''},...
-           { '',                      '[AP/LR/FH]',...
-             csi.ori.dim,             csi.ori.res,...
-             csi.ori.offcenter(1,:),  csi.ori.fov,...
-             csi.ori.vox_cor,         csi.ori.fft_cor,...
-             csi.ori.lim(:,1)',       csi.ori.lim(:,2)',...
-             csi.ori.lim_vol(:,1)',   csi.ori.lim_vol(:,2)',...
-             '----------------------------------------',''});
-
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
+
+
+
+
 
 % --- Executes on button press in button_MRI_setCoordinates.
 function button_MRI_setCoordinates_Callback(~, ~, gui)
@@ -5479,7 +5495,7 @@ if ~isfield(mri,'ori'), return; end
 mid_slice = ceil(size(mri.ori.offcenter,1)/2);
 
 % Show details to user: Res, dims, FOV, Limits.
-CSI_Log({'MRI-parameters ---------------------', ...
+CSI_Log({'MRI-parameters -------------------------------', ...
     'Dimensions', 'Resolution: ', ...
     'Full FOV: ',...
     'Voxel limit (min): ','Voxel Limit (max): ',...
@@ -5489,7 +5505,7 @@ CSI_Log({'MRI-parameters ---------------------', ...
     sprintf(' %3.2f',mri.ori.lim(:,1)),...
     sprintf(' %3.2f',mri.ori.lim(:,2)),...
     sprintf(' %3.2f',mri.ori.offcenter(mid_slice,:)),...
-    '----------------------------------------',' '});
+    '---------------------------------------------------',' '});
 
 % --- Executes on button press in button_MRI_plotImage_Grid.
 function button_MRI_plotImage_Grid_Callback(~, ~, gui)
@@ -10814,10 +10830,10 @@ CSI_Log({'Done testing.'},{''});
 
 
 
-% --- Executes on button press in button_TestSomething2.
-function button_TestSomething2_Callback(hObject, eventdata, gui)
+% --- Executes on button press in button_CSI_coordinates_shift.
+function button_CSI_coordinates_shift_Callback(~, ~, gui)
 
-CSI_backupSet(gui,'Test2');
+% CSI_backupSet(gui,'Test2');
 
 % Get csi data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -10830,21 +10846,17 @@ if ~isfield(csi, 'ori'), return; end
 % Get data
 ori = csi.ori;
 
-uans = getUserInput({'Voxel shift for each direction?'},{'0 0 0'});
+uans = getUserInput({'Voxel shift for each direction?'},{'0.5 0.5 0.5'});
 if isempty(uans), return; end
 
 shft = str2double(strsplit(uans{1}));
-
-% Edit offcenter by X-voxels in X-directions
-for kk = 1:3
-    ori.offcenter(kk) = ori.offcenter(kk) + (ori.res(kk).*shft(kk));
-end
 
 % Get shift options.
 opts.fft_cor = ori.fft_cor; opts.vox_cor = ori.vox_cor;
 
 % Calculate coordinates.
-csi.ori = CSI_coordinates_process(ori.res, ori.offcenter, ori.dim, opts);
+csi.ori = CSI_coordinates_calculate...
+    (ori.res, ori.offcenter, ori.dim, shft, opts);
 
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
@@ -10854,13 +10866,27 @@ gui = guidata(gui.CSIgui_main);
 MRI_to_CSIspace(gui);
 
 
-% ADD ALL -1 TO VOXEL...WUAW?
 
-function ori = CSI_coordinates_process(res, offcenter, dim, opts)
-% Creates output structure ORI with coordinate information for CSI grid.
-% Dim = k-space or spatial index size: csi.data.dim((k-)space index);
-% opts.vox_cor 
-% opts.fft_cor --> If not given, default is off.
+function ori = CSI_coordinates_calculate(res, offcenter, dim, shft, opts)
+% Calculate MRSI/CSI coordinates and additional spatial information.
+%
+% Input:
+% res           Voxel resolution in mm [RL AP FH];
+% dim           CSI array size [RL AP FH];
+% offcenter     Offcenter in milimeters [RL AP FH];
+% shft          Voxel shift in each direction [RL AP FH]; 
+%               Default: [0 0 0];
+% opts          Voxel and fft corrections applied yes(1) or no(0).
+%               Default: vox(1) and fft(0).
+% 
+% Output: 
+% ori-struct with all volumetric, coordinates, and spatial information of
+% the CSI grid (MRS-data) with the requested shift.
+
+
+% Handle nargin
+if nargin < 5, opts.vox_cor = 1; opts.fft_cor = 0; end
+if nargin < 4, shft = [0 0 0]; end
 
 % Set resolution
 ori.res = res; ori.offcenter = offcenter; ori.dim = dim;
@@ -10870,6 +10896,10 @@ if isfield(opts, 'vox_cor'), ori.vox_cor = opts.vox_cor; end
 if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
     
 
+% Apply any given shift
+for kk = 1:3, ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); end
+
+
 % Coordinates of CSI data. % ------------------------ %
 % Fields: 
 %   Coordinate vector (vector) 
@@ -10877,8 +10907,7 @@ if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
 %   Volume limit      (limit_vol)
 ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor); 
 
-
-% Calculate volume gird % ----------- %
+% Calculate volume grid % ----------- %
 % Meshgrid
 [ori.mesh.x, ori.mesh.y, ori.mesh.z] = ...
     meshgrid(ori.vector{1} , ori.vector{2}, ori.vector{3});
@@ -10886,19 +10915,21 @@ ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor);
 % Clean up % ------------------------ %
 
 % Update LOG
-CSI_Log({   'CSI-parameters ---------------------',...
-            'Direction:', 'Dimensions:', 'Resolution:',...
-            'Offcenter:', 'FOV:', ...
-            'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
-            'Voxel limit (Min):', 'Voxel limit (Max):', ...
-            'Volume limit (Min):', 'Volume limit (Max)', '',''},...
-           { '',                      '[AP/LR/FH]',...
-             ori.dim,             ori.res,...
-             ori.offcenter(1,:),  ori.fov,...
-             ori.vox_cor,         ori.fft_cor,...
-             ori.lim(:,1)',       ori.lim(:,2)',...
-             ori.lim_vol(:,1)',   ori.lim_vol(:,2)',...
-             '----------------------------------------',''});
+CSI_Log({ '',...
+    'CSI-parameters ----------------------------------------',...
+    'Direction:', 'Dimensions:', 'Resolution:',...
+    'Offcenter:', 'FOV:', ...
+    'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
+    'Voxel limit (Min):', 'Voxel limit (Max):', ...
+    'Volume limit (Min):', 'Volume limit (Max)','Voxel Shift:' '',''},...
+   { '','','[AP/LR/FH]',...
+     ori.dim,             ori.res,...
+     ori.offcenter(1,:),  ori.fov,...
+     ori.vox_cor,         ori.fft_cor,...
+     ori.lim(:,1)',       ori.lim(:,2)',...
+     ori.lim_vol(:,1)',   ori.lim_vol(:,2)',...
+     shft,...
+     '--------------------------------------------------------------',''});
 
 
 % --- Executes on button press in button_MRI_clear_image_data.
@@ -10911,4 +10942,6 @@ end
 if isappdata(gui.CSIgui_main, 'conv')
     rmappdata(gui.CSIgui_main, 'conv');
 end
+
+
 
