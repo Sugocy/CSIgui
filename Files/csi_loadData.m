@@ -118,7 +118,8 @@ try % SEE END OF FILE!
 % COL-NAME: Get max. index per dimensions using column names. .
 % Noise excluded. Labels of interest for indexing:
 loi = {'chan', 'kx', 'ky', 'kz', 'aver', 'mix', 'dyn', 'card',...
-       'echo', 'loca', 'sign', 'extr1', 'extr2'};
+       'echo', 'loca', 'sign', 'extr1', 'extr2','rf','grad','enc','rtop',...
+       'rr'};
 % If more are required, just append the list here! Keep "chan" at 1! :)   
 
 % LOI_IND:      Index of loi-columns in list-data.double;
@@ -128,6 +129,9 @@ loi_ind = zeros(size(loi,2),1); loi_max = loi_ind; loi_ind_neg = loi_ind;
 
 % Loop each label of interest to find the column-index of this label in
 % list.data.array, its maximum nr of values and possible negative indexing
+
+
+% EDIT HERE SOMETHIG WITH NEGATIVE OR INSANE INDEXING WITH CHANNELS 54 to 69.
 for loii = 1:size(loi,2)
     % Get data-index (column) of the label in list.data.array, index 
     % minus one due exclusion of type-column in list.data.array!
@@ -142,6 +146,16 @@ for loii = 1:size(loi,2)
     if sum(list.data.array(:,loi_ind(loii)) < 0 ) > 0 
         loi_ind_neg(loii)  = 1; 
     end
+    
+    % Correct for indexing which doesnt start at 0, otherwise sub2lin 
+    % will not work; expected array size smaller than indexing-values.
+    if (max(list.data.array(:,loi_ind(loii))) > loi_max(loii))
+        fprintf('Corrected for high-value indexing: %s\n', loi{loii})
+        minval = min(list.data.array(:,loi_ind(loii)));
+        list.data.array(:,loi_ind(loii)) = ...
+            list.data.array(:,loi_ind(loii)) - minval;
+    end
+    
 end
 
 % Include only index-dimensions larger than one.
@@ -200,7 +214,6 @@ data.sub_index_raw = num2cell(data.sub_index_raw',2);   	   %cell
 
 % Linear index for every data-point
 data.lin_index_raw = sub2ind(size(data.indexed),data.sub_index_raw{:});
-
 
 %% INDEX DATA.RAW
 

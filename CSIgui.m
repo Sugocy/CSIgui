@@ -5440,8 +5440,9 @@ ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;
 % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
 % volume limit (limit_vol).
 opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
+def_shift = [0.5 0.5 0.5]; def_shift = [ 0 0 0 ];
 csi.ori = CSI_coordinates_calculate(...
-    ori.res, ori.offcenter, ori.dim, [0.5 0.5 0.5], opts);
+    ori.res, ori.offcenter, ori.dim, def_shift, opts);
 % ---------------------------------------------------- %
 
 % % Update LOG

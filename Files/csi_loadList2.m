@@ -75,7 +75,7 @@ while ~feof(fid_r)
         
     % COLUMN-NAMES
     else
-        if size(tline_split,2)>6 && strcmp(tline_split{2},'typ'), 
+        if size(tline_split,2)>6 && strcmp(tline_split{2},'typ') 
             data_col_names = tline_split(2:end); 
         end
     end % end of if-not-#/.
