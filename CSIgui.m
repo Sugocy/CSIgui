@@ -3592,7 +3592,7 @@ ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
 
 % If data not averaged - ask user if to do so.
 if ~isnan(ind_avg)
-if size(csi.data.dim, ind_avg) ~= 1
+if csi.data.dim(ind_avg) ~= 1
     uans = getUserInput(...
         {'Average channel data before WSVD? (y/n)'},{'y'});
     if isempty(uans), uans{1} = 'n'; end

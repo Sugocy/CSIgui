@@ -54,9 +54,7 @@ switch origin
 
         
     case 'center'     % Offcenter defined at center of volume.
-        
-        disp 'NEWNEWNEWNEW'
-
+       
         negfac = [1 1 1];
         for kk = 1:size(data.dim,2) 
                 

@@ -104,14 +104,14 @@ data.noise = reshape(noise_tmp, [ndimf nchan]);
 % -- DATA: Get values of FID by excluding noise.
 data.raw       = complex(data_tmp(1,data_start:size(data_tmp,2)),...
                          data_tmp(2,data_start:size(data_tmp,2)));    
+clear('data_tmp');
 
     %%% NOISE and DATA are seperated in the list-and data-structs %%%
     
-    
-    
-   
+
 %% ANALYSE indexing-values in LIST-file  
-% Get correct columns with index-values from list.data to index data.raw.
+% Get correct indexing values from list.data table to index data.raw.
+% Search correct columns for indexing.
 
 try % SEE END OF FILE!
 
@@ -198,18 +198,19 @@ end
 %% CONVERT subscript to linear indexing
 
 % Update max value per index dimension with time-index
+% size(data) equals ldat_max_dim
 ldat_max_dim_db  = [ndimf loi_max'];                %double
 ldat_max_dim_cl  = num2cell(ldat_max_dim_db,1);     %cell
 
 % Create container for the total array 
 data.indexed = complex(zeros(ldat_max_dim_cl{:}));
-% Create container for the total array 
-data.indexed    = complex(zeros(ldat_max_dim_cl{:}));
 
 % Repeate every line in ldat ndimf time below itself!
 t = repmat(1:size(ldat,1),ndimf,1); t = t(:)'; tmp = ldat(t,:);
 % Vertically add time-index 1:ndimf.
 data.sub_index_raw = [repmat((1:ndimf)' ,size(ldat,1),1) tmp]; %dbl
+clear('tmp'); % Clear memory.
+% Convert to cell.
 data.sub_index_raw = num2cell(data.sub_index_raw',2);   	   %cell
 
 % Linear index for every data-point
