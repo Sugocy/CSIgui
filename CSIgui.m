@@ -3360,86 +3360,82 @@ if backup, CSI_backupSet(gui, 'Before combining channels.'); end
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% This should be a redirect only
+% WSVD APPLIED % ----------------------- %
+% ----- Get user input and channel index.
+% Get options from user.
+% qst    = {'WSVD Combination? (y/n): (Other options are ignored) ',...
+%           'Exclude channels: (Leave empty if none)',...
+%           'Summate only: (y/n)'}; defans = {'y','', 'n'};
+% uans = getUserInput(qst, defans);
+% if isempty(uans), return; end % User pressed skip!
+
+
+% This should be a gateway only
 % 1. WSVD:   noise scans or noise mask, exclude channels.
 % 2. Manual: exclude channels, summate only.
 
 % Figure: CSI Combine channels options
-fig_co = figure('NumberTitle', 'Off', 'resize', 'off',...
-                'Color', gui.colors.main, ...
-                'MenuBar','none', 'Toolbar', 'none', ...
+fig_cO = figure('NumberTitle', 'Off', 'resize', 'off',...
+                'Color', 'Black', 'MenuBar','none', 'Toolbar', 'none', ...
                 'Tag', 'CSI_CombOpt', 'Name', 'Combine');
-gui_combCoil = guidata(fig_co); gui_combCoil.fig = fig_co;
+gui_combCoil = guidata(fig_cO); gui_combCoil.fig = fig_cO;
 
 % Figure size and position
-CSImain_pos = get(gui.CSIgui_main,'Position'); w = 240; h = 60; 
+CSImain_pos = get(gui.CSIgui_main,'Position'); w = 240; h = 80; 
 szdiff  = (CSImain_pos(3:4)-[w h])./2;      % Get figure in middle of main
 fig_pos = [CSImain_pos(1:2)+szdiff w h];    % Use dSize of w/h to set.
-set(fig_co,'Position',fig_pos);
+set(fig_cO,'Position',fig_pos);
 
 
-% Add buttons % ------------------------------- %
+% Add buttons
 % Buttons, handles and their info description.
 bName = {'Manual','WSVD'};
 bCall = {@CSI_Combine_Manual, @CSI_Combine_WSVD};
-bToolTip = {...
-    'Manual combination of channels.',...
-    'Whitened singular voxel decomposition for channel combinations.'};
-
-% Do Not Change - Default button size
-bw = 60; bh = 20; db = 15; % gap between buttons
-
-% Add buttons (Dynamic)  
-nButtons = size(bName,2); 
-% Set required width (scaled t nButtons)
-fig_co.Position(3) = (nButtons * (bw + db)) + db;
-    
-bposh = (h-bh)/2; % Buttons have gap;
-bposx = (db+bw) * ((1:nButtons)-1) +db ;
+bInfo = {'Manual combination of channels.',...
+         'Whitened singular voxel decomposition for channel combinations.'};
+         
+% Add buttons     
+nButtons = size(bName,2); bw = 60; bh = 20;
+bpos = [(w-(bw*nButtons))/3, (h-bh)/2]; % Buttons have gap;
 for bi = 1:nButtons
    gui_combCoil.button{bi} = ...
-   uicontrol(fig_co, 'Style','pushbutton','String', bName{1,bi},...
+   uicontrol(fig_cO, 'Style','pushbutton','String', bName{1,bi},...
          'Tag', ['button_combOpts_' bName{1,bi}], 'Callback',bCall{bi},...
-         'Position',[bposx(bi) bposh bw bh],...
-         'ForegroundColor', gui.colors.text_main,...
-         'BackgroundColor', gui.colors.main,...
-         'ToolTipString', bToolTip{bi});
+         'Position',[(bpos(1,1)*bi)+((bi-1)*bw) bpos(1,2) bw bh],...
+         'ForegroundColor', [0.94 0.94 0.94],'BackgroundColor', 'Black',...
+         'ToolTipString',bInfo{bi});
 end
 % Update gui information
-guidata(gui_combCoil.fig, gui_combCoil);
+guidata(gui_combCoil.fig , gui_combCoil);
 
-% Add source for WSVD % ----------------- %
-src_name = 'WSVD';
+% % Add source WSVD
+src = 'WSVD Source';
 
-% Text
 uicontrol('Parent',gui_combCoil.fig,...
-    'Style','Text','Unit','Normalized',...
-    'Position', [0 0 0.15 1/8],...
+    'Style','Text','Unit','Normalized','Position', [0 0 0.23 1/9],...
     'HorizontalAlignment','Right',...
     'FontSize', 6, 'FontWeight', 'Bold',...
-    'String',src_name, 'HorizontalAlignment','Left',...
+    'String',src, 'HorizontalAlignment','Left',...
     'BackgroundColor',gui.colors.main,...
     'ForegroundColor',gui.colors.text_main,...
     'FontName','Helvetica',...
     'Hittest','Off');
-% Button
 uicontrol('Parent',gui_combCoil.fig,...
-    'Style','PushButton','Unit','Normalized',...
-    'Position', [0.15 0 0.05  1/8],...
+    'Style','PushButton','Unit','Normalized','Position', [0.23 0 0.05  1/8],...
     'HorizontalAlignment','Right','String','',...
     'FontSize', 6, 'FontWeight', 'Bold',...
     'HorizontalAlignment','Left',...
     'BackgroundColor',[0.75 0 0],...
     'ForegroundColor',gui.colors.text_main,...
     'FontName','Helvetica',...
-    'Callback',@CSI_Combine_WSVD_sourceArticle);
+    'Callback',@CSI_Combine_wsvd_redirect_to_sourceArticle);
 
 
-function CSI_Combine_WSVD_sourceArticle(~,~)
-% Launch system web browser with direct to WSVD article.
-% See button_CSI_Combine & CSI_Combine_WSVD
-src_name = 'WSVD'; src_web = 'http://dx.doi.org/10.1002/mrm.22230';
-web(src_web,'-browser');
+function CSI_Combine_wsvd_redirect_to_sourceArticle(~,~)
+src = 'http://dx.doi.org/10.1002/mrm.22230';
+web(src);
+disp wajdhwakdjwa
+
 
 
 % --- Executes if No WSVD for coil combination is selected.
@@ -3454,7 +3450,7 @@ function CSI_Combine_Manual(hobj, ~)
 % The above will be in this function --> See to do list Combine update.
 
 
-% GUI prepwork ----------------------------------------------%
+% GUI prepwork %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  
 % If exists, close the combine options menu
 if exist('hobj', 'var')
@@ -3552,15 +3548,15 @@ function CSI_Combine_WSVD(hobj,~)
 %   Copyright Chris Rodgers, University of Oxford, 2014.
 
 
-% GUI prepwork ----------------------------------------------%
+% GUI prepwork % ------------------------------------------- %
  
 % If exists, close the combine options menu
 if exist('hobj', 'var')
-    gui_combCoil = guidata(hobj); close(gui_combCoil.fig);
+    gui_combCoil = guidata(hobj);close(gui_combCoil.fig);
 end
 
 % Get GUI and object: CSIgui_main
-CSIgui_obj = findobj('Tag', 'CSIgui_main'); gui = guidata(CSIgui_obj);
+CSIgui_obj = findobj('Tag', 'CSIgui_main');gui = guidata(CSIgui_obj);
 
 % Return if no CSI data present.
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -3626,7 +3622,7 @@ ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
 
 % If data not averaged - ask user if to do so.
 if ~isnan(ind_avg)
-if csi.data.dim(ind_avg) ~= 1
+if size(csi.data.dim, ind_avg) ~= 1
     uans = getUserInput(...
         {'Average channel data before WSVD? (y/n)'},{'y'});
     if isempty(uans), uans{1} = 'n'; end
@@ -8883,18 +8879,7 @@ if nargin == 2
     new_info = cell(1,size(infolabel,2));
     for kk = 1:size(infolabel,2)
        val = infoval{kk}; 
-       if ~ischar(val), val = num2str(val); end % Convert to a string.
-       new_info{kk} = sprintf('%s - %s %s',datestr(rem(now,1),'HH:MM:SS'), ...
-                                           infolabel{kk}, val);
-    end
-elseif nargin == 1
-    infolabel = varargin{1};
-    infoval = repmat({''},1,size(infolabel,2));
-    % 1. PROCESS USER INPUT
-    new_info = cell(1,size(infolabel,2));
-    for kk = 1:size(infolabel,2)
-       val = infoval{kk}; 
-       if ~ischar(val), val = num2str(val); end % Convert to a string.
+       if ~ischar(val), val = num2str(val); end % Convert to a double.
        new_info{kk} = sprintf('%s - %s %s',datestr(rem(now,1),'HH:MM:SS'), ...
                                            infolabel{kk}, val);
     end
@@ -9390,25 +9375,20 @@ fig_obj = findobj('type','figure','tag','CSIgui_plot2D');
 pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
 if ~isempty(pan_obj)
     pan_gui = guidata(pan_obj);
-    % Multiple figure present. Use loop.
 else
-    % If only one image e.g. no slider thus no loop necessary 
-    if strcmp(ftype,'fig')
-        savefig(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext]);
-    else
-        
-        % Save the figure to image file
-        fig_obj.InvertHardcopy = 'off';
-        print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
-              ['-d' ftype], ['-r' num2str(dpi)], render);      
-    end
     
+    % 4. Save the figure to image file
+    fig_obj.InvertHardcopy = 'off';
+    print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
+          ['-d' ftype], ['-r' num2str(dpi)], render);
+      
+%     export_fig([fp fn sprintf('_%i_%i',[1 1 1]) '_B'], ...
+%         '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
     return;
 end
 
 % FIGURE DATA % ------------------------------------------- %
 
-% Save all figure for each index or only current.
 if save_all
     % Data slice dimensions
     dim = csi.data.dim(4:end); 
@@ -9441,13 +9421,9 @@ for indi = 1:size(indArray,1)
     
     % 4. Save the figure to image file
     fig_obj.InvertHardcopy = 'off';
-    
-    if strcmp(ftype,'fig')
-        savefig(fig_obj,[fp fn sprintf('_%i_%i',indArray(indi,:)) ext]);
-    else
-        print(fig_obj,[fp fn sprintf('_%i_%i',indArray(indi,:)) ext],...
-            ['-d' ftype], ['-r' num2str(dpi)], render);
-    end
+    print(fig_obj,[fp fn sprintf('_%i_%i',indArray(indi,:)) ext],...
+          ['-d' ftype], ['-r' num2str(dpi)], render);
+      
 %     export_fig([fp fn sprintf('_%i_%i',indArray(indi,:)) '_B'], ...
 %         '-transparent','-png','-nocrop', '-m2', fig_obj);
 end
@@ -10514,9 +10490,12 @@ end
 
 % --- % Executed by CSI_MergeVoxels_Button_Align
 function sel = CSI_MergeVoxels_Align2(sel)
-% Align voxels before averaging.
+% Frequency alignement of spectra from  multiple voxel.
 %
 % Sel-structure requires field voxels and peak of interest poi.
+% This versions used the old MergeVoxels algorithm based on maximum value
+% only.
+
 
 % Undress the input structure:
 voxels = sel.voxels; poi = sel.poi; 
@@ -10541,7 +10520,6 @@ voi_aligned = cell2mat(voi_aligned_cell);
 
 % ---- % Set Output
 sel.voxels = voi_aligned;
-
 
 % Additional plots
 
@@ -10587,16 +10565,19 @@ for kk = 1:nfig
         'Position',[0.35 0.925 0.3 0.05],...
         'string', str);
         % 'ForegroundColor','White','BackgroundColor','Black',...
-
-    
 end
 
 
 
 function sel = CSI_MergeVoxels_Align(sel)
-% Align voxels before averaging.
+% Frequency alignement of spectra from  multiple voxel.
 %
-% Sel-structure requires field voxels and peak of interest poi.
+% Sel-structure requires field voxels and poi, in a 1x2 vector representing
+% the integer unit-less index range of the peak of interest.
+%
+% Aligning is based on the spectrum with the largest signal at the POI
+% (ref) and other spectra aligned to this spectrum using the correlation
+% (2D) between ref and voxel.
 
 % Undress the input structure:
 voxels = sel.voxels; poi = sel.poi; 
@@ -10604,15 +10585,27 @@ voxels = sel.voxels; poi = sel.poi;
                    % ---- % Aligning voxels % ---- %
                     
 % Spectrum with maximum signal at peak of interest (POI)
-[voi_poi_max , voi_poi_max_pos] = max( real( voxels(poi(1):poi(2),:)), [], 1);
+[voi_poi_max , voi_poi_max_pos] = ...
+    max( real( voxels(poi(1):poi(2),:)), [], 1);
 [~,template_ind] = max(voi_poi_max);
 
 
-template = voxels(:,template_ind);
+% Correlation % ------------- %
+% Ref chosen by max value of spectrum/peak of interest
+
+% If signal processing toolbox available; use xcorr from Matlab.
+% else use xcorrq; simplified version which does the job.
+tb = isToolbox('Signal Processing Toolbox');
+
+template = voxels(:,template_ind); voi_shifts = size(voxels,2);
 for si = 1:size(voxels,2)
-    [corval, lags] = xcorr(template, voxels(:,si));
-    [max_corr, ind] = max(corval);
-     voi_shifts(si) = lags(ind);
+    if tb
+        [corval, lags] = xcorr(template, voxels(:,si));
+    else
+        [corval, lags] = xcorrq(template, voxels(:,si));
+    end
+    % Find most significant correlation for lag-distance
+    [~, ind] = max(corval); voi_shifts(si) = lags(ind);
 end
 
 % Shift each voxel by its voi_shift amount
@@ -10625,53 +10618,46 @@ voi_aligned = cell2mat(voi_aligned_cell);
 sel.voxels = voi_aligned;
 
 
-% Additional plots
+% ---- % Additional plots
 
-nsli = unique(sel.index(:,3));
-nfig = numel(nsli);
+if plot_on == 1
+    nsli = unique(sel.index(:,3)); nfig = numel(nsli);
+    % Plot for each slice seperately.
+    for kk = 1:nfig
+    
+        % N voxels for this figure.
+        nvox_perfig{kk} = find(sel.index(:,3) == nsli(kk));
+        vox_ind_all = nvox_perfig{kk};
 
-for kk = 1:nfig
-    
-    % N voxels for this figure.
-    nvox_perfig{kk} = find(sel.index(:,3) == nsli(kk));
-    vox_ind_all = nvox_perfig{kk};
-    
-    fh = figure();
-    nvox = size(nvox_perfig{kk},1);
-    for vi = 1:nvox
-        subplot(nvox,1,vi);
-        
-        vox_ind = vox_ind_all(vi);
-        
-        if isfield(sel.xaxis,'ppm'), xax = sel.xaxis.ppm;
-        else,                        xax = sel.xaxis.none;
+        fh = figure();
+        nvox = size(nvox_perfig{kk},1);
+        for vi = 1:nvox
+            subplot(nvox,1,vi);
+
+            vox_ind = vox_ind_all(vi);
+            if isfield(sel.xaxis,'ppm'), xax = sel.xaxis.ppm;
+            else,                        xax = sel.xaxis.none;
+            end
+
+            % Plot aligned
+            plA = plot(xax, real(voi_aligned(:,vox_ind)),'-r'); hold on;
+            % Plot voxel
+            plV = plot(xax, real(voxels(:,vox_ind)),'--b'); 
+
+            % Axis cosmetics
+            axh = plV.Parent; % 
+            plV.Parent.XDir = 'reverse';
+
         end
 
-        % Plot aligned
-        plA = plot(xax, real(voi_aligned(:,vox_ind)),'-r');hold on;
-        % Plot voxel
-        plV = plot(xax, real(voxels(:,vox_ind)),'--b'); 
-
-        
-        % Axis cosmetics
-        
-
-        axh = plV.Parent;
-        plV.Parent.XDir = 'reverse';
-       
+        % Display data
+        str = ['Slice ' num2str(nsli(kk)) ...
+               ' | Avg shift: ' num2str(mean(voi_shifts(vox_ind_all)))];      
+        uicontrol(fh, 'Style','text','Units','Normalized',...
+            'Position',[0.35 0.925 0.3 0.05],...
+            'string', str);    
     end
-    
-    str = ['Slice ' num2str(nsli(kk)) ...
-           ' | Avg shift: ' num2str(mean(voi_shifts(vox_ind_all)))];
-       
-    uicontrol(fh, 'Style','text','Units','Normalized',...
-        'Position',[0.35 0.925 0.3 0.05],...
-        'string', str);
-        % 'ForegroundColor','White','BackgroundColor','Black',...
-
-    
 end
-
 
 % --------------------------------------------------------------------- %
 % --------------------------------------------------------------------- %
@@ -10787,100 +10773,100 @@ end
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, eventdata, gui)
 % warndlg('Watch out! Developers testing button. Panic!');
-CSI_Log({'This si a tetsdaad'});
-% % Get csi data
-% if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-% csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get csi data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get image data
+if ~isappdata(gui.CSIgui_main, 'conv'), return; end
+conv = getappdata(gui.CSIgui_main, 'conv');
+
+mri = getappdata(gui.CSIgui_main,'mri');
+
+% Tra to Sagital % ---------------------- %
+% A (top) L (right) to R (top) A(right)
+% Current: kx rl = x = 2;  To  rl to z = 4;
+%          ky ap = y = 3;      ap to x = 2; 
+%          kz fh = z = 4;      fh to y = 3;
+
+
+plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
+% For no-time index data use plane-1;
+
+
+% ROTATE MRS
+[csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
+
+% ROTATE MRS RELATED
+% Apply rotation to labels
+csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
+% And dimensions
+csi.data.dim(plane) = csi.data.dim(fliplr(plane));
+
+
+% ROTATE IMG
+conv.data = CSI_rotate(conv.data, plane-1, 1);
+
+
+% ROTATE SPATIAL INFORMATION  MRS
+
+% Orientation info.
+ori = csi.ori;
+ori.res(plane-1)       = ori.res(fliplr(plane-1));       
+ori.offcenter(plane-1) = ori.offcenter(fliplr(plane-1));  
+ori.dim(plane-1)       = ori.dim(fliplr(plane-1));       
+
+% Coordinates of CSI data.
+% Adds fields: coordinate vector (vector) & coordinate limits (limit) &
+% volume limit (limit_vol).
+csi.ori = csi_coordinates(ori,'center', ori.vox_cor, ori.fft_cor); 
+
+% Meshgrid
+[csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
+    meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
+
+
+% ROTATE SPATIAL INFORMATION CONVERTED IMG
+
+% Swap resolutions.
+% conv.res = mri.ori.res;
+conv.res(plane-1) = conv.res(fliplr(plane-1)); % Initial... May change!
+
+% % Calculate a resolution fitting the CSI space such that there is a integer
+% % amount of image pixels fitted in each CSI direction of space.
+% res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
+% res_rem = res_fit - floor(res_fit);     % Pixel change
+% res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
 % 
-% % Get image data
-% if ~isappdata(gui.CSIgui_main, 'conv'), return; end
-% conv = getappdata(gui.CSIgui_main, 'conv');
-% 
-% mri = getappdata(gui.CSIgui_main,'mri');
-% 
-% % Tra to Sagital % ---------------------- %
-% % A (top) L (right) to R (top) A(right)
-% % Current: kx rl = x = 2;  To  rl to z = 4;
-% %          ky ap = y = 3;      ap to x = 2; 
-% %          kz fh = z = 4;      fh to y = 3;
-% 
-% 
-% plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
-% % For no-time index data use plane-1;
-% 
-% 
-% % ROTATE MRS
-% [csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
-% 
-% % ROTATE MRS RELATED
-% % Apply rotation to labels
-% csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
-% % And dimensions
-% csi.data.dim(plane) = csi.data.dim(fliplr(plane));
-% 
-% 
-% % ROTATE IMG
-% conv.data = CSI_rotate(conv.data, plane-1, 1);
-% 
-% 
-% % ROTATE SPATIAL INFORMATION  MRS
-% 
-% % Orientation info.
-% ori = csi.ori;
-% ori.res(plane-1)       = ori.res(fliplr(plane-1));       
-% ori.offcenter(plane-1) = ori.offcenter(fliplr(plane-1));  
-% ori.dim(plane-1)       = ori.dim(fliplr(plane-1));       
-% 
-% % Coordinates of CSI data.
-% % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
-% % volume limit (limit_vol).
-% csi.ori = csi_coordinates(ori,'center', ori.vox_cor, ori.fft_cor); 
-% 
-% % Meshgrid
-% [csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
-%     meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
-% 
-% 
-% % ROTATE SPATIAL INFORMATION CONVERTED IMG
-% 
-% % Swap resolutions.
-% % conv.res = mri.ori.res;
-% conv.res(plane-1) = conv.res(fliplr(plane-1)); % Initial... May change!
-% 
-% % % Calculate a resolution fitting the CSI space such that there is a integer
-% % % amount of image pixels fitted in each CSI direction of space.
-% % res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
-% % res_rem = res_fit - floor(res_fit);     % Pixel change
-% % res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
-% % 
-% % % New resolution for each direction
-% % conv.res = res_new;
-% 
-% % Volume limits of CSI but with half a voxel distance for voxel limits e.g.
-% % a total voxel (MRI res) vs the volume.
-% conv.fov       = csi.ori.fov;     % Does not change regards to CSI
-% conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
-% conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
-% conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
-% 
-% % Range of volume/grid of MRSI for MRI
-% for kk = 1:size(conv.lim,1)    
-%     % Number of pixels in kk-direction
-%     N = (conv.fov(kk)./conv.res(kk));
-%     % Grid vector defining volume
-%     conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
-% end
-% 
-% % Image grid in MRSI space 
-% % This grid lays in the CSI-space e.g. within limits of CSI FOV but is
-% % sampled in x, y and z as close to the resolution of the image as possible
-% [x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
-% conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
-% 
-% % Store data
-% setappdata(gui.CSIgui_main, 'csi',csi);
-% setappdata(gui.CSIgui_main, 'conv',conv);
-% CSI_Log({'Done testing.'},{''});
+% % New resolution for each direction
+% conv.res = res_new;
+
+% Volume limits of CSI but with half a voxel distance for voxel limits e.g.
+% a total voxel (MRI res) vs the volume.
+conv.fov       = csi.ori.fov;     % Does not change regards to CSI
+conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
+conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
+conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
+
+% Range of volume/grid of MRSI for MRI
+for kk = 1:size(conv.lim,1)    
+    % Number of pixels in kk-direction
+    N = (conv.fov(kk)./conv.res(kk));
+    % Grid vector defining volume
+    conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
+end
+
+% Image grid in MRSI space 
+% This grid lays in the CSI-space e.g. within limits of CSI FOV but is
+% sampled in x, y and z as close to the resolution of the image as possible
+[x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
+conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
+
+% Store data
+setappdata(gui.CSIgui_main, 'csi',csi);
+setappdata(gui.CSIgui_main, 'conv',conv);
+CSI_Log({'Done testing.'},{''});
 
 
 
