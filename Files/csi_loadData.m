@@ -127,11 +127,10 @@ loi = {'chan', 'kx', 'ky', 'kz', 'aver', 'mix', 'dyn', 'card',...
 % LOI_MAX:      Maximum # of unique values in the loi-column in list-data;
 loi_ind = zeros(size(loi,2),1); loi_max = loi_ind; loi_ind_neg = loi_ind; 
 
-% Loop each label of interest to find the column-index of this label in
-% list.data.array, its maximum nr of values and possible negative indexing
-
-
-% EDIT HERE SOMETHIG WITH NEGATIVE OR INSANE INDEXING WITH CHANNELS 54 to 69.
+% Loop each label of interest (loi) to find the column-index of this label in
+% list.data.array, its maximum nr of values and possible negative indexing.
+% QH - 201906: edit for non-consecutive channel ID e.g. [54:69 16] is the
+% ID for the 31P RX 16ch array and body coil for receive.
 for loii = 1:size(loi,2)
     % Get data-index (column) of the label in list.data.array, index 
     % minus one due exclusion of type-column in list.data.array!
@@ -147,13 +146,19 @@ for loii = 1:size(loi,2)
         loi_ind_neg(loii)  = 1; 
     end
     
-    % Correct for indexing which doesnt start at 0, otherwise sub2lin 
-    % will not work; expected array size smaller than indexing-values.
+    % Correct for non-consecutive numbers.
     if (max(list.data.array(:,loi_ind(loii))) > loi_max(loii))
         fprintf('Corrected for high-value indexing: %s\n', loi{loii})
-        minval = min(list.data.array(:,loi_ind(loii)));
-        list.data.array(:,loi_ind(loii)) = ...
-            list.data.array(:,loi_ind(loii)) - minval;
+               
+        % Create temp backup of the column of interest
+        tmp = list.data.array(:,loi_ind(loii));
+        % Loop each unique value and increment the new indexing ID 
+        % automatically.
+        uni = unique(list.data.array(:,loi_ind(loii))); % All unique values
+        for ui = 1:size(uni,1)
+            tmp(list.data.array(:,loi_ind(loii)) == uni(ui)) = (ui-1);
+        end
+        list.data.array(:,loi_ind(loii)) = tmp; clear('tmp');
     end
     
 end

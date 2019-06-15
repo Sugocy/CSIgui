@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 26-Apr-2019 13:15:06
+% Last Modified by GUIDE v2.5 15-Jun-2019 02:45:35
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2111,7 +2111,8 @@ function CSI_Normalize(gui)
 
 % Get userinput: normalize how?
 uans = getUserInput_Popup({'Normalize by: '},...
-    {{'Maximum per voxel','Maximum in volume','Specific peak per voxel'}});
+    {{'Maximum per voxel','Maximum in volume',...
+      'Specific peak per voxel','Noise per voxel', 'Noise in volume'}});
 if isempty(uans), CSI_Log({'Skipped normalize data.'},{''}); return; 
 end  
 
@@ -2156,6 +2157,29 @@ switch uans{1}
         % Normalize to maximum in volume
         datac = cellfun(@(x,y) x./max(y), ...
             datac, repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
+        
+    case 'Noise per voxel'
+        % Noise mask
+        uans = getUserInput({'Size of noise mask: ',...
+            'Save noise/voxel to file (y/n) : '},{'50','y'});
+        if isempty(uans), return; end
+        msksz = str2double(uans{1}); savenoise = uans{2};
+        
+        % Normalize to noise per voxel
+        % Noise = absolute std of last N samples
+        noise = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
+            datac,'Uniform',0);
+        datac = cellfun(@(x,y) x./y, datac, noise, 'Uniform', 0);
+        
+        % Save noise if requested.
+        if strcmp(savenoise,'y')
+            currdir = cd; filt = {'*.mat','MATLAB File (*.mat)'};
+            [fn, fp] = uiputfile(filt,'Save Noise Data',currdir);
+            save([fp '\' fn],'noise');
+        end
+        
+    case 'Noise in volume'
+        CSI_Log({'Under construction.'},{''})
         
 end
 
@@ -3328,8 +3352,8 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 CSI_Log({'MRS data divided by '},{fac});
 
 
-% --- Executes on button press in button_Normalize.
-function button_Normalize_Callback(~ , ~, gui, backup)
+% --- Executes on button press in button_CSI_Normalize.
+function button_CSI_Normalize_Callback(~ , ~, gui, backup)
 % Normalize data to specific peak maximum: multiple methods available. See
 % CSI_Normalize();
 if nargin < 4 , backup = 1; end
@@ -4228,9 +4252,9 @@ CSI_Log({'Applied phase change to shift voxels. Shifted by:'},...
                 
 % --- Executes on button press in button_CSI_FidOrEcho.
 function button_CSI_FidOrEcho_Callback(hObject, eventdata, gui)
-% Split data to FID and Echo data, specially design for use with AMESING
+% Split data to FID and Echo data, specially design for use with (A)MESING
 % data. Echoes and FIDs require different processing resulting in different
-% sample sizes.
+% sample size; (zerofilling to match bandwidth)
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -4346,7 +4370,6 @@ CSI_Log({log_msg}, {csi.data.split.type});
 % --- Executes on button press in button_Log_DeleteLine.
 function button_Log_DeleteLine_Callback(hObj, eventdata, gui)
 CSI_Log_deleteLine(hObj);
-
 
 
 % --- Executes on button press in button_CSI_AutoProcessing
@@ -8682,8 +8705,20 @@ if isempty(uanstype), return; end
 % Additional options for specific filters
 switch uanstype{1}
     case 'Gaussian'
-        uansopts = getUserInput(...
-            {'Standard deviation e.g. lentgh of FWHM (Samples): '},{5});
+        % ((1/(1/BW x nSamples) * (ans/nSamples)) / pi) == (bw/ans)/pi 
+        % Hz = bw / (N*pi) && N = (Hz * Pi)/BW
+        if isfield(appdata1D.axis,'BW')
+            uopts = getUserInput({'Apodization factor: (Hz)'},{20});    
+            if isempty(uopts)
+                CSI_Log({'Skipped apodization.'},{''}); return; 
+            end
+            hz = str2double(uopts{1});
+            uansopts{1} = num2str(appdata1D.axis.BW ./ (hz * pi));
+        else
+            uansopts = getUserInput(...
+            {'Standard deviation e.g. half length at FWHM: (Samples)'},...
+            {(appdatat1D.xaxis.N/4)});
+        end
     case 'Exponential'
         uansopts = getUserInput(...
             {'Exponential decay strength (Samples): '},{0.5});
@@ -9376,12 +9411,15 @@ pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
 if ~isempty(pan_obj)
     pan_gui = guidata(pan_obj);
 else
-    
     % 4. Save the figure to image file
     fig_obj.InvertHardcopy = 'off';
-    print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
-          ['-d' ftype], ['-r' num2str(dpi)], render);
-      
+    if strcmp(ext,'fig')
+        savefig(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext]);
+    else
+
+        print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
+              ['-d' ftype], ['-r' num2str(dpi)], render);
+    end
 %     export_fig([fp fn sprintf('_%i_%i',[1 1 1]) '_B'], ...
 %         '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
     return;
@@ -9421,8 +9459,14 @@ for indi = 1:size(indArray,1)
     
     % 4. Save the figure to image file
     fig_obj.InvertHardcopy = 'off';
-    print(fig_obj,[fp fn sprintf('_%i_%i',indArray(indi,:)) ext],...
-          ['-d' ftype], ['-r' num2str(dpi)], render);
+    if strcmp(ext,'.fig')
+        savefig(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext]);
+    else
+
+        print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
+              ['-d' ftype], ['-r' num2str(dpi)], render);
+    end
+
       
 %     export_fig([fp fn sprintf('_%i_%i',indArray(indi,:)) '_B'], ...
 %         '-transparent','-png','-nocrop', '-m2', fig_obj);
@@ -10871,8 +10915,8 @@ CSI_Log({'Done testing.'},{''});
 
 
 
-% --- Executes on button press in button_CSI_coordinates_shift.
-function button_CSI_coordinates_shift_Callback(~, ~, gui)
+% --- Executes on button press in button_CSI_setVoxelsShift.
+function button_CSI_setVoxelsShift_Callback(~, ~, gui)
 
 % CSI_backupSet(gui,'Test2');
 

@@ -5,7 +5,9 @@ function [data, bline, blevel, best] = csi_baseline(data, method, preview)
 %        method     - (1) Use clicked locations (0) use data locations
 %        preview    - (1) View outcome
 %
-% Output: [data, bline, blevel, best]
+% Output: [data, bline,     baseline correction
+%                blevel,    baseline default level 
+%                best       baseline correction estimate from user
 %
 % Contact: qhoutum2@umcutrecht.nl
 
@@ -29,13 +31,12 @@ figh = figure(); plot(x4fit, real(data)); title('Spectrum'); hold on;
 plot(figh.Children, x4fit, repmat(blevel,size(data,1)),'--k');
 % figh.Children.XDir = 'Reverse';
 % Get user input
-title(figh.Children,'Click 5 points to define baseline offset');
+title(figh.Children,'Click 6 points to define baseline offset');
 
-pos = ginputQ(5,figh); 
+pos = ginputQ(6,figh); 
 x = pos(:,1); y = pos(:,2); x = round(x); 
 
 title('Spectrum'); 
-
 
 if method % Method 1: Use clicked locations
     % Base line estimate user.
