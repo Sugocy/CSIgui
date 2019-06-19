@@ -6,6 +6,7 @@ hilight2 =0.8 0 0.50196
 lines1 =0 0.45098 0.74118
 lines2 =1 0 0
 grid =0.50196 0 0.10196
+grid2=0.50196 0 0.10196
 \\
 Put information here
 % Backgrounds
@@ -15,3 +16,5 @@ Put information here
 % Higlight backgrounds
 % Static line color
 % Static line color
+% Grid color for voxel seperation in 2D plot
+% Grid color for individual voxels in 2D plot

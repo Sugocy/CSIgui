@@ -180,6 +180,8 @@ gui.menubar.MRSI.operations.avg = ...
     'Enable', 'on','Callback', @button_CSI_Average_Callback);
 
 
+
+
 % 2.MRSI > Color Scaling (2D)
 gui.menubar.MRSI.ColorScale.main = ...
     uimenu(gui.menubar.MRSI.main,'Label', 'Color Scaling', 'Enable', 'On');
@@ -199,11 +201,19 @@ gui.menubar.MRSI.ColorScale.Static = ...
     uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Static',...
     'Check', 'Off','Callback', @CSI_2D_Scaling_Color_Set, 'Enable', 'On');
 
+% 2. MRSI > Color Scaling (2D) > Scale by window
+gui.menubar.MRSI.ColorScale.ScalebyWindow = ...
+    uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Scale by Window',...
+    'Check', 'Off','Separator','on',...
+    'Callback',@CSI_2D_Scaling_Color_ScaleByWindow, 'Enable', 'On');
+
 % 2. MRSI > Color Scaling (2D) > Colorbar
 gui.menubar.MRSI.ColorScale.Colorbar = ...
     uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Colorbar',...
-    'Check', 'Off','Separator','on',...
+    'Check', 'Off','Separator','off',...
     'Callback',@CSI_2D_Scaling_plotColorbar, 'Enable', 'On');
+
+
 
 % 2.MRSI > Axis Scaling (2D)
 gui.menubar.MRSI.AxisScale.main = ...
@@ -224,6 +234,20 @@ gui.menubar.MRSI.AxisScale.Volume = ...
     uimenu(gui.menubar.MRSI.AxisScale.main,'Label', 'Volume',...
     'Check', 'Off', 'Callback', @CSI_2D_Scaling_Axis_Set, 'Enable', 'On');
         
+% 2.MRSI > Axis Scaling (2D) >  Scale by window
+gui.menubar.MRSI.AxisScale.ScalebyWindow = ...
+    uimenu(gui.menubar.MRSI.AxisScale.main, 'Label', 'Scale by Window',...
+    'Check', 'Off','Separator','on',...
+    'Callback',@CSI_2D_Scaling_Axis_ScaleByWindow, 'Enable', 'On');
+
+% 2.MRSI > Axis Scaling (2D) >  Grid
+gui.menubar.MRSI.AxisScale.Grid = ...
+    uimenu(gui.menubar.MRSI.AxisScale.main, 'Label', 'Grid',...
+    'Check', 'Off','Separator','off',...
+    'Callback',@CSI_2D_Scaling_GridVoxels, 'Enable', 'On');
+
+
+
 % 2.MRSI > Set Domain
 gui.menubar.MRSI.domain.main = ...
     uimenu(gui.menubar.MRSI.main,'Label', 'Set Domain', 'Enable', 'on');
@@ -347,14 +371,17 @@ try
         
         menu_name = {'Color Scaling', 'Axis Scaling','Noise','Set Domain'};
         menu_tip = {...
-         ['Set spectra color scaling in 2D MRSI plots relative to'... 
-          'maximum per slice, volume or as static e.g. single color.'],...
-         ['Set spectra y-axis scaling in 2D MRSI plots to maximum '...
-          'per voxel, slice or volume.'],...
-         ['View noise data from list/data file. Use the show '...
-          'CSI-button or plot in menu > CSI to display. ' ...
-          'To revert back to the original data, click here again.'], ...
-          'Set data domain of MRSI data to frequency or time.'};
+     ['Set spectra color scaling in 2D MRSI plot relative to,',... 
+      'maximum per slice, volume or as static (e.g. single color), '...
+      'from the total spectrum or within the displayed x-axis window. '],...
+      ['Scale the spectra y-axis in 2D MRSI plot to the maximum '...
+      'per voxel, slice or volume, '...
+      'from the total spectrum or within the displayed x-axis window. '...
+      'Enable/Disable the grid within a voxel in the 2D MRSI plot.'],...
+     ['View noise data from list/data file. Use the show '...
+      'CSI-button or plot in menu > CSI to display. ' ...
+      'To revert back to the original data, click here again.'], ...
+      'Set data domain of MRSI data to frequency or time.'};
         
         nMenus = size(fieldnames(gui.menubar.MRSI),1)-1; % Remove main CSI
         for kk = 0:nMenus-1 % Start indexin @ zero - Matlab vs Java.
@@ -2110,9 +2137,8 @@ function CSI_Normalize(gui)
 % Additional: peak specific?
 
 % Get userinput: normalize how?
-uans = getUserInput_Popup({'Normalize by: '},...
-    {{'Maximum per voxel','Maximum in volume',...
-      'Specific peak per voxel','Noise per voxel', 'Noise in volume'}});
+uans = getUserInput_Popup({'Normalize by: ',''},...
+    {{'Maximum','Minimum','Peak','Noise','Value'},{'per voxel','in volume'}});
 if isempty(uans), CSI_Log({'Skipped normalize data.'},{''}); return; 
 end  
 
@@ -2138,49 +2164,90 @@ datac = mat2cell(dataR, sz(1), cell_layout{:});
 
 
 switch uans{1}
-    case 'Specific peak per voxel'
+    case 'Peak'
+        
         % Get peak of interest
         doi = CSI_getDataAtPeak(data, csi.xaxis);
         if isnan(doi), return; end
-        % Maximum to normalize to.
-        max_val = max(real(doi),[],1); 
-        datac = cellfun(@(x,y) x./y, ...
-            datac,repmat({max_val},size(datac)), 'Uniform', 0);
+                
+        switch uans{2}
+                        
+            case 'per voxel'
+                
+                % Peak maximum to normalize to.
+                max_val = max(real(doi),[],1); 
+                % Normalize
+                datac = cellfun(@(x,y) x./y, datac, maxval, 'Uniform', 0);
+                
+            case 'in volume'
+                  
+                
+                % Peak maximum in volume to normalize to.
+                max_val = max(real(doi(:)),[],1); 
+                datac = cellfun(@(x,y) x./y, ...
+                    datac,repmat({max_val},size(datac)), 'Uniform', 0);
+                
+        end
+    case 'Maximum'
         
-    case 'Maximum per voxel'
-        
-        % Normalize to maximum of each voxel
-        datac = cellfun(@(x) x./max(x(:)), datac, 'Uniform', 0);
-        
-    case 'Maximum in volume'
-        
-        % Normalize to maximum in volume
-        datac = cellfun(@(x,y) x./max(y), ...
-            datac, repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
-        
-    case 'Noise per voxel'
-        % Noise mask
-        uans = getUserInput({'Size of noise mask: ',...
-            'Save noise/voxel to file (y/n) : '},{'50','y'});
-        if isempty(uans), return; end
-        msksz = str2double(uans{1}); savenoise = uans{2};
-        
-        % Normalize to noise per voxel
-        % Noise = absolute std of last N samples
-        noise = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
-            datac,'Uniform',0);
-        datac = cellfun(@(x,y) x./y, datac, noise, 'Uniform', 0);
-        
-        % Save noise if requested.
-        if strcmp(savenoise,'y')
-            currdir = cd; filt = {'*.mat','MATLAB File (*.mat)'};
-            [fn, fp] = uiputfile(filt,'Save Noise Data',currdir);
-            save([fp '\' fn],'noise');
+        switch uans{2}
+            case 'per voxel'
+                
+                % Normalize to maximum of each voxel
+                datac = cellfun(@(x) x./max(x(:)), datac, 'Uniform', 0);
+                
+            case 'in volume'
+                
+                % Normalize to maximum in volume
+                datac = cellfun(@(x,y) x./max(y), datac, ...
+                    repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
         end
         
-    case 'Noise in volume'
-        CSI_Log({'Under construction.'},{''})
+    case 'Noise'
         
+        % Per voxel
+        switch uans{2}
+            case 'per voxel'
+                
+                % Noise mask
+                uans = getUserInput({'Size of noise mask: ',...
+                    'Save noise/voxel to file (y/n) : '},{'50','y'});
+                if isempty(uans), return; end
+                msksz = str2double(uans{1}); savenoise = uans{2};
+
+                % Normalize to noise per voxel
+                % Noise = absolute std of last N samples
+                noise = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
+                    datac,'Uniform',0);
+                datac = cellfun(@(x,y) x./y, datac, noise, 'Uniform', 0);
+
+                % Save noise if requested.
+                if strcmp(savenoise,'y')
+                    currdir = cd; filt = {'*.mat','MATLAB File (*.mat)'};
+                    [fn, fp] = uiputfile(filt,'Save Noise Data',currdir);
+                    save([fp '\' fn],'noise');
+                end
+        
+            case 'in volume'
+                
+                % Volume
+                CSI_Log({'Under construction.'},{''})
+        end
+        
+    case 'Value'
+        
+        % Get value from user
+        tuans = getUserInput({'Value for normalization:'},{'1'});
+        if isempty(tuans), CSI_Log({'Skipped normalization.'},{''}); 
+            return; 
+        end
+        val = str2double(tuans{1});
+        
+        % Normalized each voxel by entered value
+        datac = cellfun(@(x,y) x./y, datac,...
+            repmat({val},size(datac)), 'Uniform', 0);
+        
+        CSI_Log({'Normalized data by user-value: '},{val});
 end
 
 % Replace with original data
@@ -6608,6 +6675,15 @@ end
 % Display xlimit
 plot_par.xlimit = plot_par.xaxis.xlimit;
 
+
+% Voxel grid on or off
+if strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on')
+    plot_par.voxel_grid = 1;
+else
+    plot_par.voxel_grid = 0;
+end
+
+
 % --- % Executed by CSI_plot2D_initiate: plot images
 function plot_par = CSI_2D_plotImages(plot_par, csiguiObj)
 % GUI of 2D figure
@@ -6754,18 +6830,31 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         ylim(plot_par.ax{ri,ci}, ylimit);
 
         % X LIMIT % -------------------- %
+        
         % Use limits of ppm axis(1) and (end) plus reverse the x-axis
         % direction to correctly display MRSI data.
-        xlim(plot_par.ax{ri,ci}, plot_par.xlimit(1:2)); 
+        xlim(plot_par.ax{ri,ci}, sort(plot_par.xlimit(1:2))); 
         set(plot_par.ax{ri,ci}, 'xdir', 'reverse');
         
-        % AXIS COSMETICS % -------------- %
-        set(plot_par.ax{ri,ci},...
-               'Color', 'None',...
-               'XColor', plot_par.colors.main,'YColor', plot_par.colors.main,...
-               'LineWidth', axlw_pt, 'Xtick',[], 'Ytick',[],...
-               'TickLength',[0 0.00001],'Box', 'off');             
         
+        % VOXEL GRID % ------------------ %
+        
+        if plot_par.voxel_grid
+            plot_par.ax{ri,ci} = ...
+                CSI_2D_plotVoxels_grid(plot_par.ax{ri,ci},...
+                                       plot_par.colors.grid2);
+        end
+        
+
+        % AXIS COSMETICS % -------------- %
+        
+        set(plot_par.ax{ri,ci},...
+          'Color', 'None',...
+          'XColor', plot_par.colors.main,'YColor', plot_par.colors.main,...
+          'LineWidth', axlw_pt, 'Xtick',[], 'Ytick',[],...
+          'TickLength',[0 0.00001],'Box', 'off');             
+        
+       
         % Set action when clicked on this axis (ci, ri);
         set(get(plot_par.ax{ri,ci},'Children'),'HitTest', 'Off');
         set(plot_par.ax{ri,ci},'ButtonDownFcn',@CSI_2D_voxel_select);
@@ -6775,17 +6864,19 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         
         plot_par.ax{ri,ci}.UserData = [ri, ci];
         % guidata(plot_par.ax{ri,ci}, plot_par);
+         
+      
     end
 end
 
 guidata(plot_par.fh, plot_par);
 
 % PLOT GRID: Overlay of the axis. % ----------------------------------- %
-% Why: Due to a axis linewidth error in Matlab, the ancor point of position
-% of the axis is not the bottom left point but the middle of the axis
-% linewidth. This create descripancies in the plot layout due to
-% pixel/normalized/inches conversion on the screen - especially when saving
-% figures. Using seperate grids, this error is not visible.
+% Why: Due to a axis linewidth error in Matlab, the anchor point of the
+% position of the axis is not the bottom left point but the center of 
+% the axis linewidth. This create descripancies in the plot layout due to
+% pixel/normalize/inches conversions to on the screen display - especially 
+% when saving figures. Using seperate grids, this error is not visible.
 if createFig
     CSI_2D_grid(plot_par.fh,  plot_par.fh.Position(3:4), ...
                 plot_par.dim, plot_par.range, gui.colors.grid);
@@ -6793,6 +6884,39 @@ end
 
 % Bring figure to front.
 figure(plot_par.fh);
+
+% --- Calculate and add a grid in each voxel in 2D-plots
+function ax = CSI_2D_plotVoxels_grid(ax, clr)
+% Add a grid to a voxel in the 2D CSI plot. Used in csi_2D_plotVoxels and
+% requires the axes handle to the voxel and a grid color;
+
+% Prep options                                  ----- !Can Be Edited!
+% Number of grid lines, grid linewidth and grid alpha opacity; latter
+% overwrites userinput.
+gridN = 5; gridW = 0.5; 
+gridAlpha = 0.75; clr(4) = gridAlpha;
+
+
+% Get current axis limits
+yl = ax.YLim; xl = ax.XLim;
+
+% Calulate (mesh) grid-cooridnates for voxel
+xstep = diff(xl)/gridN; ystep = diff(yl)/gridN;
+xv = xl(1):xstep:xl(2); yv = yl(1):ystep:yl(2);
+[xgh, ygh] = meshgrid(xv,yv); xgv = xgh'; ygv = ygh';
+
+% Plot grid
+hold(ax,'on');
+plot(ax,xgh(:,2:end-1),ygh(:,2:end-1),...
+    'r-','Linewidth',gridW,'Color',clr);
+plot(ax,xgv(:,2:end-1),ygv(:,2:end-1),...
+    'r-','Linewidth',gridW,'Color',clr);    
+hold(ax,'off');
+
+% Reverse plot-layering e.g. plotted data on top.
+ax.Children = flip(ax.Children,1);
+
+
 
 % --- Executes on button press in button_CSI_setFigure_ratio.
 function button_CSI_setFigure_ratio_Callback(~, ~, gui)
@@ -7210,6 +7334,46 @@ end
 % 3. Update GUI data.
 guidata(hObject,gui);
     
+% --- Executed by user in menubar: CSI > Scaling Color > Scale by window
+function CSI_2D_Scaling_Color_ScaleByWindow(hObject, ~)
+% Enabel or disbale scale by Color.
+gui = guidata(hObject);
+
+if strcmp(get(gui.menubar.MRSI.ColorScale.ScalebyWindow,'Checked'), 'off')
+    set(gui.menubar.MRSI.ColorScale.ScalebyWindow,'Checked', 'on');
+else
+    set(gui.menubar.MRSI.ColorScale.ScalebyWindow,'Checked', 'off');
+end
+
+% 3. Update GUI data.
+guidata(hObject,gui);
+
+function CSI_2D_Scaling_Axis_ScaleByWindow(hObject, ~)
+% Enabel or disbale scale by Color.
+gui = guidata(hObject);
+
+if strcmp(get(gui.menubar.MRSI.AxisScale.ScalebyWindow,'Checked'), 'off')
+    set(gui.menubar.MRSI.AxisScale.ScalebyWindow,'Checked', 'on');
+else
+    set(gui.menubar.MRSI.AxisScale.ScalebyWindow,'Checked', 'off');
+end
+
+% 3. Update GUI data.
+guidata(hObject,gui);
+
+function CSI_2D_Scaling_GridVoxels(hObject, ~)
+% Enabel or disbale scale by Color.
+gui = guidata(hObject);
+
+if strcmp(get(gui.menubar.MRSI.AxisScale.Grid,'Checked'), 'off')
+    set(gui.menubar.MRSI.AxisScale.Grid,'Checked', 'on');
+else
+    set(gui.menubar.MRSI.AxisScale.Grid,'Checked', 'off');
+end
+
+% 3. Update GUI data.
+guidata(hObject,gui);
+
 % --- Executed by user in menubar: CSI > Scaling Axis
 function CSI_2D_Scaling_Axis_Set(hObject, evt)
 % Change the y-axis limit scaling setting of the 2D plot to
@@ -7505,7 +7669,7 @@ evt.Source.Text = yaxis_ans{2}; evt.Source.Label = yaxis_ans{2};
 CSI_2D_Scaling_Axis_Set(gui.CSIgui_main, evt);
 
 % Process x-axis range answer
-csi.xaxis.xlimit = str2double(strsplit(xaxis_ans{1},' '));
+csi.xaxis.xlimit = sort(str2double(strsplit(xaxis_ans{1},' ')));
 
 % Figure ratio
 button_CSI_setFigure_ratio_Callback([], [], gui);
@@ -7998,9 +8162,13 @@ end
 if revX, appdata1D.axes.XDir = 'reverse'; end
 
 % Y axis
-limy = [min(plot_y) max(plot_y)].*1.05;
-if limy(1) >= limy(2), limy(1) = limy(1)-1; end
-ylim(appdata1D.axes, limy);
+if isfield(appdata1D, 'ylimit')
+    appdata1D.axes.YLim =  appdata1D.ylimit;
+else
+    limy = [min(plot_y) max(plot_y)].*1.05;
+    if limy(1) >= limy(2), limy(1) = limy(1)-1; end
+    ylim(appdata1D.axes, limy);
+end
 
 % Title
 title_str = CSI_1D_display_createTitle(appdata1D.voxel.index);
@@ -8766,6 +8934,8 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 
 % USER INPUT % -------------------------------- %
+
+% X-axis ------------ %
 uans = getUserInput_Popup({'X-axis type: ','Plot unit: '},...
                           {{'PPM', 'Frequency','Time','None'},...
                            {'Real', 'Magnitude','Phase','Imaginary'}});
@@ -8777,10 +8947,22 @@ axis_unit = lower(uans{1}); plot_unit = uans{2};
 % Edit some x axis labels...
 if strcmp(axis_unit,'frequency'), axis_unit = 'freq'; end 
 
+% Get current x-axis settings
+xlimit = appdata1D.axes.XLim;                     
+
+% Ask user x-axis limits
+xans = getUserInput({'X-axis limits: (ppm or unitless)'},{xlimit}); 
+appdata1D.axis.xlimit= str2double(strsplit(xans{1}));
+
+
+% Y-axis ------------ %
+uans = getUserInput({'Y-axis limits:'},{appdata1D.axes.YLim});
+
 % APPLY SETTINGS % ---------------------------- %
 appdata1D.voxel.unit = plot_unit;
-appdata1D.axis.unit = axis_unit;
-          
+appdata1D.axis.unit  = axis_unit;
+appdata1D.ylimit     = str2double(strsplit(uans{1}));
+
 % SAVE AND DISPLAY % -------------------------- %
 
 % Save the new appdata
@@ -9831,6 +10013,7 @@ if strcmp(day,'on')
     colors.lines1     = [0 0 1];             % Static line color
     colors.lines2     = [1 0 0];             % Second line color
     colors.grid       = [0.4 0.4 0.4];       % Grid color 2D plot
+    colors.grid2      = [0.4 0.4 0.4];       % Grid color 2D plot
 elseif strcmp(night,'on')
     % GUI color palet: Night theme
     colors.main       = [0.1 0.1 0.1];             % Backgrounds
@@ -9841,6 +10024,7 @@ elseif strcmp(night,'on')
     colors.lines1     = [1 1 1];             % Static line color
     colors.lines2     = [1 0 0];             % Second line color
     colors.grid       = [0.4 0 0];           % Grid color 2D plot
+    colors.grid2      = [0.4 0 0];           % Grid color 2D plot
 elseif strcmp(custom, 'on')
    
    % Read colors from file

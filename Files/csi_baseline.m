@@ -33,7 +33,7 @@ plot(figh.Children, x4fit, repmat(blevel,size(data,1)),'--k');
 % Get user input
 title(figh.Children,'Click 6 points to define baseline offset');
 
-pos = ginputQ(6,figh); 
+pos = ginputQ(5,figh); 
 x = pos(:,1); y = pos(:,2); x = round(x); 
 
 title('Spectrum'); 
