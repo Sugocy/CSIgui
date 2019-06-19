@@ -5052,8 +5052,7 @@ for sli = 1:size(data,4) % ----------------- %
     end
     % To linear vector per cell.
     nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
-    
-    % Get data.
+
     plot_par.data2D = data(:,:,:,sli,nDimC{:});
     
     % Plot Scaling Settings %  ------------ %
@@ -6568,6 +6567,19 @@ else
     plot_par.plotindex = {1}; % Slice and other indices set to 1.
 end
 
+
+% Get FULL data cell indexing % --------- %
+% Used to get all data including all slices.
+
+% Create cell for indexing outside the spatial-dimensions 
+if numel(plot_par.dim) > 3, nDimC = num2cell(plot_par.dim(4:end));
+else, nDimC = {1};
+end
+% To linear vector per cell.
+nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
+plot_par.select_all_dim = nDimC;
+
+
 % Data: Slice % ------------------- %
             
 % Get data-unit to plot and extract data from array.
@@ -6585,6 +6597,7 @@ function plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume)
 %               Data total volume (3D)
 % Output-fields: plot_par.clrs, plot_par.clrs_data_range
 
+
 % Scaling: Plot Color % ------------- %
 
 csiobj = findobj('Tag','CSIgui_main'); gui = guidata(csiobj);
@@ -6594,24 +6607,44 @@ csiobj = findobj('Tag','CSIgui_main'); gui = guidata(csiobj);
 % displayed CSI slice relative to the limits of the slice.
 % E.g. visualise data amplitude using colors allowing individual voxel
 % y-axis scaling!
-%
+
+
+if strcmp(gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked,'on')
+    plot_par.scale_by_window_color = 1;
+else
+    plot_par.scale_by_window_color = 0;
+end
+
 
 % Color scaling by SLICE, VOLUME or STATIC.
 vol_data = CSI_getUnit(data_volume, plot_par.data_unit);
+full_scale_range =  plot_par.scale_range(1):plot_par.scale_range(2);
+
+% Correct volume data used to calculate specific bins for different colors
+% scaled by minimum and maximum values: In x-axis window or from full
+% spectral field of view.
+if plot_par.scale_by_window_color
+    vol_data = vol_data(full_scale_range,:,:,plot_par.select_all_dim{:}); 
+end
+
 scaleby = CSI_2D_Scaling_Color_Get(gui);
 switch scaleby
     case 'vol' % Scale by volume
         % Plot color scaled for all voxels in the *volume*
         max_per_voxel = max(vol_data,[],1);
         data_ylimits_color = [min(max_per_voxel(:)), max(max_per_voxel(:))]; 
+        plot_par.scale_color = 0;
     case 'sli' % Scale by slice
         % Calc limits in slice
         max_per_voxel = max(vol_data(:,:,:,plot_par.plotindex{:}),[],1);
         data_ylimits_color = [min(max_per_voxel(:)) max(max_per_voxel(:))];           
+        plot_par.scale_color = 1;
     case 'sta' % Static color
         % Color scaling limited to 1 color: static line color
         data_ylimits_color = NaN;
+        plot_par.scale_color = 2;
 end
+
 
 % Get plot colors range for different max-limits.
 if ~isnan(data_ylimits_color)
@@ -6631,16 +6664,73 @@ end
 % --- % Executed by CSI_plot2D_initiate: get plot2D settings
 function plot_par = CSI_2D_getPlotSettings(plot_par, gui, data_volume)
 % Add to structure plot_par the following plot-settings and plot-data
-% fields:
+% fields: 
 % 
-% Scaling: plot color, axis-y and x limit (by volume/static/voxel);
+% Scaling plot color, axis-y and x limit (by volume/static/voxel) and
+% more.
+% Output fields to plot_par:
+%               scale_by_window_color   Color scale data by window or full 
+%                                       spectra
+%               scale_color             Scale type of colors: 
+%                                       vol(0/sli(1/sta(2
+%               clrs                    Plot colors for color scaling 
+%                                       spectra
+%               xlimit                  Visual x-limits of spectra plots
+%               xaxisdata               Xaxis plot data (ppm/unitless)
+%               scale_by_window_axis    Scale y-axis by window or full
+%                                       spectrum
+%               scale_range             Index scale range for previous
+%               scale                   Scale type: vox(0/sli(1/vol(2
+%               axScale_ylimit          Y-limits for scaling vol/sli
+%               voxel_grid              Enable or disable grid in each vox
 
 
-% Scaling: Plot Color % ------------- %
-% Create - plot_par.clrs, plot_par.clrs_data_range
-plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume);
+% Axis: scale by window and X-limits% ---------- %
 
+% Get visual and index range of x-axis data to use for scale by window of
+% the y-axis.
 
+% X-axis visual limits
+plot_par.xlimit = plot_par.xaxis.xlimit;
+
+% Get the frequenty axis
+% unitless(none) or frequency(ppm) and get unitless range of data to 
+% scale y-axis; to full spectrum or to visible part of spectrum.
+if isfield(plot_par.xaxis, 'ppm')
+    plot_par.xaxisdata = plot_par.xaxis.ppm;
+    
+    [~,scale_range(1)] =  ...
+        min(abs(plot_par.xaxis.ppm - plot_par.xaxis.xlimit(1)));
+    [~,scale_range(2)] =  ...
+        min(abs(plot_par.xaxis.ppm - plot_par.xaxis.xlimit(2)));
+   
+else         
+    
+    plot_par.xaxisdata = plot_par.xaxis.none; 
+    [~,scale_range(1)] =  ...
+        min(abs(plot_par.xaxis.none - plot_par.xaxis.xlimit(1)));
+    [~,scale_range(2)] =  ...
+        min(abs(plot_par.xaxis.none - plot_par.xaxis.xlimit(2)));
+end
+
+% If only a single value... 
+if diff(scale_range) > size(data_volume,1)
+    scale_range = [1 size(data_volume,1)];
+end
+
+% If user request Y-axis scaling by full spectrum - set full index as new
+% scaling range.
+if strcmp(gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked,'off')
+    scale_range = [1 size(data_volume,1)];
+    plot_par.scale_by_window_axis = 0;
+else
+    plot_par.scale_by_window_axis = 1;
+end
+
+% Save scale range.
+plot_par.scale_range = scale_range;
+
+    
 % Scaling: Axis Y Limit % ------------------- %
             
 % Get data-unit to plot and extract data from array.
@@ -6658,30 +6748,34 @@ scaleby = CSI_2D_Scaling_Axis_Get(gui);
 switch scaleby 
     case 'vox', plot_par.scale = 0; 
     case 'sli', plot_par.scale = 1; 
+        % Unit
         tmp_data = CSI_getUnit(plot_par.data2D, plot_par.data_unit);
+        % Correct x-axis window
+        tmp_data = tmp_data(scale_range(1):scale_range(2),...
+            :,:,plot_par.plotindex{:});
         plot_par.axScale_ylimit = [min(tmp_data(:)) max(tmp_data(:))]; 
     case 'vol', plot_par.scale = 2; 
+        % Unit
         tmp_dataVol = CSI_getUnit(data_volume, plot_par.data_unit);
+        % Correct x-axis window
+        tmp_dataVol = tmp_dataVol(scale_range(1):scale_range(2),...
+            :,:,plot_par.select_all_dim{:});
         plot_par.axScale_ylimit = [min(tmp_dataVol(:)) max(tmp_dataVol(:))];
 end
 
-% Axis: x-axis data % ------------------- %
-
-% Find possible frequenty axis.
-if isfield(plot_par.xaxis, 'ppm'), plot_par.xaxisdata = plot_par.xaxis.ppm; 
-else,                              plot_par.xaxisdata = plot_par.xaxis.none; 
-end
-
-% Display xlimit
-plot_par.xlimit = plot_par.xaxis.xlimit;
-
-
-% Voxel grid on or off
+ 
+% Voxel grid on or off % ---------------- %
 if strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on')
     plot_par.voxel_grid = 1;
 else
     plot_par.voxel_grid = 0;
 end
+
+
+% Scaling: Plot Color % ------------- %
+% Create - plot_par.clrs, plot_par.clrs_data_range
+plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume);
+
 
 
 % --- % Executed by CSI_plot2D_initiate: plot images
@@ -6772,6 +6866,8 @@ axlw_pt = 1;
 % Replot the entire figure or use open figure.
 if isfield(plot_par, 'ax'), createFig = 0; else, createFig = 1; end
 
+full_scale_range =  plot_par.scale_range(1):plot_par.scale_range(2);
+
 % Plot csi voxel per axis in plot_par.grid
 for ci = 1:plot_par.dim(1)                  % Col loop.
     for ri = 1:plot_par.dim(2)              % Row loop.
@@ -6784,18 +6880,22 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         pos = [x y plot_par.res(1) plot_par.res(2)];
         % Create axis with pos(3,4) size at pos(1,2) position
         if ~ishandle(plot_par.fh), return; end
-        if createFig
+        if createFig % Only if figure did not exist before...
             plot_par.ax{ri,ci} = axes('parent',plot_par.fh,'position',pos);
         end
 
+        
         % VOXEL DATA % ----------------- %
         plot_data_vox = plot_par.data2D(:,ci,ri);
         plot_data_vox = CSI_getUnit(plot_data_vox, plot_par.data_unit);
         
+        
         % COLOR SCALING % -------------- %
+        
         % This is NOT the Ylimit eventually used for axis-display.
-        % See below plot();
-        ylimit = [min(plot_data_vox(:)) max(plot_data_vox(:))];
+        % See below plot() @ YAXIS SCALING
+        ylimit = [min( plot_data_vox( : ) ) max( plot_data_vox( : ) )];
+        
         % Relative to maximum Y-data.
         [~, clr_ind] = min(abs(plot_par.clrs_data_range-ylimit(2)));
         plot_color = plot_par.clrs(clr_ind,:); % See before ri/ci for-loops.
@@ -6810,7 +6910,10 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         % YAXIS SCALING % -------------- %
         
         % Scale Y axis by limits of voxel, slice or volume.
-        if     plot_par.scale == 0                                          % Voxel - No action required.
+        if plot_par.scale == 0                                              % Voxel 
+            ylimit = ...
+                [min( plot_data_vox( full_scale_range ) )...
+                 max( plot_data_vox( full_scale_range ) )];
         elseif plot_par.scale == 1 || plot_par.scale == 2                   % Slice or Volume
             ylimit = plot_par.axScale_ylimit;                               % Use pre-calculated limit.
         end
@@ -6818,17 +6921,15 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         % Largest absolute limit: min/max.
         if     abs(ylimit(2)) > abs(ylimit(1)), ylimfac = abs(ylimit(2));
         elseif abs(ylimit(1)) > abs(ylimit(2)), ylimfac = abs(ylimit(1));
-        else
-            ylimfac = 1;
+        else, ylimfac = 1;
         end
        
-        % Create visualised Ylimit. Centered around zero!
+        % Create visualised Ylimit. Centered around zero.
         ylimit = [-1.05*ylimfac  1.05.*ylimfac];
-        % Safety for the Ylimits;
-        if ylimit(2) <= ylimit(1), ylimit(2) = ylimit(1)+1; end
-        % Set Ylimit
-        ylim(plot_par.ax{ri,ci}, ylimit);
+        if ylimit(2) <= ylimit(1), ylimit(2) = ylimit(1)+1; end % Safety 
+        ylim(plot_par.ax{ri,ci}, ylimit); % Set Ylimit
 
+        
         % X LIMIT % -------------------- %
         
         % Use limits of ppm axis(1) and (end) plus reverse the x-axis
@@ -7216,10 +7317,6 @@ gui = guidata(hObj);
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-
-% colors = plot_par.clrs;
-% values = plot_par.clrs_data_range;
-
 % --- Data unit
 data_unit = get(gui.popup_plotUnit,'String');
 data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
@@ -7243,22 +7340,27 @@ else
     plot_par.plotindex = {1}; % Slice and other indices set to 1.
 end
 
-% Get plot-color scaling range
-plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, csi.data.raw);
+% xaxis data.
+plot_par.xaxis = csi.xaxis;
 
+% Axis size to fit figure
+plot_par.dim      = size(csi.data.raw);   % Data dimensions
+plot_par.dim(1)   = [];                   % Remove time index e.g. 1
+plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
 
+% Get all necessary data.
+plot_par = CSI_2D_getData(plot_par, gui, csi.data.raw);
+plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 
 % --- Open colorbar with color-options from plot_par
 
 % Set input
 colors = plot_par.clrs; values = plot_par.clrs_data_range;
-
 colorbarQ(colors, values)
 
 catch err
     CSI_Log({[err.stack(1).name ':'], 'Line: '},...
                        {err.message, err.stack(1).line});
-     
 end
 
 % --- Executed by plot2D and others to get current color scaling state
@@ -8952,6 +9054,7 @@ xlimit = appdata1D.axes.XLim;
 
 % Ask user x-axis limits
 xans = getUserInput({'X-axis limits: (ppm or unitless)'},{xlimit}); 
+if isempty(xans),return;end
 appdata1D.axis.xlimit= str2double(strsplit(xans{1}));
 
 
