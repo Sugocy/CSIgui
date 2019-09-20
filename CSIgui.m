@@ -818,10 +818,14 @@ if isfield(gui.inp,'data')
     try        
         csi.data = gui.inp.data;             % Set data struct       
         csi.data.dim = size(csi.data.raw);   % Add dimension info.
-        csi.ext = '.data'; csi.filename = data.filename; % File nfo
+        csi.ext = '.data'; csi.filename = gui.inp.data.filename; % File nfo
 
         % Save CSI data in app-data
         setappdata(gui.CSIgui_main,'csi',csi);   
+        
+        button_CSI_ReorderDim_Auto_Callback(gui.CSIgui_main);
+        gui = guidata(gui.CSIgui_main);
+        
 
     catch err
         CSI_Log({'Failed processing user input!'},{err.message});   
@@ -832,7 +836,9 @@ if isfield(gui.inp,'data')
     CSI_Log({'User input processed: '},{userInfo});
 
     % Calculate xaxis from available data
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1); 
+    CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1); 
+    gui = guidata(gui.CSIgui_main);
+    csi = getappdata(gui.CSIgui_main,'csi'); 
     
     % Parse succes
     succes = 1;
@@ -844,7 +850,7 @@ if isfield(gui.inp,'list')
     userInfo = 'List-struct loaded.';
 
     % Set input.
-    csi.list = gui.inp.list; csi.filename = csi.list.filename;
+    csi.list = gui.inp.list; csi.filename = gui.inp.list.filename;
     % Save as appdata
     setappdata(gui.CSIgui_main,'csi', csi);   
 
@@ -915,6 +921,9 @@ if isfield(gui.inp,'labels')
     % Pase succes
     succes = 1;
 end
+
+
+
 
 % --- Parse DICOM file
 function success = parse_dicom(fp, fn, gui)
@@ -1008,21 +1017,32 @@ csi.xaxis.BW = nfo.SpectralBW_Hz;
 if isfield(nfo,'VoxRL_mm') 
    csi.ori.res(1) = nfo.VoxRL_mm;     
    csi.ori.offcenter(1) = [nfo.RL_L__mm]; 
-end
-if isfield(nfo, 'VoxelSizeRL_mm')
+   
+elseif isfield(nfo,'ACQVoxelSizeRL_mm')
+   csi.ori.res(1) = nfo.ACQVoxelSizeRL_mm;     
+   csi.ori.offcenter(1) = [nfo.RL_L__mm]; 
+   
+elseif isfield(nfo, 'VoxelSizeRL_mm') 
    csi.ori.res(1) = nfo.VoxelSizeRL_mm;
+   csi.ori.offcenter(1) = [nfo.RL_L__mm];
 end
 
 % Res AP - INDEX 2
-if isfield(nfo,'VoxAP_mm')
+if isfield(nfo,'VoxAP_mm') 
     csi.ori.res(2) = nfo.VoxAP_mm;
     csi.ori.offcenter(2) = [nfo.SliceOffc_AP_P__mm]; 
+elseif isfield(nfo,'ACQAP_mm')
+   csi.ori.res(2) = nfo.ACQAP_mm;     
+   csi.ori.offcenter(2) = [nfo.SliceOffc_AP_P__mm];
 end
 
 % Res FH - INDEX 3
 if isfield(nfo,'VoxFH_mm')
    csi.ori.res(3) = nfo.VoxFH_mm;
    csi.ori.offcenter(3) = [nfo.FH_H__mm]; 
+elseif isfield(nfo,'ACQAP_mm')
+   csi.ori.res(3) = nfo.ACQFH_mm;     
+   csi.ori.offcenter(3) = [nfo.FH_H__mm];
 end       
     
 
@@ -1057,23 +1077,35 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % NFO field                                 CSIgui variabel 
 % Nucleus                                   Nucleus
 % SpectralBW_Hz                             BW
-% VoxelSizeRL_mm VoxAP_mm VoxFH_mm          Resolution
-% SliceOffc_AP_P__mm RL_L__mm FH_H__mm'};   Offcenter
+% DimN_step                                 Resolution
+% SliceOffc_AP_P__mm RL_L__mm FH_H__mm'     Offcenter
        
 % Copy some frequency parameters
 
 % Covert nucleus 
-% nucleus = 
+% OFFCENTER
+if isfield(nfo,'si_lr_off_center')
+    csi.ori.offcenter(1) = nfo.si_lr_off_center;
+end
+if isfield(nfo,'si_ap_off_center')
+    csi.ori.offcenter(2) = nfo.si_ap_off_center;
+end
+if isfield(nfo,'si_cc_off_center')
+    csi.ori.offcenter(3) = nfo.si_cc_off_center;
+end
+
+
+% RESOLUTION
+if isfield(nfo,'slice_distance')
+    csi.ori.res(3) = nfo.slice_distance;
+end
+if isfield(nfo, 'dim2_step'), csi.ori.res(1) = nfo.dim2_step; end
+if isfield(nfo, 'dim3_step'), csi.ori.res(2) = nfo.dim3_step; end
+
 
 % Save nucleus and BW to axis info
 csi.xaxis.nucleus = nfo.nucleus;
 csi.xaxis.BW = nfo.sample_frequency;
-
-% Copy some coordnate parameters
-% csi.ori.res = [nfo.slice_distance nfo.RL_L__mm nfo.slice_distance];
-% csi.ori.offcenter = ...
-%     [nfo.si_ap_off_center nfo.si_lr_off_center nfo.si_cc_off_center];
-
 
 
                 % --------- % Clean Up % --------- %
@@ -3352,10 +3384,12 @@ spec = ipermute(spec, permv);
 
 
 % --- Executes on button press in button_CSI_Multiply.
-function button_CSI_Multiply_Callback(~, ~, gui, backup)
+function button_CSI_Multiply_Callback(hObj, ~, gui, backup)
 % Multiply the MRS data
 
-if nargin < 4 , backup= 1; end
+if nargin < 4 , backup = 1; end
+
+if ~exist('gui', 'var'), gui = guidata(hObj); end
 
 % Create backup
 if backup, CSI_backupSet(gui, 'Before multiplication.'); end
@@ -5014,10 +5048,17 @@ plot_par.colors = gui.colors; plot_par.xaxis = csi.xaxis;
 plot_par.dim      = size(csi.data.raw);   % Data dimensions
 plot_par.dim(1)   = [];                   % Remove time index e.g. 1
 plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
-        
+ 
 % Correction 1D
 % Set in plot_par the 1D dimension to the second index e.g. column.
 if plot_par.data_dim == 1, plot_par.dim(2) = 1; plot_par.data_dim = 2; end
+
+% Store all other indexes..
+if numel(plot_par.dim) > 2, nDimCtmp = num2cell(plot_par.dim(3:end));
+else, nDimCtmp = {1};
+end
+nDimCtmp = cellfun(@(x) 1:x, nDimCtmp,'UniformOutput',0);
+plot_par.select_all_dim = nDimCtmp;
 
 % Create Figure % ----------------- %
 plot_par = CSI_2D_setFigure(plot_par, [], datatag);
@@ -5559,7 +5600,7 @@ ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;
 % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
 % volume limit (limit_vol).
 opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
-def_shift = [0.5 0.5 0.5]; def_shift = [ 0 0 0 ];
+def_shift = [0.5 0.5 0.5]; def_shift = [ 0.5 -0.5 0.5 ];
 csi.ori = CSI_coordinates_calculate(...
     ori.res, ori.offcenter, ori.dim, def_shift, opts);
 % ---------------------------------------------------- %
@@ -6089,15 +6130,15 @@ if strcmp(csi.ext,'.list') || strcmp(csi.ext,'.data')
 %         spat_ind = str2double(strsplit(uans{1},' '));
 %     end
 %     
-    % Get, if available, unflipped original data.
-    if isfield(conv,'Original_MRSI')
-        mrsi_to_flip = conv.Original_MRSI;
-    else
-        mrsi_to_flip = csi.data.raw; conv.Original_MRSI = mrsi_to_flip;
-    end
-    spat_ind = csi_findDimLabel(csi.data.labels,...
-                               {'kx','ky','kz','x','y','z'});
-    csi.data.raw = flip(csi.data.raw, spat_ind(3));
+%     % Get, if available, unflipped original data.
+%     if isfield(conv,'Original_MRSI')
+%         mrsi_to_flip = conv.Original_MRSI;
+%     else
+%         mrsi_to_flip = csi.data.raw; conv.Original_MRSI = mrsi_to_flip;
+%     end
+%     spat_ind = csi_findDimLabel(csi.data.labels,...
+%                                {'kx','ky','kz','x','y','z'});
+%     csi.data.raw = flip(csi.data.raw, spat_ind(3));
         
 %     % Rotate according to HFS/FFS?
 %     switch ppos
@@ -6577,7 +6618,13 @@ else, nDimC = {1};
 end
 % To linear vector per cell.
 nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
-plot_par.select_all_dim = nDimC;
+
+% Store all other indexes..
+if numel(plot_par.dim) > 2, nDimCtmp = num2cell(plot_par.dim(3:end));
+else, nDimCtmp = {1};
+end
+nDimCtmp = cellfun(@(x) 1:x, nDimCtmp,'UniformOutput',0);
+plot_par.select_all_dim = nDimCtmp;
 
 
 % Data: Slice % ------------------- %
@@ -6751,8 +6798,7 @@ switch scaleby
         % Unit
         tmp_data = CSI_getUnit(plot_par.data2D, plot_par.data_unit);
         % Correct x-axis window
-        tmp_data = tmp_data(scale_range(1):scale_range(2),...
-            :,:,plot_par.plotindex{:});
+        tmp_data = tmp_data(scale_range(1):scale_range(2),:,:);
         plot_par.axScale_ylimit = [min(tmp_data(:)) max(tmp_data(:))]; 
     case 'vol', plot_par.scale = 2; 
         % Unit
@@ -7363,6 +7409,9 @@ catch err
                        {err.message, err.stack(1).line});
 end
 
+
+
+
 % --- Executed by plot2D and others to get current color scaling state
 function scaleby = CSI_2D_Scaling_Color_Get(gui)
 % Returns what to color scale by; slice(SLI), volume(VOL) or static(STA)
@@ -7707,82 +7756,328 @@ csi.xaxis = xaxis; % Contains frequency details of MRS data
 % Save in appdata
 setappdata(gui.CSIgui_main,'csi',csi);
 
-% --- Executed to manually set various 2D-plot scaling & display options
+
+
+
+% (Additional window for editting 2D plot options.) --------------------- %
+
+% --- Executes on button press in button_CSI_DisplayOptions.
+function button_CSI_DisplayOptions_Callback(~, ~, gui)
+CSI_2D_Scaling_Options(gui); % Set all options for 2D plot using a GUI.
+
+% --- See button_CSI_DisplayOptions_Callback
 function CSI_2D_Scaling_Options(gui)
-% Set display options: x-axis control, y-axis control, data color
-% scaling 
-%
-% Uses CSI_Scaling2D_Axis; CSI_Scaling2D_Color
 
 
 % Get CSI app data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi'); 
 
-% USER INPUT % -------------------------------------- %
+% CURRENT 2D-PLOT SETTINGS % ------------------------------------------- %
 
-% Y-axis scaling options % -------- %
-
-% Get current y-axis scaling options: full name
+% Color scaling % --- %
+% Create option per setting and sort with current setting at top.
 current_clr = CSI_2D_Scaling_Color_Get(gui);
 switch current_clr
     case 'vol', current_clr = 'Volume';
     case 'sli', current_clr = 'Slice';
     case 'sta', current_clr = 'Static';
 end
+% Create option per setting and sort with current setting at top.
+inp_clr = {'Voxel', 'Volume', 'Static'};
+ind = contains(inp_clr, current_clr); inp_clr = {inp_clr{ind} inp_clr{~ind}};
+
+% Scale by x-axis window: on/off
+cl_scaleWindow = gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked;
+if strcmp(cl_scaleWindow,'on'), cl_scaleWindow = 1; 
+else,                           cl_scaleWindow = 0; 
+end
+
+
+% Y-axis scaling % --- %
+% Create option per setting and sort with current setting at top.
 current_axs = CSI_2D_Scaling_Axis_Get(gui);
 switch current_axs
     case 'vox', current_axs = 'Voxel';
     case 'sli', current_axs = 'Slice';
     case 'vol', current_axs = 'Volume';
 end
-% Sort with current setting at top.
-inp_clr = {'Voxel', 'Volume', 'Static'};
-ind = contains(inp_clr, current_clr);inp_clr = {inp_clr{ind} inp_clr{~ind}};
 inp_axs = {'Voxel','Slice','Volume'};
-ind = contains(inp_axs, current_axs);inp_axs = {inp_axs{ind} inp_axs{~ind}};
+ind = contains(inp_axs, current_axs); inp_axs = {inp_axs{ind} inp_axs{~ind}};
 
-% Ask user.
-yaxis_ans = getUserInput_Popup({'Color scaling:','Y-axis scaling:'},...
-                          {inp_clr,inp_axs});
-if isempty(yaxis_ans) 
-    CSI_Log({'Skipped setting 2D plot options.'},{''}); return; 
-end  
-                      
-% X-axis scaling options % -------- %
+% Scale by x-axis window: on/off
+ax_scaleWindow = gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked;
+if strcmp(ax_scaleWindow,'on'), ax_scaleWindow = 1; 
+else,                           ax_scaleWindow = 0; 
+end
 
-% Get current x-axis settings
-xlimit = csi.xaxis.xlimit;                     
+% Voxel Grid % --- %
+ax_grid = strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on');
 
-% Ask user
-xaxis_ans = getUserInput({'X-axis display range: (ppm or unitless)'},...
-                         {xlimit});                     
-% Return if user pressed skip.
-if isempty(xaxis_ans)
-    CSI_Log({'Skipped setting 2D plot options.'},{''}); return; 
-end  
+% X-Limit % --- %
+xlimit = num2str(csi.xaxis.xlimit);     
+
+
+% ---------------------------------------------------------------------- %
+
+
+% 2D PLOT OPTIONS GUI % --------------------- %
+% Create figure and the UI elements.
+
+% Figure
+tg = 'CSI_2D_OptionsGUI';
+nm = 'CSIgui - 2D-Plot Display Options';
+fh = figure('Name',nm,'Tag',tg,'Menubar','none','Toolbar','none',...
+    'Color', gui.colors.main,'Unit','Pixels','NumberTitle', 'Off');
+gdat = guidata(fh); axis off;
+
+% Figure position
+fig_wh = [400 250];
+sz = gui.CSIgui_main.Position; fig_pos = sz(1:2)+((sz(3:4)-fig_wh)./2);
+fh.Position = [fig_pos fig_wh];
+
+
+
+% --- % Title static text % --- % 
+
+gdat.title.displayOptions = ...
+    uicontrol(fh, 'Style', 'Text','Unit', 'Pixels',...
+    'Position',[10 230 240 15],...
+    'String','Plot 2D - Display Options',...
+    'Fontsize', 10, 'FontWeight','Bold',...
+    'Foregroundcolor', gui.colors.hilight1,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+
+
+% --- % Axis scaling % --- % 
+
+%Popup menu title
+gdat.title.scaleAxis = ...
+    uicontrol(fh, 'Style', 'Text','Unit', 'Pixels',...
+    'Position',[50 202 100 15],...
+    'String','Y-Axis scaling','Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_title,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+
+% Dropdown menu title    
+gdat.popup.scaleAxis = ...
+    uicontrol(fh, 'Style', 'popupmenu','Unit', 'Pixels',...
+    'Position',[50 180 150 20],...
+    'String',inp_axs,'Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_main,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+
+% Radio button scale by x-axis window.
+gdat.radio.ax_scaleWindow = ...
+    uicontrol(fh, 'Style','radiobutton','Unit', 'Pixels',...
+            'position', [50 155 125 20],'value',ax_scaleWindow,...
+            'String','Scale by Window',...
+            'Foregroundcolor', gui.colors.text_main,...
+            'BackgroundColor', gui.colors.main);
+
+% Radio button grid.
+gdat.radio.grid = ...
+    uicontrol(fh, 'Style','radiobutton','Unit', 'Pixels',...
+            'position', [50 135 125 20],'value',ax_grid,...
+            'String','Grid per voxel',...
+            'Foregroundcolor', gui.colors.text_main,...
+            'BackgroundColor', gui.colors.main);
+
+% --- % Color Scaling % --- % 
+
+%Popup menu title
+gdat.title.scaleColor = ...
+    uicontrol(fh, 'Style', 'Text','Unit', 'Pixels',...
+    'Position',[50 110 100 15],...
+    'String','Color scaling','Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_title,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+
+% Dropdown menu title    
+gdat.popup.scaleColor = ...
+    uicontrol(fh, 'Style', 'popupmenu','Unit', 'Pixels',...
+    'Position',[50 90 150 20],...
+    'String',inp_clr,'Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_main,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+   
+% Radio button scale by x-axis window.
+gdat.radio.cl_scaleWindow = ...
+    uicontrol(fh, 'Style','radiobutton','Unit', 'Pixels',...
+            'position', [50 65 125 20],'value',cl_scaleWindow,...
+            'String','Scale by Window',...
+            'Foregroundcolor', gui.colors.text_main,...
+            'BackgroundColor', gui.colors.main);
+             
+
+  
+% --- % X-Limits % --- %
+
+% X-Limit edits title
+gdat.title.xlimits = ...
+    uicontrol(fh, 'Style', 'Text','Unit', 'Pixels',...
+    'Position',[250 202 100 15],...
+    'String','X-Axis limits','Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_title,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Left');
+
+gdat.edit.xlimit = ...
+    uicontrol(fh, 'Style', 'edit','Unit', 'Pixels',...
+    'Position',[250 180 100 22],...
+    'String',xlimit,'Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_main,...
+    'BackgroundColor', gui.colors.main,...
+    'HorizontalAlignment', 'Center');
+
+
+% --- % Buttons % --- % 
+
+% Apply button
+gdat.button.Apply = ...
+    uicontrol(fh, 'Style', 'Pushbutton','Unit', 'Pixels',...
+    'Position',[275 30 75 20],'String','Apply','Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_main,...
+    'BackgroundColor', gui.colors.main,...
+    'Callback', @CSI_2D_OptionsGUI_Apply);
+
+% Update button
+gdat.button.Update = ...
+    uicontrol(fh, 'Style', 'Pushbutton','Unit', 'Pixels',...
+    'Position',[200 30 75 20],'String','Update','Fontsize', 8,...
+    'Foregroundcolor', gui.colors.text_main,...
+    'BackgroundColor', gui.colors.main,...
+    'Callback', @CSI_2D_OptionsGUI_Update);
+
+% Store gui-data.
+guidata(fh, gdat);
+% --- See CSI_2D_Scaling_Options GUI
+function CSI_2D_OptionsGUI_Apply(hobj, ~)
+% Process data from Plot 2D - Display GUI.
+
+% Get GUIdata
+gdat = guidata(hobj);
+
+csiobj = findobj('Name','CSIgui','Tag', 'CSIgui_main', 'Type', 'Figure');
+if isempty(csiobj), return; end
+gui = guidata(csiobj); csi = getappdata(gui.CSIgui_main,'csi');
 
 % PROCESS INPUT % -------------------------------------- %
 
-% Process y-axis scaling answer
-evt.Source.Text = yaxis_ans{1}; evt.Source.Label = yaxis_ans{1};
-CSI_2D_Scaling_Color_Set(gui.CSIgui_main, evt);
-evt.Source.Text = yaxis_ans{2}; evt.Source.Label = yaxis_ans{2};
+% Axis scaling
+ax_ans = gdat.popup.scaleAxis.String{gdat.popup.scaleAxis.Value};
+evt.Source.Text = ax_ans; evt.Source.Label = ax_ans;
 CSI_2D_Scaling_Axis_Set(gui.CSIgui_main, evt);
 
+% Color scaling
+cl_ans = gdat.popup.scaleColor.String{gdat.popup.scaleColor.Value};
+evt.Source.Text = cl_ans; evt.Source.Label = cl_ans;
+CSI_2D_Scaling_Color_Set(gui.CSIgui_main, evt);
+
+% Grid per voxel
+if gdat.radio.grid.Value
+    gui.menubar.MRSI.AxisScale.Grid.Checked = 'on';
+else
+    gui.menubar.MRSI.AxisScale.Grid.Checked = 'off';
+end
+
 % Process x-axis range answer
-csi.xaxis.xlimit = sort(str2double(strsplit(xaxis_ans{1},' ')));
+xl = gdat.edit.xlimit.String;
+csi.xaxis.xlimit = sort(str2double(strsplit(xl,' ')));
 
-% Figure ratio
-button_CSI_setFigure_ratio_Callback([], [], gui);
+% Scale by window for Y-axis and Color scaling
+if gdat.radio.cl_scaleWindow.Value
+    gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked = 'on';
+else
+    gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked = 'off';
+end
+if gdat.radio.ax_scaleWindow.Value
+    gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked = 'on';
+else
+    gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked = 'off';
+end
 
-% Save appdata.
-setappdata(gui.CSIgui_main,'csi',csi); 
+% Store
+guidata(gui.CSIgui_main, gui);
+setappdata(gui.CSIgui_main,'csi',csi);
+% --- See CSI_2D_Scaling_Options GUI
+function CSI_2D_OptionsGUI_Update(hobj,~)
 
-% --- Executes on button press in button_CSI_DisplayOptions.
-function button_CSI_DisplayOptions_Callback(~, ~, gui)
-% Set all scaling options for 2D plot using a GUI
-CSI_2D_Scaling_Options(gui);
+% Get GUIdata
+gdat = guidata(hobj);
+
+csiobj = findobj('Name','CSIgui','Tag', 'CSIgui_main', 'Type', 'Figure');
+if isempty(csiobj), return; end
+gui = guidata(csiobj); csi = getappdata(gui.CSIgui_main,'csi');
+
+% Current CSI 2D Plot Options % ----------------------------------- %
+
+% Color scaling % --- %
+% Create option per setting and sort with current setting at top.
+current_clr = CSI_2D_Scaling_Color_Get(gui);
+switch current_clr
+    case 'vol', current_clr = 'Volume';
+    case 'sli', current_clr = 'Slice';
+    case 'sta', current_clr = 'Static';
+end
+% Create option per setting and sort with current setting at top.
+inp_clr = {'Voxel', 'Volume', 'Static'};
+ind = contains(inp_clr, current_clr); inp_clr = {inp_clr{ind} inp_clr{~ind}};
+
+% Scale by x-axis window: on/off
+cl_scaleWindow = gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked;
+if strcmp(cl_scaleWindow,'on'), cl_scaleWindow = 1; 
+else,                           cl_scaleWindow = 0; 
+end
+
+% Y-axis scaling % --- %
+% Create option per setting and sort with current setting at top.
+current_axs = CSI_2D_Scaling_Axis_Get(gui);
+switch current_axs
+    case 'vox', current_axs = 'Voxel';
+    case 'sli', current_axs = 'Slice';
+    case 'vol', current_axs = 'Volume';
+end
+inp_axs = {'Voxel','Slice','Volume'};
+ind = contains(inp_axs, current_axs); inp_axs = {inp_axs{ind} inp_axs{~ind}};
+
+% Scale by x-axis window: on/off
+ax_scaleWindow = gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked;
+if strcmp(ax_scaleWindow,'on'), ax_scaleWindow = 1; 
+else,                           ax_scaleWindow = 0; 
+end
+
+% Voxel Grid % --- %
+ax_grid = strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on');
+
+% X-Limit % --- %
+xlimit = num2str(csi.xaxis.xlimit);  
+
+% Set Options % ----------------------------------- %
+
+% Axis scaling
+gdat.popup.scaleAxis.String = inp_axs;
+gdat.radio.ax_scaleWindow.Value = ax_scaleWindow;
+% Voxel grid
+gdat.radio.grid.Value = ax_grid;
+% Color scaling
+gdat.popup.scaleColor.String = inp_clr;
+gdat.radio.cl_scaleWindow.Value = cl_scaleWindow;
+% X-axis limits.
+gdat.edit.xlimit.String = xlimit;
+
+% Save handles.
+guidata(hobj,gdat);
+  
+% ----------------------------------------------------------------------- %
+
+  
+
 
 
 % PLOT 2D PANEL % ----------------------------------------------------- %
@@ -10634,7 +10929,7 @@ fh = hObj.Parent;
 matver = version('-release'); matyr = str2double(matver(1:end-1));
 % Compact for MATLAB 2015 and later versions only.
 if (matyr <= 2014), savefig(fh, [fp '\' fn '.fig']);
-else,               savefig(fh, [fp '\' fn '.fig'], 'compact');
+else,               savefig(fh.Parent.Parent, [fp '\' fn '.fig'], 'compact');
 end
 
 % LOG
@@ -10910,6 +11205,8 @@ function sel = CSI_MergeVoxels_Align(sel)
 % (ref) and other spectra aligned to this spectrum using the correlation
 % (2D) between ref and voxel.
 
+
+plot_on = 1;
 % Undress the input structure:
 voxels = sel.voxels; poi = sel.poi; 
 
@@ -11105,99 +11402,127 @@ end
 function button_TestSomething_Callback(hObj, eventdata, gui)
 % warndlg('Watch out! Developers testing button. Panic!');
 
-% Get csi data
+
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% Get image data
-if ~isappdata(gui.CSIgui_main, 'conv'), return; end
-conv = getappdata(gui.CSIgui_main, 'conv');
 
-mri = getappdata(gui.CSIgui_main,'mri');
-
-% Tra to Sagital % ---------------------- %
-% A (top) L (right) to R (top) A(right)
-% Current: kx rl = x = 2;  To  rl to z = 4;
-%          ky ap = y = 3;      ap to x = 2; 
-%          kz fh = z = 4;      fh to y = 3;
+data = csi.data.raw;
+vox = data(:,8,7,3);
 
 
-plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
-% For no-time index data use plane-1;
 
 
-% ROTATE MRS
-[csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
+disp dwakjdbnkawjdn
 
-% ROTATE MRS RELATED
-% Apply rotation to labels
-csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
-% And dimensions
-csi.data.dim(plane) = csi.data.dim(fliplr(plane));
+T2 = 1500; W = 0.1; shft = 0; amp = max(real(vox));
+par = [amp W shft T2];
+func = @(par,x) par(1).*sin((par(2).*x) - par(3)).* exp(-x/par(4));
+inp = 1:size(vox,1);
 
-
-% ROTATE IMG
-conv.data = CSI_rotate(conv.data, plane-1, 1);
-
-
-% ROTATE SPATIAL INFORMATION  MRS
-
-% Orientation info.
-ori = csi.ori;
-ori.res(plane-1)       = ori.res(fliplr(plane-1));       
-ori.offcenter(plane-1) = ori.offcenter(fliplr(plane-1));  
-ori.dim(plane-1)       = ori.dim(fliplr(plane-1));       
-
-% Coordinates of CSI data.
-% Adds fields: coordinate vector (vector) & coordinate limits (limit) &
-% volume limit (limit_vol).
-csi.ori = csi_coordinates(ori,'center', ori.vox_cor, ori.fft_cor); 
-
-% Meshgrid
-[csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
-    meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
+% [fpar, R, J, covB, MSE, ErrorModel] = nlinfit(inp, real(vox)', func, par);
+fpar = polyfit(inp,real(vox)',42); fval = polyval(fpar,inp);
+figure(); plot(inp,func(par,inp) )
+figure(); plot(inp,real(vox)')
+figure(); plot(inp,fval,inp, real(vox)' )
 
 
-% ROTATE SPATIAL INFORMATION CONVERTED IMG
+function an = sincQ(x)
+an = sin(x)./x;
 
-% Swap resolutions.
-% conv.res = mri.ori.res;
-conv.res(plane-1) = conv.res(fliplr(plane-1)); % Initial... May change!
-
-% % Calculate a resolution fitting the CSI space such that there is a integer
-% % amount of image pixels fitted in each CSI direction of space.
-% res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
-% res_rem = res_fit - floor(res_fit);     % Pixel change
-% res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
+% % Get csi data
+% if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+% csi = getappdata(gui.CSIgui_main, 'csi');
 % 
-% % New resolution for each direction
-% conv.res = res_new;
-
-% Volume limits of CSI but with half a voxel distance for voxel limits e.g.
-% a total voxel (MRI res) vs the volume.
-conv.fov       = csi.ori.fov;     % Does not change regards to CSI
-conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
-conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
-conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
-
-% Range of volume/grid of MRSI for MRI
-for kk = 1:size(conv.lim,1)    
-    % Number of pixels in kk-direction
-    N = (conv.fov(kk)./conv.res(kk));
-    % Grid vector defining volume
-    conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
-end
-
-% Image grid in MRSI space 
-% This grid lays in the CSI-space e.g. within limits of CSI FOV but is
-% sampled in x, y and z as close to the resolution of the image as possible
-[x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
-conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
-
-% Store data
-setappdata(gui.CSIgui_main, 'csi',csi);
-setappdata(gui.CSIgui_main, 'conv',conv);
-CSI_Log({'Done testing.'},{''});
+% % Get image data
+% if ~isappdata(gui.CSIgui_main, 'conv'), return; end
+% conv = getappdata(gui.CSIgui_main, 'conv');
+% 
+% mri = getappdata(gui.CSIgui_main,'mri');
+% 
+% % Tra to Sagital % ---------------------- %
+% % A (top) L (right) to R (top) A(right)
+% % Current: kx rl = x = 2;  To  rl to z = 4;
+% %          ky ap = y = 3;      ap to x = 2; 
+% %          kz fh = z = 4;      fh to y = 3;
+% 
+% 
+% plane = [3 4]; % Plane for MRS data e.g. time/x/y/z...
+% % For no-time index data use plane-1;
+% 
+% 
+% % ROTATE MRS
+% [csi.data.raw, permv] = CSI_rotate(csi.data.raw, plane, 1);
+% 
+% % ROTATE MRS RELATED
+% % Apply rotation to labels
+% csi.data.labels(plane) =  csi.data.labels(fliplr(plane));
+% % And dimensions
+% csi.data.dim(plane) = csi.data.dim(fliplr(plane));
+% 
+% 
+% % ROTATE IMG
+% conv.data = CSI_rotate(conv.data, plane-1, 1);
+% 
+% 
+% % ROTATE SPATIAL INFORMATION  MRS
+% 
+% % Orientation info.
+% ori = csi.ori;
+% ori.res(plane-1)       = ori.res(fliplr(plane-1));       
+% ori.offcenter(plane-1) = ori.offcenter(fliplr(plane-1));  
+% ori.dim(plane-1)       = ori.dim(fliplr(plane-1));       
+% 
+% % Coordinates of CSI data.
+% % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
+% % volume limit (limit_vol).
+% csi.ori = csi_coordinates(ori,'center', ori.vox_cor, ori.fft_cor); 
+% 
+% % Meshgrid
+% [csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
+%     meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
+% 
+% 
+% % ROTATE SPATIAL INFORMATION CONVERTED IMG
+% 
+% % Swap resolutions.
+% % conv.res = mri.ori.res;
+% conv.res(plane-1) = conv.res(fliplr(plane-1)); % Initial... May change!
+% 
+% % % Calculate a resolution fitting the CSI space such that there is a integer
+% % % amount of image pixels fitted in each CSI direction of space.
+% % res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
+% % res_rem = res_fit - floor(res_fit);     % Pixel change
+% % res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
+% % 
+% % % New resolution for each direction
+% % conv.res = res_new;
+% 
+% % Volume limits of CSI but with half a voxel distance for voxel limits e.g.
+% % a total voxel (MRI res) vs the volume.
+% conv.fov       = csi.ori.fov;     % Does not change regards to CSI
+% conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
+% conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
+% conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
+% 
+% % Range of volume/grid of MRSI for MRI
+% for kk = 1:size(conv.lim,1)    
+%     % Number of pixels in kk-direction
+%     N = (conv.fov(kk)./conv.res(kk));
+%     % Grid vector defining volume
+%     conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
+% end
+% 
+% % Image grid in MRSI space 
+% % This grid lays in the CSI-space e.g. within limits of CSI FOV but is
+% % sampled in x, y and z as close to the resolution of the image as possible
+% [x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
+% conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
+% 
+% % Store data
+% setappdata(gui.CSIgui_main, 'csi',csi);
+% setappdata(gui.CSIgui_main, 'conv',conv);
+% CSI_Log({'Done testing.'},{''});
 
 
 

@@ -25,7 +25,7 @@ if nargin ~= 3, shift_method = 0; end
 fft_data = csi; sz = size(fft_data);
 
 
-loop = 1;
+loop = 0;
 
 
 % CIRC SHIFT
@@ -77,6 +77,7 @@ elseif shift_method == 1
     
 % CIRC/FFTSHIFT based on odd/even    
 elseif shift_method == 2
+    
     % odd even bool
     odd_bool = mod(dim,2);    
     

@@ -58,7 +58,14 @@ while ~feof(fid_r)
     % DATA    
     if ~strcmp(tline_split(1), '#') && ~strcmp(tline_split(1), '.')         % If line starts with hash (35) or dot (46) else data line.
         % Store data-line and typ column.
-        ldata{n,1} = tline_split(2:end); rtype{n,1} = tline_split{2};
+        if length(tline_split)<2
+            warning(['MATLAB:csi_loadList2:corrupt list-file. ' ,...
+                     'Could not properly read lines.']);
+            list = NaN;
+            return;
+        end
+        ldata{n,1} = tline_split(2:end); 
+        rtype{n,1} = tline_split{2};
         n = n+1;
 
     % HEADER
