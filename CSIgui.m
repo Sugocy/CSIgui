@@ -352,7 +352,7 @@ function gui = CSIgui_setMenuBar_JavaScript(gui)
 % ----------- %%% Some Jave Menu ToolTip String Magic %%% -------------- %
 try
     % Flush java.
-    drawnow; pause(0.01); 
+    drawnow; pause(0.015); 
     % Surpress obsolete function message
     warning('off', 'MATLAB:HandleGraphics:ObsoletedProperty:JavaFrame');
     
@@ -367,7 +367,7 @@ try
     % Check if right component
     if strcmp(jMRSI.getText,'MRSI')
         % Click once to open the menu 
-        jMRSI.doClick;  pause(0.01); 
+        jMRSI.doClick;  pause(0.015); 
         
         menu_name = {'Color Scaling', 'Axis Scaling','Noise','Set Domain'};
         menu_tip = {...
@@ -2736,7 +2736,7 @@ data_summed = sum(data,index);
 
 
 % --- Executes on button press in button_T1_MRS.
-function button_T1_MRS_Callback(hObject, eventdata, gui)
+function button_T1_MRS_Callback(~, ~, gui)
 % Calculate T1 for each voxel over a specific dimension in the data.
 % Requires TR input from user.
 %
@@ -2944,7 +2944,7 @@ CSI_Log({'T1 calculated. Saving T1 results to mat-file.'}, {''});
 disp('')
 
 % --- Executes on button press in button_CSI_T2.
-function button_CSI_T2_Callback(hObject, eventdata, gui)
+function button_CSI_T2_Callback(~, ~, gui)
 % Calculate T2 for each voxel over a specific dimension in the data.
 % Requires TE/echotime input from user.
 %
@@ -3221,7 +3221,7 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 CSI_Log({'Applied zero filling. Sample size increased to'},{N});
 
 % --- Executes on button press in button_CSI_AutoPhase.
-function button_CSI_AutoPhase_Callback(hObject, eventdata, gui,backup)
+function button_CSI_AutoPhase_Callback(~, ~, gui,backup)
 % Apply zero order phase correction to all voxels in the data set.
 if nargin < 4, backup = 1; end
 
@@ -8656,7 +8656,7 @@ bw = w-20; bh = 20; % Normalised w and h of button
 
 % Buttons, handles and their info description.
 bName = {'Phasing','FFT','iFFT','Apodization', 'Zero Fill', 'SNR',...
-         'Linewidth','Baseline','Data Display','Replace Voxel', 'Export'};
+         'Linewidth','Baseline','Shift', 'Data Display','Replace Voxel', 'Export'};
 bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_FFT, ...
          @panel_1D_iFFT, ...
@@ -8665,6 +8665,7 @@ bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_SNR,  ...
          @panel_1D_FWHM, ...
          @panel_1D_Baseline, ...
+         @panel_1D_Shift,...
          @panel_1D_DataDisplay, ...
          @panel_1D_SaveToMain, ...
          @panel_1D_Export};
@@ -8676,6 +8677,7 @@ bInfo = {'Apply phasing corrections. Multiple methods available',...
          'Calculate Signal-to-Noise-ratio of the 1D spectrum.',...
          'Calculate the full width at half maximum of a peak.',...
          'Apply a baseline correction to the spectrum.',...
+         'Apply a time/frequency shift to the FID or spectrum.',...
          'Change display settings of the 1D plot.',...
          'Replace voxel data in CSIgui with edited 1D data.',...
          'Export spectrum to file.'};
@@ -9446,6 +9448,42 @@ end
 % Show info to user
 CSI_Log({'CSIgui-1D:'},{'Saved 1D data to file.'});
 
+
+% --- Executes when user presses "Export" in panel_1D.
+function panel_1D_Shift(hObj, ~)
+% Time to frequency domain.
+
+% PREP DATA % ---------------------------------- %
+
+% Get CSIgui 1D figure object
+obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
+
+% Do checks and get CSI_1D object, data_1D appdata and data array
+[CSI_1D_obj, appdata1D, data] = CSI_1D_getData(obj1D);
+
+% Shift % ---------------------------------------- %
+
+[m,ii] = max(real(data)); sz = size(data,1);
+appdata1D.voxel.processed = zeros(sz,1);
+appdata1D.voxel.processed(1:(sz-ii+1)) = data(ii:end);
+
+% [m,ii] = max(real(data)); sz = size(data,1);
+% appdata1D.voxel.processed = circshift(data,-ii,1);
+
+% Apply 1D fourier transform
+% appdata1D.voxel.processed = circshift(data2shift,);
+
+% PLOT AND SAVE % ------------------------------ %
+
+% Save the complex result to the 1D-plot figure's appdata.
+setappdata(CSI_1D_obj, 'data1D', appdata1D);
+
+% Plot the 1D data
+CSI_1D_displayData(CSI_1D_obj)
+
+% Show info to user
+CSI_Log({'CSIgui-1D:'},{'Applied FFT.'});
+
 % ---------------------------------------------------------------------- %
 
 % --- Called everywhere to update CSIinfo listbox
@@ -9960,30 +9998,37 @@ switch ext
     otherwise,   render = '-opengl';
 end
 
-uans = getUserInput_Popup({'Specify figure(s) to save:','Resolution (DPI):'},...
+uans = getUserInput_Popup({'Specify figure(s) to save:','Resolution (DPI):','Transparency:'},...
                          {{'Current figure', 'All'},...
-                           cat(2,num2cell(0:200:1200),'Custom')});
+                           cat(2,num2cell(0:200:1200),'Custom'),{'No','Yes'}});
 if isempty(uans), CSI_Log({'Skipped exporting figures.'},{''}); return; 
 end  
 
-% Process waht to save
+% Process what to save
 switch uans{1}
     case 'Current figure', save_all = 0;
-    case 'All', save_all = 1;
+    case 'All',            save_all = 1;
 end
+
 % Process resolution
 if strcmp(uans{2},'Custom')
         uans{2} = getUserInput({'Custom DPI scaling:'},{''});
 end
 dpi = str2double(uans{2});
 
+% Process transparency
+if strcmp(uans{3},'Yes'), transparency = 1; else, transparency = 0; end
 
-% FIGURE OBJECT % ----------------------------------------- %
 
-% Check if 2D Plot is active
+% FIGURE OBJECT % ------------------------------------------------------ %
+% Get 2D-plot figure its object, apply chosen options and save as image.
+
+% Check if 2D Plot is active (open).
 fig_obj =  findobj('type','figure','tag','CSIgui_plot2D');
 % If 2D Plot not active, open it.
-if isempty(fig_obj),panel_2D_DataSliders([],[],gui); CSI_2D_initiate2D(); end
+if isempty(fig_obj)
+    panel_2D_DataSliders([],[],gui); CSI_2D_initiate2D(); 
+end
 
 % Get 2D-Plot and 2D-Panel figure
 fig_obj = findobj('type','figure','tag','CSIgui_plot2D');
@@ -9991,19 +10036,23 @@ pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
 if ~isempty(pan_obj)
     pan_gui = guidata(pan_obj);
 else
-    % 4. Save the figure to image file
-    fig_obj.InvertHardcopy = 'off';
-    if strcmp(ext,'fig')
-        savefig(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext]);
-    else
-
-        print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
-              ['-d' ftype], ['-r' num2str(dpi)], render);
+    % Open slider panel
+    panel_2D_DataSliders([],[],gui);
+    % Get the object
+    pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
+    pan_gui = guidata(pan_obj);
+    % Get plot index for 2D plot figure gui data.
+    gui2D = guidata(fig_obj); gui2D.plotindex
+    
+    % Set sliders
+    for sli = 1:size(pan_gui.sliders,2)
+        pan_gui.sliders{sli}.Value = gui2D.plotindex{sli};
+        pan_gui.texts{sli}.String = sprintf('%i/%i', gui2D.plotindex{sli},...
+            gui2D.dim(sli+2));
     end
-%     export_fig([fp fn sprintf('_%i_%i',[1 1 1]) '_B'], ...
-%         '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
-    return;
 end
+
+
 
 % FIGURE DATA % ------------------------------------------- %
 
@@ -10029,6 +10078,8 @@ for indi = 1:size(indArray,1)
     % 1. Set index at the slider
     for sli = 1:size(pan_gui.sliders,2)
         pan_gui.sliders{sli}.Value = indArray(indi,sli);
+        pan_gui.texts{sli}.String = sprintf('%i/%i', indArray(indi,sli),...
+            dim(sli));
     end
     
     % 2. Replot 2D CSI plot.
@@ -10037,19 +10088,57 @@ for indi = 1:size(indArray,1)
     % 3. Get new 2D CSI plot figure object
     fig_obj = findobj('type','figure','tag','CSIgui_plot2D');
     
+    
     % 4. Save the figure to image file
-    fig_obj.InvertHardcopy = 'off';
+    
     if strcmp(ext,'.fig')
-        savefig(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext]);
+        savefig(fig_obj,[fp fn sprintf('_%i',indArray(indi,:)) ext]);
     else
+        
+       % TRANSPARENCY % --------------------------------------------------- % 
+       if transparency
+        % This is annoyingly complicated to implement.
+        % Find background of figure 
+        % Find the difference
+        % Create alphamap using difference map
+           
+%             % Set all backgrounds to none-color
+%             % fig_obj.Color = 'none';
+%             ax = findall(fig_obj.Children, 'Type','axes');
+%             for kk = 1:size(ax,1)   
+%                 ax(kk).Color = 'none';
+%             end
+%             fig_obj.Color = 'None';
+%             Qrgb = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%             [Q,Qmap] = rgb2ind(Qrgb,255);
+%             
+%             % Preprint
+%             fig_obj.Color = [0 1 0]; fig_obj.InvertHardcopy = 'off';
+%             A = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%             fig_obj.Color = [1 0 0]; fig_obj.InvertHardcopy = 'off';
+%             B = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%             % Difference map
+%             C = B-A;
+%             % Boolean of bg
+%             alphaBool = (C(:,:,1) == 255).*255;
+%             imwrite(Q, alphaBool,[fp fn sprintf('_%i', indArray(indi,:)) ext]);
+%             print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
+%               ['-dpng'], 'Alpha', double(alphaBool.*255),['-r' num2str(dpi)]);
 
-        print(fig_obj,[fp fn sprintf('_%i_%i',[1 1 1]) ext],...
+             print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
               ['-d' ftype], ['-r' num2str(dpi)], render);
+       else
+           print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
+              ['-d' ftype], ['-r' num2str(dpi)], render);
+       end
     end
 
-      
-%     export_fig([fp fn sprintf('_%i_%i',indArray(indi,:)) '_B'], ...
-%         '-transparent','-png','-nocrop', '-m2', fig_obj);
+    
+    
+    % This is an 3rd party script and therefor not implemented. Working on
+    % proper use wrt licensing.
+    %     export_fig([fp fn sprintf('_%i_%i',indArray(indi,:)) '_B'], ...
+    %         '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
 end
 
 % --- Save CSIinfo listbox log as text-file
@@ -11400,8 +11489,7 @@ end
 
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, eventdata, gui)
-% warndlg('Watch out! Developers testing button. Panic!');
-
+warndlg('Watch out! Developers testing button. Panic!');
 
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
@@ -11409,9 +11497,6 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 data = csi.data.raw;
 vox = data(:,8,7,3);
-
-
-
 
 disp dwakjdbnkawjdn
 
