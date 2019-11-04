@@ -108,7 +108,8 @@ clear('data_tmp');
 
     %%% NOISE and DATA are seperated in the list-and data-structs %%%
     
-
+    
+    
 %% ANALYSE indexing-values in LIST-file  
 % Get correct indexing values from list.data table to index data.raw.
 % Search correct columns for indexing.
@@ -148,7 +149,7 @@ for loii = 1:size(loi,2)
     
     % Correct for non-consecutive numbers.
     if (max(list.data.array(:,loi_ind(loii))) > loi_max(loii))
-        fprintf('Corrected for high-value indexing: %s\n', loi{loii})
+        fprintf('Corrected for inconsecutive-values indexing: %s\n', loi{loii})
                
         % Create temp backup of the column of interest
         tmp = list.data.array(:,loi_ind(loii));
@@ -202,29 +203,43 @@ end
 
 %% CONVERT subscript to linear indexing
 
-% Update max value per index dimension with time-index
-% size(data) equals ldat_max_dim
-ldat_max_dim_db  = [ndimf loi_max'];                %double
-ldat_max_dim_cl  = num2cell(ldat_max_dim_db,1);     %cell
+% Data size in MB
+% a = whos('data'); fprintf('Data variable size: %3.3f\n', ...
+% a.bytes/(1024^2));
 
-% Create container for the total array 
+% Update the maximum value per index/dimension including the time-index  
+% E.g. size(data) equals ldat_max_dim
+ldat_max_dim_db  = [ndimf loi_max'];                % dbl
+ldat_max_dim_cl  = num2cell(ldat_max_dim_db,1);     % cell
+clear('ldat_max_dim_db');                           % Clear memory
+
+% Create container for the total array: zeroes for automatic zerofill.
 data.indexed = complex(zeros(ldat_max_dim_cl{:}));
+clear('ldat_max_dim_cl');                           % Clear memory
 
-% Repeate every line in ldat ndimf time below itself!
+% Repeate every row in ldat, ndimf times below itself!;)
 t = repmat(1:size(ldat,1),ndimf,1); t = t(:)'; tmp = ldat(t,:);
-% Vertically add time-index 1:ndimf.
-data.sub_index_raw = [repmat((1:ndimf)' ,size(ldat,1),1) tmp]; %dbl
+% Add time-index (1:ndimf) as rows.
+sub_index_raw = [repmat((1:ndimf)' ,size(ldat,1),1) tmp]; % dbl
 clear('tmp'); % Clear memory.
-% Convert to cell.
-data.sub_index_raw = num2cell(data.sub_index_raw',2);   	   %cell
+sub_index_raw = num2cell(sub_index_raw',2); % cell
 
 % Linear index for every data-point
-data.lin_index_raw = sub2ind(size(data.indexed),data.sub_index_raw{:});
+lin_index_raw = sub2ind(size(data.indexed),sub_index_raw{:});
+% data = rmfield(data,'sub_index_raw'); % Removed sub index array 
+clear('sub_index_raw');
 
 %% INDEX DATA.RAW
 
 % Store raw dat using the linear indices
-data.indexed(data.lin_index_raw) = data.raw(:);
+data.indexed(lin_index_raw) = data.raw(:);
+% Remove unnecessary fields
+data.raw = data.indexed; data = rmfield(data,{'indexed'});
+
+% Data size in MB
+% a = whos('data'); fprintf('Data variable size: %3.3f\n', ...
+% a.bytes/(1024^2));
+
 % </Done>.
 
 
@@ -238,14 +253,6 @@ fprintf('\nMax size: \n'); fprintf('| %4i ', loi_max); fprintf('\n');
 % Display run-time
 t1 = toc; 
 fprintf('Processed data-file using list-file. Elapsed: %4.3fs \n', t1);
-
-
-
-%% Overwrite raw to indexed
-% And remove linear and sub index arrays.
-rem_fields_str = {'lin_index_raw','sub_index_raw', 'indexed'};
-data.raw = data.indexed; data = rmfield(data, rem_fields_str);
-
 
 
 %% Save indexed data
