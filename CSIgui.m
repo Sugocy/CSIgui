@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 15-Jun-2019 02:45:35
+% Last Modified by GUIDE v2.5 04-Nov-2019 19:49:45
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -65,10 +65,10 @@ gui.version = '2.0';
 %% Add menu-bar
 
 loadBar(0.1, 'Creating menubar...');
-gui = CSIgui_setMenuBar(gui);
+gui = CSIgui_menubar_Set(gui);
 
 loadBar(0.3, 'Executing JavaScript...');
-gui = CSIgui_setMenuBar_JavaScript(gui);
+gui = CSIgui_manubar_javaScript(gui);
 
 
 
@@ -122,7 +122,7 @@ setGUIcolor(hObject); % This stores the right color palet in gui-handle
 loadBar(1, 'Launching GUI...'); pause(0.0005); loadBar(NaN);
 
 % --- Executes at launch
-function gui = CSIgui_setMenuBar(gui)
+function gui = CSIgui_menubar_Set(gui)
 % Set CSIgui menubar items and corresponding callbacks
 % See gui.menubar for all available items.
 
@@ -148,7 +148,7 @@ gui.menubar.MRSI.main = uimenu(gui.CSIgui_main, 'Label', 'MRSI');
 % 2.MRSI > Undo
 gui.menubar.MRSI.undo = ...
     uimenu(gui.menubar.MRSI.main,'Label', 'Undo', 'Enable', 'on',...
-    'Accelerator', 'z', 'Callback', @CSIgui_Undo);
+    'Accelerator', 'z', 'Callback', @CSIgui_menubar_backupUndo);
 
 % 2.MRSI > Plot
 gui.menubar.MRSI.plot = ...
@@ -265,7 +265,7 @@ gui.menubar.MRSI.domain.frequency = ...
 % 2.MRSI > Noise
 gui.menubar.MRSI.noise = ...
     uimenu(gui.menubar.MRSI.main, 'Label', 'Noise','Enable', 'on',...
-    'Callback',@CSI_viewNoise);        
+    'Callback',@CSIgui_menubar_Noise);        
         
 % 2.MRSI > Save > ...
 gui.menubar.MRSI.export.main = ...
@@ -346,7 +346,7 @@ gui.menubar.About.about = ...
 end
 
 % --- Executes at launch
-function gui = CSIgui_setMenuBar_JavaScript(gui)
+function gui = CSIgui_manubar_javaScript(gui)
 % Sets tooltips to menu-bar entries.
 
 % ----------- %%% Some Jave Menu ToolTip String Magic %%% -------------- %
@@ -3243,11 +3243,13 @@ if isempty(poi), return; end
 
 % Get method of auto-phasing
 uans = getUserInput_Popup({'Auto phasing method:'},...
-    {{'Match real part to maximum absolute signal.',...
+    {{'Correct for TE delat in FID by shift.',...
+    'Match real part to maximum absolute signal.',...
       'Maximize real part of signal.'}});
 if isempty(uans), CSI_Log({'Skipped zero-phasing.'},{''}) ; return; end
 
 switch uans{1}
+    case 'Correct for TE delat in FID by shift.', phase_method = 3;
     case 'Match real part to maximum absolute signal.', phase_method = 2;
     case 'Maximize real part of signal.',phase_method = 1;
 end
@@ -3260,7 +3262,12 @@ if length(poi) > 1, poi = poi(1):poi(2); end
 
 % Correct data domain (I/II)
 domain = CSI_getDomain(gui);
-if strcmp(domain,'time'), csi.data.raw = csi_fft(csi.data.raw); end
+
+if (phase_method == 3) && strcmp(domain,'freq')
+    csi.data.raw = csi_ifft(csi.data.raw); 
+elseif strcmp(domain,'time') && (phase_method ~= 3)
+    csi.data.raw = csi_fft(csi.data.raw); 
+end
 
 % MRSI data to cell format
 sz = size(csi.data.raw); 
@@ -3268,6 +3275,7 @@ cell_layout = arrayfun(@ones,...
     ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
 cell_mrsi = mat2cell(csi.data.raw, sz(1), cell_layout{:});
 
+if phase_method ~= 3
 % Apply auto zerophase to each cell
 cell_mrsi_phased = ...
 cellfun(@csi_autoZeroPhase, ...
@@ -3276,6 +3284,14 @@ cellfun(@csi_autoZeroPhase, ...
             repmat({phase_method},size(cell_mrsi)),...  % method
             repmat({0},      size(cell_mrsi)),...       % plot
             'UniformOutput', 0);            
+else
+    
+    data = cell_mrsi;
+    [~,ind] = cellfun(@max,data,'uniform', 0);
+%     sz = size(data); sz(1) = size(data{1},1);    
+    cell_mrsi_phased = cellfun(@csi_shift_phasing,data,ind,'uniform',0); 
+
+end
 
 % MRSI data to array        
 array_mrsi = cell2mat(cell_mrsi_phased);
@@ -3293,6 +3309,11 @@ setappdata(gui.CSIgui_main,'csi',csi);
 
 % Update info to user.
 CSI_Log({'Applied automatic zero order phase correction:'},uans);
+
+function new = csi_shift_phasing(data,shift_index)
+new = zeros(size(data,1),1);
+new(1:(size(data,1)-shift_index+1))= data(shift_index:end); 
+
 
 % --- Executes on button press in button_CSI_Flip.
 function button_CSI_Flip_Callback(~, ~, gui)
@@ -9448,8 +9469,7 @@ end
 % Show info to user
 CSI_Log({'CSIgui-1D:'},{'Saved 1D data to file.'});
 
-
-% --- Executes when user presses "Export" in panel_1D.
+% --- Executes when user presses "Shift" in panel_1D.
 function panel_1D_Shift(hObj, ~)
 % Time to frequency domain.
 
@@ -9601,7 +9621,7 @@ if val <= sz, str(val) = []; gui.listbox_CSIinfo.String = str; end
 % ---------------------------------------------------------------------- %
 
 % --- View noise component executed in menu
-function CSI_viewNoise(hObject, ~, ~)
+function CSIgui_menubar_Noise(hObject, ~, ~)
 % Gui-data struct.
 gui = guidata(hObject);
 
@@ -10164,15 +10184,15 @@ fclose(fid);
 % CSI Backup System % -------------------------------------------------- %
 % ---------------------------------------------------------------------- %
 
-% --- Executes on button press in button_setBackup.
-function button_setBackup_Callback(~, ~, gui)
+% --- Executes on button press in button_backupSet.
+function button_backupSet_Callback(~, ~, gui)
 % Store the csi.data field into csi.backup
 % csi.backup.(bu time).data = csi.data;
 % csi.backup.(bu time).tag  = info_str;
 CSI_backupSet(gui, 'User backup.');
 
-% --- Executes on button press in button_getBackup.
-function button_getBackup_Callback(~, ~, gui)
+% --- Executes on button press in button_backupGet.
+function button_backupGet_Callback(~, ~, gui)
 % Open up a menu and select backup of interest to revert to.
 % Requires fields shown below:
 % csi.backup.(bu time).data = csi.data;
@@ -10309,7 +10329,7 @@ CSI_Log(...
     {['Reverted to backup ' strrep(boi(8:end),'_',':') ]},{tagoi});
 
 % --- Revert to previous backup: ctrl+z or menubar
-function CSIgui_Undo(hObj,~,~)
+function CSIgui_menubar_backupUndo(hObj,~,~)
 % This function launches CSI_backupGet without any required user input. The
 % CSI_backupGet will use lastBackup field in csi if available and will get
 % the latest backup created or a backup before the previously restored 
@@ -10720,7 +10740,7 @@ setGUIcolor(csigui_obj);
 %%% MERGE VOXELS % ------------------------------------------------------ %
 
 % --- Executed if user presses merge voxels button
-function CSI_MergeVoxels_Initiate(hObj, gui)
+function MergeVoxels_Initiate(hObj, gui)
 % Get the data and create plot_par structure with all settings and data for
 % plotting the MergeVoxels figure: image + grid + click-axis only.
 
@@ -10760,18 +10780,18 @@ plot_par = CSI_2D_getData(plot_par, gui,  csi.data.raw);
 plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 
 % ------- % Plot data
-CSI_MergeVoxels_plotVoxels(hObj, gui, plot_par);
+MergeVoxels_plotVoxels(hObj, gui, plot_par);
 
-% --- Executes on button press in button_CSI_MergeVoxels.
-function button_CSI_MergeVoxels_Callback(hObj, ~, gui)
+% --- Executes on button press in button_MergeVoxels.
+function button_MergeVoxels_Callback(hObj, ~, gui)
 % Initiate MergeVoxels figure to allow selecting multiple voxels to average
 % using specific options.
 
 % Initiate a figure for CSI_mergeVoxels
-CSI_MergeVoxels_Initiate(hObj, gui);
+MergeVoxels_Initiate(hObj, gui);
 
 % --- Executes by CSI_MergeVoxels_Initiate
-function CSI_MergeVoxels_plotVoxels(hObj, gui, plot_par)
+function MergeVoxels_plotVoxels(hObj, gui, plot_par)
 % Plot voxels, axis only, each slice in a tab.       
 
 % Add tab-group
@@ -10879,13 +10899,13 @@ for sli = 1:plot_par.dim(3)
               'BackgroundColor',plot_par.colors.main,...
               'ForegroundColor',gui.colors.text_main,...
               'Position',[5 5 50 15],...
-              'Callback',@CSI_MergeVoxels_Button_Merge);                  
+              'Callback',@MergeVoxels_Button_Merge);                  
     % Save selected voxel data or figure
     uicontrol('Parent',save_data.tabh{sli},'Style','pushbutton','String', 'Save',...
               'BackgroundColor',plot_par.colors.main,...
               'ForegroundColor',gui.colors.text_main,...
               'Position',[5 20 50 15],...
-              'Callback',@CSI_MergeVoxels_Button_Save);
+              'Callback',@MergeVoxels_Button_Save);
 
 end % ------ % End of Slice Loop % ------ %
 
@@ -10896,7 +10916,7 @@ guidata(plot_par.fh, save_data);
 loadBar(NaN);
 
 % --- Executed by functions related to CSI_MergeVoxels
-function selected = CSI_MergeVoxels_getSelected(hObj)
+function selected = MergeVoxels_getSelected(hObj)
 % Find all selected voxels in MergeVoxels figure and return data of each
 % selected voxel.
 %
@@ -10936,10 +10956,10 @@ selected.xaxis = csi.xaxis;
 gui = guidata(csigui_obj); selected.log = gui.listbox_CSIinfo.String;
 
 % --- % Executes on button press: Align @ CSI_MergeVoxel figure
-function CSI_MergeVoxels_Button_Merge(hObj,~)
+function MergeVoxels_Button_Merge(hObj,~)
 
 % --- % Get the selected voxels data
-sel = CSI_MergeVoxels_getSelected(hObj);
+sel = MergeVoxels_getSelected(hObj);
 
 % --- % Userinput
 
@@ -10953,26 +10973,26 @@ end
 if sum(uans) > 0 
     
     % --- % Get POI
-    [sel.poi, sel.pex] = CSI_MergeVoxels_POI(sel.xaxis);
+    [sel.poi, sel.pex] = MergeVoxels_POI(sel.xaxis);
     
     % --- % SNR Filtering
-    if uans(1), sel = CSI_MergeVoxels_SNR_Filter(sel);  end
+    if uans(1), sel = MergeVoxels_SNR_Filter(sel);  end
 
     % --- % Aligning
-    if uans(2), sel = CSI_MergeVoxels_Align(sel); end
+    if uans(2), sel = MergeVoxels_Align(sel); end
 
     % --- % Weighting
-    if uans(3), sel = CSI_MergeVoxels_Weighted(sel); end
+    if uans(3), sel = MergeVoxels_Weighted(sel); end
 
 else
     % No Options
 end
 
 % --- % Average & display
-CSI_MergeVoxels_Average(sel);
+MergeVoxels_Average(sel);
 
 % --- % Executes on button press: Save @ CSI_MergeVoxel figure
-function CSI_MergeVoxels_Button_Save(hObj,~)
+function MergeVoxels_Button_Save(hObj,~)
 
 % ---- % File destination and type: figure or data
 [fn,fp,idx] = uiputfile(...
@@ -10986,20 +11006,20 @@ if isequal(fn,0) && isequal(fp,0), return; end
 [fp,fn] = fileparts([fp fn]);
 
 if     idx ==1 % Save Data
-    CSI_MergeVoxels_SaveData(hObj, fp, fn); 
+    MergeVoxels_SaveData(hObj, fp, fn); 
 elseif idx ==2 % Save Figure
-    CSI_MergeVoxels_SaveFig(hObj,  fp, fn); 
+    MergeVoxels_SaveFig(hObj,  fp, fn); 
 elseif idx ==3 % Save both
-    CSI_MergeVoxels_SaveData(hObj, fp, fn);
-    CSI_MergeVoxels_SaveFig(hObj,  fp, fn); 
+    MergeVoxels_SaveData(hObj, fp, fn);
+    MergeVoxels_SaveFig(hObj,  fp, fn); 
 end
 
 % --- % Executed by CSI_MergeVoxels_Button_Save
-function CSI_MergeVoxels_SaveData(hObj, fp, fn)
+function MergeVoxels_SaveData(hObj, fp, fn)
 % Get the selected voxel data and save to file.
 
 % --- % Get selected voxels.
-selected = CSI_MergeVoxels_getSelected(hObj);
+selected = MergeVoxels_getSelected(hObj);
 
 % --- % Store data
 save([fp '\' fn '.mat'], 'selected');
@@ -11008,7 +11028,7 @@ save([fp '\' fn '.mat'], 'selected');
 CSI_Log({'Saved selected voxel data to:'},{[fp '\' fn '.mat']})
 
 % --- % Executed by CSI_MergeVoxels_Button_Save
-function CSI_MergeVoxels_SaveFig(hObj, fp, fn)
+function MergeVoxels_SaveFig(hObj, fp, fn)
 
 % ---- % Figure object
 fh = hObj.Parent; 
@@ -11025,7 +11045,7 @@ end
 CSI_Log({'Saved selected voxel figure to:'},{[fp '\' fn '.fig']});
 
 % --- % Executes is user requests merge with options none
-function CSI_MergeVoxels_Average(sel)
+function MergeVoxels_Average(sel)
 % Requires data structure data with fields:
 % xaxis, data.
 %
@@ -11045,7 +11065,7 @@ end
 CSI_1D_initiateGUI(data1D, 1, sprintf('#Voxels %i',size(sel.index,1)));
 
 % --- % Peak of interest for merging and filter criteria
-function [poi, pex] = CSI_MergeVoxels_POI(xaxis)
+function [poi, pex] = MergeVoxels_POI(xaxis)
 % Get POI and possibly PEX for merging voxels
 %
 % Returns: sel.poi and sel.pex 
@@ -11067,7 +11087,7 @@ if isempty(range{2}), range{2} = NaN; end
 poi = range{1}; pex = range{2};
 
 % --- % Executed to filter merging voxels by SNR
-function sel = CSI_MergeVoxels_SNR_Filter(sel)
+function sel = MergeVoxels_SNR_Filter(sel)
 % Include and/or exclude voxels using SNR.
 
 voxels = sel.voxels; pex_on = ~isnan(sel.pex); index = sel.index;
@@ -11096,12 +11116,12 @@ if pex_on, pex_snr_lim = str2double(uans{2}); else, pex_snr_lim = 0; end
 % ---- % Phasing and SNR
 
 % SNR of POI 
-poi_snr = CSI_MergeVoxels_SNR(sel, 'alignment');         
+poi_snr = MergeVoxels_SNR(sel, 'alignment');         
 
 % SNR of PEX
 if pex_on
     seltmp = sel; seltmp.poi = sel.pex;
-    pex_snr = CSI_MergeVoxels_SNR(seltmp, 'exlusion'); 
+    pex_snr = MergeVoxels_SNR(seltmp, 'exlusion'); 
 end
 
 % ---- % Select Voxels by SNR
@@ -11140,7 +11160,7 @@ CSI_Log({'-----------------------','Total #Voxels for merging:',...
 sel.voxels = voi; sel.snr = voi_snr; sel.index = voi_ind;
 
 % --- % Executed to calculate SNR and apply phasing
-function snr = CSI_MergeVoxels_SNR(sel, poi_tag)
+function snr = MergeVoxels_SNR(sel, poi_tag)
 % Calculate SNR and apply phasing prior to calculations if necessary.
 %
 % poi_tag = 'Name for peak'
@@ -11187,7 +11207,7 @@ end
 snr = csi_SNR(poi_vox_4snr, 50, 1, sel.poi); % Calc SNR for POI   
 
 % --- % Executed to weight voxels to SNR
-function sel = CSI_MergeVoxels_Weighted(sel)
+function sel = MergeVoxels_Weighted(sel)
 % Apply weighting to each voxel before averaging
 % Weighting is calculated from maximum SNR at a POI from all voxels.
  
@@ -11204,7 +11224,7 @@ for kk = 1:size(sel.voxels,2)
 end
 
 % --- % Executed by CSI_MergeVoxels_Button_Align
-function sel = CSI_MergeVoxels_Align2(sel)
+function sel = MergeVoxels_Align2(sel)
 % Frequency alignement of spectra from  multiple voxel.
 %
 % Sel-structure requires field voxels and peak of interest poi.
@@ -11282,9 +11302,8 @@ for kk = 1:nfig
         % 'ForegroundColor','White','BackgroundColor','Black',...
 end
 
-
-
-function sel = CSI_MergeVoxels_Align(sel)
+% --- % Executed by CSI_MergeVoxels_Button_Align- OFF
+function sel = MergeVoxels_Align(sel)
 % Frequency alignement of spectra from  multiple voxel.
 %
 % Sel-structure requires field voxels and poi, in a 1x2 vector representing
