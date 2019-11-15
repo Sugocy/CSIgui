@@ -215,6 +215,7 @@ switch lower(mouse_button)
         gui.opt.limit = getContrast(gui.data(:,:,gui.sb.Value));
         caxis(gui.ax, gui.opt.limit);
         
+        
     case 'extend'
         % Add additional callback to Mouse Motion Fcn.
         gui.fh.WindowButtonMotionFcn = ... 
@@ -222,6 +223,7 @@ switch lower(mouse_button)
            {@(hObj,evt)hoverMouse(hObj,evt),...
             @(hObj,evt)hoverMouse_changeContrast(hObj,evt)}));
 end
+guidata(hObj,gui);
 
 % ------- Mouse Up
 function clickUp(hObj, ~)

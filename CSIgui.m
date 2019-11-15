@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 04-Nov-2019 19:49:45
+% Last Modified by GUIDE v2.5 15-Nov-2019 15:09:38
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -624,6 +624,8 @@ if isappdata(gui.CSIgui_main,'mri')
         name = mri.filename;                             % Get filename
         if size(name,2) > maxL, name = name(1:maxL); end % Max length name
         set(gui.txt_fnIMG, 'String', name);              % Set in GUI
+        gui.txt_fnIMG.TooltipString = name;              % Full name ttstr
+        
     end
 end
 
@@ -1166,7 +1168,11 @@ end
 if success, CSI_Log({'Read the protocol nfo file.'},{''});
 else,       CSI_Log({'Failed reading protocol nfo file.'},{''});
 end
-                    
+            
+% --- Executes on button press in button_CSI_ReadInfo2.
+function button_CSI_ReadInfo2_Callback(~, ~, gui)
+button_CSI_ReadInfo_Callback([],[],gui);
+
 
 % Help and About % ---------------------------------------------------- %
 % --------------------------------------------------------------------- %
@@ -4558,7 +4564,7 @@ gdat = guidata(fh); axis off;
 
 % Each process stepp has 2x text heights which include a dh (offset)
 % per text and a line for seperation.
-dw = 5; dh = 4; szt = [230 18]; szl = round(dh/2); % DEFINES FIGURE SIZE
+dw = 5; dh = 4; szt = [320 18]; szl = round(dh/2); % DEFINES FIGURE SIZE
 
 % pos x and y and w h for each object in a single element
 % [txt; nfo; line];
@@ -4589,8 +4595,8 @@ for kk = 1:nelem
     
     % Radio
     rad{kk} = uicontrol('Style', 'radiobutton', 'String', '',...
-    'BackgroundColor',gui.colors.hilight2,...
-    'ForegroundColor',gui.colors.main,...
+    'BackgroundColor',gui.colors.main,...
+    'ForegroundColor',gui.colors.hilight2,...
     'HorizontalAlignment', 'Left');
     step = 2 * kk * ( dh + szt(2) ) - dh - szt(2);
     rad{kk}.Position =  [ w-18 (h - step)  18 18];
@@ -5648,6 +5654,70 @@ csi.ori = CSI_coordinates_calculate(...
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
 
+% --- Executes to calculate CSI coordinates from offcenter and voxelsize
+function ori = CSI_coordinates_calculate(res, offcenter, dim, shft, opts)
+% Calculate MRSI/CSI coordinates and additional spatial information.
+%
+% Input:
+% res           Voxel resolution in mm [RL AP FH];
+% dim           CSI array size [RL AP FH];
+% offcenter     Offcenter in milimeters [RL AP FH];
+% shft          Voxel shift in each direction [RL AP FH]; 
+%               Default: [0 0 0];
+% opts          Voxel and fft corrections applied yes(1) or no(0).
+%               Default: vox(1) and fft(0).
+% 
+% Output: 
+% ori-struct with all volumetric, coordinates, and spatial information of
+% the CSI grid (MRS-data) with the requested shift.
+
+
+% Handle nargin
+if nargin < 5, opts.vox_cor = 1; opts.fft_cor = 0; end
+if nargin < 4, shft = [0 0 0]; end
+
+% Set resolution
+ori.res = res; ori.offcenter = offcenter; ori.dim = dim;
+
+% Correction factors saved.
+if isfield(opts, 'vox_cor'), ori.vox_cor = opts.vox_cor; end
+if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
+    
+
+% Apply any given shift
+for kk = 1:3, ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); end
+
+
+% Coordinates of CSI data. % ------------------------ %
+% Fields: 
+%   Coordinate vector (vector) 
+%   Coordinate limits (limit) 
+%   Volume limit      (limit_vol)
+ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor); 
+
+% Calculate volume grid % ----------- %
+% Meshgrid
+[ori.mesh.x, ori.mesh.y, ori.mesh.z] = ...
+    meshgrid(ori.vector{1} , ori.vector{2}, ori.vector{3});
+
+% Clean up % ------------------------ %
+
+% Update LOG
+CSI_Log({ '',...
+    'CSI-parameters ----------------------------------------',...
+    'Direction:', 'Dimensions:', 'Resolution:',...
+    'Offcenter:', 'FOV:', ...
+    'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
+    'Voxel limit (Min):', 'Voxel limit (Max):', ...
+    'Volume limit (Min):', 'Volume limit (Max)','Voxel Shift:' '',''},...
+   { '','','[AP/LR/FH]',...
+     ori.dim,             ori.res,...
+     ori.offcenter(1,:),  ori.fov,...
+     ori.vox_cor,         ori.fft_cor,...
+     ori.lim(:,1)',       ori.lim(:,2)',...
+     ori.lim_vol(:,1)',   ori.lim_vol(:,2)',...
+     shft,...
+     '--------------------------------------------------------------',''});
 
 
 
@@ -6417,6 +6487,19 @@ tgui_data.fig = fh;
 
 % Save tgui-data to gui
 guidata(fh, tgui_data);
+
+% --- Executes on button press in button_MRI_clear_image_data.
+function button_MRI_clear_image_data_Callback(~, ~, gui)
+
+% Delete MRI and CONV appdata 
+if isappdata(gui.CSIgui_main, 'mri')
+    rmappdata(gui.CSIgui_main, 'mri'); 
+end
+if isappdata(gui.CSIgui_main, 'conv')
+    rmappdata(gui.CSIgui_main, 'conv');
+end
+
+
 
 
 % PLOT 2D CSI % -------------------------------------------------------- %
@@ -10549,7 +10632,7 @@ fn = fieldnames(gui);
 % Loop each object in gui data structure
 for fi = 1:size(fn,1)
     
-   
+    
     % Check if its a object handle.
     if sum(ishandle(gui.(fn{fi}))) == 1 
         
@@ -10558,8 +10641,8 @@ for fi = 1:size(fn,1)
             % Set backgroundcolor of figure
             gui.(fn{fi}).Color = colors.main;
             
-        % If its a uicontrol object
-        elseif strcmp((gui.(fn{fi}).Type),'uicontrol')  % GUI control
+        % If its a uicontrol object: GUI control
+        elseif strcmp((gui.(fn{fi}).Type),'uicontrol') 
             
             if sum(strcmp(gui.(fn{fi}).Tag, obj_hilight1)) == 1
                 % SPECIAL UICONTROL OBJECT 1
@@ -10589,6 +10672,10 @@ for fi = 1:size(fn,1)
                     gui.(fn{fi}).ForegroundColor = colors.text_title;
                 end
             end
+        elseif strcmp((gui.(fn{fi}).Type),'uipanel')
+            gui.(fn{fi}).BackgroundColor = colors.main;
+            gui.(fn{fi}).ForegroundColor = colors.text_title;
+            gui.(fn{fi}).HighlightColor = colors.text_title;
 
         end
     end
@@ -11666,83 +11753,6 @@ gui = guidata(gui.CSIgui_main);
 % Recalculate all.
 MRI_to_CSIspace(gui);
 
-
-
-function ori = CSI_coordinates_calculate(res, offcenter, dim, shft, opts)
-% Calculate MRSI/CSI coordinates and additional spatial information.
-%
-% Input:
-% res           Voxel resolution in mm [RL AP FH];
-% dim           CSI array size [RL AP FH];
-% offcenter     Offcenter in milimeters [RL AP FH];
-% shft          Voxel shift in each direction [RL AP FH]; 
-%               Default: [0 0 0];
-% opts          Voxel and fft corrections applied yes(1) or no(0).
-%               Default: vox(1) and fft(0).
-% 
-% Output: 
-% ori-struct with all volumetric, coordinates, and spatial information of
-% the CSI grid (MRS-data) with the requested shift.
-
-
-% Handle nargin
-if nargin < 5, opts.vox_cor = 1; opts.fft_cor = 0; end
-if nargin < 4, shft = [0 0 0]; end
-
-% Set resolution
-ori.res = res; ori.offcenter = offcenter; ori.dim = dim;
-
-% Correction factors saved.
-if isfield(opts, 'vox_cor'), ori.vox_cor = opts.vox_cor; end
-if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
-    
-
-% Apply any given shift
-for kk = 1:3, ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); end
-
-
-% Coordinates of CSI data. % ------------------------ %
-% Fields: 
-%   Coordinate vector (vector) 
-%   Coordinate limits (limit) 
-%   Volume limit      (limit_vol)
-ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor); 
-
-% Calculate volume grid % ----------- %
-% Meshgrid
-[ori.mesh.x, ori.mesh.y, ori.mesh.z] = ...
-    meshgrid(ori.vector{1} , ori.vector{2}, ori.vector{3});
-
-% Clean up % ------------------------ %
-
-% Update LOG
-CSI_Log({ '',...
-    'CSI-parameters ----------------------------------------',...
-    'Direction:', 'Dimensions:', 'Resolution:',...
-    'Offcenter:', 'FOV:', ...
-    'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
-    'Voxel limit (Min):', 'Voxel limit (Max):', ...
-    'Volume limit (Min):', 'Volume limit (Max)','Voxel Shift:' '',''},...
-   { '','','[AP/LR/FH]',...
-     ori.dim,             ori.res,...
-     ori.offcenter(1,:),  ori.fov,...
-     ori.vox_cor,         ori.fft_cor,...
-     ori.lim(:,1)',       ori.lim(:,2)',...
-     ori.lim_vol(:,1)',   ori.lim_vol(:,2)',...
-     shft,...
-     '--------------------------------------------------------------',''});
-
-
-% --- Executes on button press in button_MRI_clear_image_data.
-function button_MRI_clear_image_data_Callback(~, ~, gui)
-
-% Delete MRI and CONV appdata
-if isappdata(gui.CSIgui_main, 'mri')
-    rmappdata(gui.CSIgui_main, 'mri'); 
-end
-if isappdata(gui.CSIgui_main, 'conv')
-    rmappdata(gui.CSIgui_main, 'conv');
-end
 
 
 
