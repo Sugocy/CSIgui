@@ -8746,7 +8746,7 @@ fh_1D = figure('Tag', 'CSIpanel_1D', ...
 
 % Get PC screensize for panel size
 scrsz = get(0,'Screensize'); 
-w = 180; h = 320;
+w = 180; h = 420;
 % Set panel figure size: linked to the 1D plot!
 set(fh_1D, 'position', [ceil(scrsz(3).*22/32) ceil(scrsz(4).*2/4) w h]);
 
