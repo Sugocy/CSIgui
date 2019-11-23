@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 15-Nov-2019 15:09:38
+% Last Modified by GUIDE v2.5 23-Nov-2019 14:12:28
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -10869,12 +10869,9 @@ plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 % ------- % Plot data
 MergeVoxels_plotVoxels(hObj, gui, plot_par);
 
-% --- Executes on button press in button_MergeVoxels.
-function button_MergeVoxels_Callback(hObj, ~, gui)
-% Initiate MergeVoxels figure to allow selecting multiple voxels to average
-% using specific options.
 
-% Initiate a figure for CSI_mergeVoxels
+% --- Executes on button press in button_CSI_MergeVoxels.
+function button_CSI_MergeVoxels_Callback(hObj, ~, gui)
 MergeVoxels_Initiate(hObj, gui);
 
 % --- Executes by CSI_MergeVoxels_Initiate
@@ -11752,6 +11749,8 @@ gui = guidata(gui.CSIgui_main);
 
 % Recalculate all.
 MRI_to_CSIspace(gui);
+
+
 
 
 
