@@ -6032,13 +6032,25 @@ gui = guidata(hObj);
 if isappdata(gui.CSIgui_main,'conv')
     conv = getappdata(gui.CSIgui_main,'conv');
 else
-    img = NaN; return;
+    img = NaN; 
+    CSI_Log({'MRI Match Slices: No converted image data present.'},...
+            {''});
+    return;
 end
 
-if ~isappdata(gui.CSIgui_main,'csi') img = NaN; return; end
+if ~isappdata(gui.CSIgui_main,'csi')
+    CSI_Log({'MRI Match Slices: No CSI data present.'},...
+            {''});
+    img = NaN; return; 
+end
 
 csi = getappdata(gui.CSIgui_main,'csi');
-if ~isfield(csi,'ori'), img = NaN; return; end
+if ~isfield(csi,'ori')
+    CSI_Log({'MRI Match Slices: No geometry info for MRS data present.'},...
+            {''});
+    img = NaN; return; 
+end
+
 
         % ----- % Create MRS matching images % ----- %
 
@@ -6941,9 +6953,15 @@ if isappdata(csiguiObj, 'conv')
     try 
     
         % Get image @ this slice: uses CSI2MRI
-        plot_par.img = MRI_matchSlices(csiguiObj);  
-        plot_par.img = plot_par.img(:,:,plot_par.plotindex{1});
-       
+        plot_par.img = MRI_matchSlices(csiguiObj); % Returns NaN if fail. 
+        if (length(plot_par.img) == 1) && isnan(plot_par.img)
+            CSI_Log({'Converting image data to MRS-space failed.'},...
+                    {'Canceled image plot.'});
+            return;
+        else
+            plot_par.img = plot_par.img(:,:,plot_par.plotindex{1});
+        end
+
         % Plot IMG at CSI-coordinates! %%%%
         if ~isfield(plot_par, 'imax')
             plot_par.fh.Units = 'Pixels';
