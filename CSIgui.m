@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 23-Nov-2019 14:12:28
+% Last Modified by GUIDE v2.5 23-Dec-2019 21:01:03
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -11773,3 +11773,44 @@ MRI_to_CSIspace(gui);
 
 
 
+
+
+% --- Executes on button press in button_CSI_setCircularShift.
+function button_CSI_setCircularShift_Callback(hobj, evt, gui)
+% Apply circular shift to MRS data: correct for foldover. This shift is not
+% taken into account with set spatial parameters of the MRS data or the MRS
+% data eg. literal circular shift of the data.
+
+% Get csi data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+
+% Dimension to shift
+spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
+spat_dim(isnan(spat_dim)) = [];
+if isempty(spat_dim), spat_dim = [2 3 4]; end
+
+% Ask user #shift and which dimension
+uans = getUserInput(...
+    {   {'Spatial index in MRSI data: (kx ky kz) '},...
+        {'Number of voxels to shift data: (x, y, z | col, row, slice'}},...
+        {spat_dim, '1 0 0'} );
+% Proces input
+kspace = str2double(strsplit(uans{1}));
+shifts = str2double(strsplit(uans{2}));  
+
+% Apply shift
+for kk = 1:size(kspace)
+    if shifts(kk) ~= 0
+        % Kk +1 to correct for the time dimension at index 1.
+        if shifts(kk) ~= 0
+        csi.data.raw = circshift(csi.data.raw,shifts(kk),kspace(kk));
+            CSI_Log({'Circular shift #voxels | N-dimension:'},{[num2str(shifts(kk)) ' | ' num2str(kspace(kk))]})
+        end
+    end
+end
+
+% Save to appdata
+setappdata(gui.CSIgui_main,'csi',csi); 
+gui = guidata(gui.CSIgui_main);
