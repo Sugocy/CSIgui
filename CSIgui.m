@@ -11735,8 +11735,23 @@ an = sin(x)./x;
 
 % --- Executes on button press in button_CSI_setVoxelsShift.
 function button_CSI_setVoxelsShift_Callback(~, ~, gui)
+% Subtract or add voxels to the CSI coordinates grid or by manipulating the
+% data indexing.
 
-% CSI_backupSet(gui,'Test2');
+uans = ...
+    getUserInput_Buttons('Shift MRS data by manipulating:',...
+                        {'Coordinate grid', 'Data index'});
+if isempty(uans), return; end
+
+switch uans
+    case 'Data index'
+        CSI_voxelShift_Indexing(gui);
+    case 'Coordinate grid'        
+        CSI_voxelShift_Coordinates(gui);
+end
+                    
+function CSI_voxelShift_Coordinates(gui)
+% Shift N-voxels by manipulating the cooridnate grid of the CSI data. 
 
 % Get csi data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -11746,15 +11761,15 @@ if ~isfield(csi, 'ori'), return; end
 % For subtracting or adding a voxel shift... to CSI grid. in a specific
 % direction.
 
-% Get data
+% Get orientation data
 ori = csi.ori;
 
+% Get requested shift
 uans = getUserInput({'Voxel shift for each direction?'},{'0.5 0.5 0.5'});
 if isempty(uans), return; end
-
 shft = str2double(strsplit(uans{1}));
 
-% Get shift options.
+% Get previous voxel-coordinate calculation shift options.
 opts.fft_cor = ori.fft_cor; opts.vox_cor = ori.vox_cor;
 
 % Calculate coordinates.
@@ -11765,21 +11780,18 @@ csi.ori = CSI_coordinates_calculate...
 setappdata(gui.CSIgui_main,'csi',csi);   
 gui = guidata(gui.CSIgui_main);
 
-% Recalculate all.
+% Recalculate all conversion data.
 MRI_to_CSIspace(gui);
-
-
-
-
-
-
 
 
 % --- Executes on button press in button_CSI_setCircularShift.
 function button_CSI_setCircularShift_Callback(hobj, evt, gui)
 % Apply circular shift to MRS data: correct for foldover. This shift is not
 % taken into account with set spatial parameters of the MRS data or the MRS
-% data eg. literal circular shift of the data.
+% data eg. a circular shift of the data on the first index (samples).
+
+
+function CSI_voxelShift_Indexing(gui)
 
 % Get csi data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -11801,13 +11813,12 @@ kspace = str2double(strsplit(uans{1}));
 shifts = str2double(strsplit(uans{2}));  
 
 % Apply shift
-for kk = 1:size(kspace)
+for kk = 1:size(kspace,2)
+    % Kk +1 to correct for the time dimension at index 1.
     if shifts(kk) ~= 0
-        % Kk +1 to correct for the time dimension at index 1.
-        if shifts(kk) ~= 0
-        csi.data.raw = circshift(csi.data.raw,shifts(kk),kspace(kk));
-            CSI_Log({'Circular shift #voxels | N-dimension:'},{[num2str(shifts(kk)) ' | ' num2str(kspace(kk))]})
-        end
+    csi.data.raw = circshift(csi.data.raw,shifts(kk),kspace(kk));
+        CSI_Log({'Circular shift #voxels | N-dimension:'},...
+                {[num2str(shifts(kk)) ' | ' num2str(kspace(kk))]})
     end
 end
 
