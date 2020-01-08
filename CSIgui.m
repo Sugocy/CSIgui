@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 23-Dec-2019 21:01:03
+% Last Modified by GUIDE v2.5 08-Jan-2020 15:32:37
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -4326,9 +4326,10 @@ setappdata(gui.CSIgui_main,'csi', csi);
 % Update LOG
 CSI_Log({['Applied a phase shift of ' num2str(dt) 'ms to each FID']},{''});
 
-% --- Executes on button press in button_CSI_VoxelShift.
-function button_CSI_VoxelShift_Callback(~, ~, gui, backup)
-% Shift CSI K-space to spatially shift the volume a number of voxels
+% --- Executes on button press in button_CSI_spatialShift_kspace.
+function button_CSI_spatialShift_kspace_Callback(~, ~, gui, backup)
+% Shift CSI k-space to spatially shift the volume a number of voxels in the
+% prefered direction.
 
 if nargin < 4 , backup= 1; end
 % Create backup
@@ -4341,7 +4342,9 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % USER INPUT % ------------------- %
 
 % Get shift from user
-uans = getUserInput({'Number of voxels to shift: '},{[0.5 0.5 0.5]});
+uans = getUserInput(...
+    {'Requires k-space domain CSI data. Number of voxels to shift: '},...
+    {[0.5 0.5 0.5]});
 if isempty(uans), CSI_Log({'Skipped voxel shift.'},{''}) ; return; end
 shift = str2double(strsplit(uans{1},' '));
 
@@ -4350,23 +4353,16 @@ k_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
 k_dim(isnan(k_dim)) = [];
 if isempty(k_dim)
     k_dim = getUserInput({'Spatial index in MRSI data? (kx/ky/kz): '},...
-                            {'2 3 4'});
+                         {'2 3 4'});
     if isempty(k_dim), CSI_Log({'Skipped voxel shift.'},{''}) ; return; end
     k_dim = str2double(strsplit(k_dim{1},' '));
 end
 
 % SHIFT DATA % ------------------- %
 
-% Check data domain type availability: Need time domain data
-domain = CSI_getDomain(gui);
-if strcmp(domain,'freq'), csi.data.raw = csi_ifft(csi.data.raw); end
 
 % Shift the data
 [csi.data.raw, ~] = csi_voxelshift(csi.data.raw, shift, k_dim);
-
-% Check data domain type availability: Need time domain data
-domain = CSI_getDomain(gui);
-if strcmp(domain,'freq'), csi.data.raw = csi_ifft(csi.data.raw); end
 
 
 % CLEAN UP % -------------------- %
@@ -4375,7 +4371,7 @@ if strcmp(domain,'freq'), csi.data.raw = csi_ifft(csi.data.raw); end
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % LOG
-CSI_Log({'Applied phase change to shift voxels. Shifted by:'},...
+CSI_Log({'Phase change applied to spatially shift the CSI volume. Shifted by:'},...
         {strjoin(strsplit(uans{1},' '),' | ')});
                 
 % --- Executes on button press in button_CSI_FidOrEcho.
@@ -10509,13 +10505,15 @@ function button_MRI_setContrast_Callback(hObject, eventdata, gui)
 % Get data.
 if ~isappdata(gui.CSIgui_main, 'mri'), return; end
 mri = getappdata(gui.CSIgui_main, 'mri');
+if ~isappdata(gui.CSIgui_main, 'conv'), return; end
+conv = getappdata(gui.CSIgui_main, 'conv');
 
 % Get current contrast or calculate.
-if isfield(mri, 'contrast')
-    disp_cont =  mri.contrast; 
+if isfield(conv, 'contrast')
+    disp_cont =  conv.contrast; 
 else
-    fn = fieldnames(mri.data);
-    disp_cont = [min(mri.data.(fn{1})(:)) max(mri.data.(fn{1})(:))];
+    fn = fieldnames(conv.data);
+    disp_cont = [min(conv.data.(fn{1})(:)) max(conv.data.(fn{1})(:))];
 end
 
 % Get new contrast from user.

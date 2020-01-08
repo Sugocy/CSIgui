@@ -84,7 +84,7 @@ if isfield(opt,'pos')
     if size(opt.pos,2) == 4
         fh.Position = opt.pos;
     else
-        fh.Position(1:2) = opt;pos;
+        fh.Position(1:2) = opt.pos;
     end
 end
 
@@ -131,13 +131,25 @@ if isfield(opt,'tag')
 else
     tag = [];
 end
+
+
+% EDIT CONTAST
+edit_w = 80;
+edit = uicontrol(fh,'Style','edit','Units','Pixels',...
+               'Position',[0 fh.Position(4)-9 100 10],...
+               'ForegroundColor','Yellow','BackgroundColor','Black',...
+               'HorizontalAlignment','Center','FontSize',7,'String','TEST');    
+edit.String = 'contrast'; edit.FontWeight = 'bold';
+
+
+
            
 % Normalize UI elements
 fh.Units = 'Normalized'; sb.Units  = 'Pixels';
 
 % Save GUI components and data
 gui = guidata(fh); gui.fh = fh; gui.data = data; gui.ax = ax; gui.sb = sb;
-gui.txt = txt; gui.opt = opt; gui.tag = tag;
+gui.txt = txt; gui.opt = opt; gui.tag = tag; gui.edit = edit;
 guidata(fh,gui);
 
 % Display data
@@ -164,7 +176,8 @@ if gui.opt.limit(1) >= gui.opt.limit(2)
     gui.opt.limit(2) = gui.opt.limit(1)+1;
 end
 gui.ax.CLim =  gui.opt.limit;
-    
+gui.edit.String = num2str(gui.opt.limit);
+
 
 % Colormap type
 if isfield(gui.opt,'colormap')
@@ -279,6 +292,8 @@ if isfield(gui, 'mousePos')
 
     % Set contrast and save it in the options
     gui.ax.CLim = contrastNew; gui.opt.limit = contrastNew;
+    gui.edit.String = num2str(gui.opt.limit);
+    
 else
     gui.mousePos = curPos;
 end
@@ -318,6 +333,7 @@ if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )
 else
     gui.fh.Name = 'Display 3D in 2D';
 end
+
 
 guidata(hObj,gui);
 
