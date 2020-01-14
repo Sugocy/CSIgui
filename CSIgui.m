@@ -10512,8 +10512,9 @@ conv = getappdata(gui.CSIgui_main, 'conv');
 if isfield(conv, 'contrast')
     disp_cont =  conv.contrast; 
 else
-    fn = fieldnames(conv.data);
-    disp_cont = [min(conv.data.(fn{1})(:)) max(conv.data.(fn{1})(:))];
+%     fn = fieldnames(conv);
+%     disp_cont = [min(conv.data.(fn{1})(:)) max(conv.data.(fn{1})(:))];
+    disp_cont = [min(conv.data(:)) max(conv.data(:))];
 end
 
 % Get new contrast from user.
