@@ -217,10 +217,11 @@ clear('ldat_max_dim_db');                           % Clear memory
 data.indexed = complex(zeros(ldat_max_dim_cl{:}));
 clear('ldat_max_dim_cl');                           % Clear memory
 
-% Repeate every row in ldat, ndimf times below itself!;)
-t = repmat(1:size(ldat,1),ndimf,1); t = t(:)'; tmp = ldat(t,:);
+
+% Repeat every row in ldat "ndimf" times.
+t = repmat(1:size(ldat,1),ndimf,1); t = t(:)'; tmp = single(ldat(t,:));
 % Add time-index (1:ndimf) as rows.
-sub_index_raw = [repmat((1:ndimf)' ,size(ldat,1),1) tmp]; % dbl
+sub_index_raw = single([repmat((1:ndimf)' ,size(ldat,1),1) tmp]); % sngl
 clear('tmp'); % Clear memory.
 sub_index_raw = num2cell(sub_index_raw',2); % cell
 

@@ -3727,7 +3727,7 @@ end
 % Create backup % ------------------------------------------- %
 
 % Create a backup of the current data set.
-button_setBackup_Callback([], [], gui)
+button_backupSet_Callback([], [], gui)
 CSI_Log({'WSVD; Created a backup before combining channels.'},...
                {'Use the backup get button to revert back.'});
 
