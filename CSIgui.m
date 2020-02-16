@@ -9,7 +9,7 @@ function varargout = CSIgui(varargin)
 %
 % UNDER DEVELOPMENT - 20181001
 
-% Last Modified by GUIDE v2.5 08-Jan-2020 15:32:37
+% Last Modified by GUIDE v2.5 20-Jan-2020 17:19:35
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -547,7 +547,7 @@ if strcmp(ext,'.dcm')                                          % DICOM
 
     % Parse dicom file
     success = parse_dicom(fp, fn, gui);
-
+    
 elseif strcmp(ext,'.par') || strcmp(ext,'.rec')                % PAR/REC
 
     % Parse par/rec file
@@ -561,7 +561,9 @@ elseif strcmp(ext,'.list') || strcmp(ext,'.data')              % LIST/DATA
     CSI_ReorderDim_Auto(gui);
     % Calculate xaxis data struct
     CSI_2D_Scaling_calc_xaxis(hObj, [], 1); % Automatic
-     
+    % Data domain set to 2 = frequency
+    domain = 2; 
+    
 elseif strcmp(ext,'.mat')                                      % MAT
     
     % Parse mat-file
@@ -575,24 +577,34 @@ elseif strcmpi(ext,'.sdat') || strcmpi(ext,'.spar')            % SDAT/SPAR
     success = parse_sdatspar(fp, fn, gui);
     % Calculate xaxis data struct
     CSI_2D_Scaling_calc_xaxis(hObj,[],1);
-
+    
+    % Data domain set to 2 = frequency
+    domain = 2; 
+    
 elseif strcmpi(ext, '.txt')                                    % TEXT
     
     % Parse the text file
     success = parse_text(fp, fn, gui);
     % Calculate xaxis data struct
     CSI_2D_Scaling_calc_xaxis(hObj,[],1);
-   
+    
+    % Data domain set to 2 = frequency
+    domain = 2; 
+    
 elseif strcmpi(ext,'userinput')                                % USER
     
     % Parse the userinput
     success = parse_userinput(gui);
-
+    
+    % Data domain set to 2 = frequency
+    domain = 2; 
+    
 else                                                           % ERROR 
     % Update LOG and return
     CSI_Log({'Warning. File format not supported.'},{ext});
     warning('The selected file format is not supported.'); return;
 end
+
 
 % Update LOG
 if success
@@ -608,7 +620,20 @@ delete_UserInput(hObj, gui);
 gui = guidata(hObj);    
 
                            % --- GUI updating --- %
-              
+                           
+% Set domain
+if exist('domain', 'var')
+    if     domain == 2, evt.Source.Text = 'Frequency';        
+    elseif domain == 3, evt.Source.Text = 'Time';   
+    end
+    gui.popup_domain.Value = domain; 
+    CSI_setDomain(hObj,evt);
+end
+
+% Fresh gui data
+guidata(hObj,gui);  
+
+% Update visuals              
 maxL = 40; % Max name-length
 if isappdata(gui.CSIgui_main,'csi') 
     csi = getappdata(gui.CSIgui_main,'csi');
@@ -635,8 +660,19 @@ function success = parse_listdata(fp, fn, gui)
 %
 % Created: csi-struct.
 
-% Load list/data file into memory.
-[csi.data, csi.list] = csi_loadData([fp '\' fn], 0);
+[fp, fn, ~] = fileparts([fp '\' fn]); data_nfo = dir([fp '\' fn '.data']);
+if ((data_nfo.bytes/1024^2) > 400)
+    
+    % Load list/data file into memory: use other script for larger files to
+    % ease memory usage.
+    [csi.data, csi.list] = csi_loadData_largeFile([fp '\' fn], 0);
+    
+else
+
+    % Load list/data file into memory.
+    [csi.data, csi.list] = csi_loadData([fp '\' fn], 0);
+
+end
 
 % If error while loading.
 if isempty(csi.data) 
@@ -650,6 +686,9 @@ end
 csi.data.dim = size(csi.data.raw);
 % Add filename and extension info.
 csi.ext = '.data'; csi.filename = fn; csi.filepath = fp;
+% Set domain
+gui.popup_domain.Value = 2;
+
 
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi);   
@@ -676,9 +715,10 @@ end
 csi.data.dim = size(csi.data.raw);
 % Add filename extension info.
 csi.ext = 'sdat'; csi.filename = fn; % Save filename
-% Add dimension labels.
-% Create labels 
+% Add dimension labels - Create labels 
 csi.data.labels = csi.list.dim_labels;
+% Set domain
+gui.popup_domain.Value = 2;
 
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi);  
@@ -1878,6 +1918,14 @@ if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------- %
 
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'time')
+    CSI_Log({'MRS data is in time domain; '},...
+    {'change to frequency domain (k-space) to apply FFT to spatial time domain.'});
+    return;
+end 
+
 % Create backup
 if backup, CSI_backupSet(gui, 'Before spatial FFT.'); end
 
@@ -1915,6 +1963,9 @@ csi.data.raw = csi_rawfft(csi.data.raw, spat_dim, shift_opt);
 
 % CLEAN UP % -------------------------- %
 
+% Set domain
+CSI_setDomain(gui.CSIgui_main,[],'time');
+
 % Store appdata
 setappdata(gui.CSIgui_main, 'csi', csi);
 
@@ -1940,13 +1991,21 @@ CSI_Log({'Used FFT shift method: '}, {tmp});
 
 % --- Executes on button press in button_CSI_FFT.
 function button_CSI_FFT_Callback(~, ~, gui, backup)
-% Apply forward fourier to transform the MRSI data from the spatial domain
-% to the frequency domain.
+% Apply forward fourier to transform the MRSI data from the spatial(voxels)
+% time(FID)domain to the spatial(voxels) frequency(spectrum) domain.
 % 
 % Uses csi_fft();
 if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ------------------------------- %
+
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'freq')
+    CSI_Log({'MRS data is in frequency domain; '},...
+            {'change it to time domain to apply forward FFT.'});
+    return;
+end 
 
 % Create backup
 if backup, CSI_backupSet(gui, 'Before forward FFT.'); end
@@ -1966,10 +2025,15 @@ if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 if strcmpi(uans{1},'yes'),correct_N = 1; else, correct_N = 0; end
 if strcmpi(uans{2},'yes'),dbl_shift = 1; else, dbl_shift = 0; end
 
+
+
 % Apply FFT
 csi.data.raw = csi_fft(csi.data.raw,correct_N,dbl_shift);
 
 % CLEANUP % ---------------------------------------- %
+
+% Set domain
+CSI_setDomain(gui.CSIgui_main,[],'freq');
 
 % Save appdata
 setappdata(gui.CSIgui_main, 'csi', csi);
@@ -1986,6 +2050,14 @@ if nargin < 4 , backup= 1; end
 
 % BACKUP + APPDATA % ------------------- %
 
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'time')
+    CSI_Log({'MRS data is in time domain; '},...
+            {'change to frequency domain to apply backward FFT.'});
+    return;
+end 
+
 % Create backup
 if backup, CSI_backupSet(gui, 'Before inverse FFT.'); end
 
@@ -1999,6 +2071,9 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 csi.data.raw = csi_ifft(csi.data.raw);
 
 % CLEAN UP % --------------------------- %
+
+% Set domain
+CSI_setDomain(gui.CSIgui_main,[],'time');
 
 % Store data
 setappdata(gui.CSIgui_main, 'csi', csi);
@@ -2017,8 +2092,17 @@ function button_CSI_Apodization_Kspace_Callback(~, ~, gui, backup)
 if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % --------------------------------- %
+
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'time')
+    CSI_Log({'MRS data is in time domain; '},...
+     {'change to frequency domain (k-space) to apply 2D/3D apodization.'});
+    return;
+end 
+
 % Create backup
-if backup, CSI_backupSet(gui, 'Before apodization.'); end
+if backup, CSI_backupSet(gui, 'Before k-space apodization.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -2089,6 +2173,13 @@ if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % --------------------------- %
 
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'freq')
+    CSI_Log({'MRS data is in frequency domain; '},...
+{'Converting to time domain and back, use the backup (ctrl+z) to undo.'});
+end 
+
 % Create backup
 if backup, CSI_backupSet(gui, 'Before 1D apodization.'); end
 
@@ -2144,7 +2235,6 @@ if strcmp(uanstype{2},'FID'), opts(2) = 1; else, opts(2) = 2; end
 % APPLY FILTER % ---------------------------------- %
 
 % Check data domain type availability
-domain = CSI_getDomain(gui);
 if strcmp(domain,'freq'), csi.data.raw = csi_ifft(csi.data.raw); end
 
 % Create window and apply filter
@@ -2215,7 +2305,7 @@ switch uans{1}
                 % Peak maximum to normalize to.
                 max_val = max(real(doi),[],1); 
                 % Normalize
-                datac = cellfun(@(x,y) x./y, datac, maxval, 'Uniform', 0);
+                datac = cellfun(@(x,y) x./y, datac, max_val, 'Uniform', 0);
                 
             case 'in volume'
                   
@@ -3165,8 +3255,15 @@ save([ str_time '_T2Calc_' data_unit '.mat'], 'T2data');
 function button_CSI_ZeroFill_Callback(~, ~, gui, backup)
 % Zero fill the data in the time domain. Requires userinput to get lentgh
 % of the FID after zero filling.
-if nargin < 4, backup = 1; end;
+if nargin < 4, backup = 1; end
 % BACKUP + APPDATA % ------------------- %
+
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'freq')
+    CSI_Log({'MRS data is in frequency domain; '},...
+{'Converting to time domain and back, use the backup (ctrl+z) to undo.'});
+end 
 
 % Create backup
 if backup, CSI_backupSet(gui, 'Before zero filling.'); end
@@ -3233,6 +3330,8 @@ if nargin < 4, backup = 1; end
 
 % BACKUP + APPDATA % ---------------------------- %
 
+
+
 % Create backup
 if backup, CSI_backupSet(gui, 'Before auto phase correction.'); end
 
@@ -3250,14 +3349,14 @@ if isempty(poi), return; end
 % Get method of auto-phasing
 uans = getUserInput_Popup({'Auto phasing method:'},...
     {{    'Match real part to maximum absolute signal.',...
-      'Maximize real part of signal.',...
-      'Correct for TE delat in FID by shift.'}});
+          'Maximize real part of signal.',...
+          'Correct for TE delat in FID by shift.'}});   
 if isempty(uans), CSI_Log({'Skipped zero-phasing.'},{''}) ; return; end
 
 switch uans{1}
-    case 'Correct for TE delat in FID by shift.', phase_method = 3;
+    case 'Correct for TE delay in FID by shift.',       phase_method = 3;
     case 'Match real part to maximum absolute signal.', phase_method = 2;
-    case 'Maximize real part of signal.',phase_method = 1;
+    case 'Maximize real part of signal.',               phase_method = 1;
 end
 
 
@@ -3267,11 +3366,19 @@ end
 if length(poi) > 1, poi = poi(1):poi(2); end
 
 % Correct data domain (I/II)
-domain = CSI_getDomain(gui);
+domain = CSI_getDomain(gui);  % THIS DOES NOT UPDATE
 
+% Correct domain if possible
 if (phase_method == 3) && strcmp(domain,'freq')
+    CSI_Log({['MRS data is in frequency domain; Autophase method requires '...
+             'time domain data. Converting to time domain and back, use backup'...
+             '(ctrl+z) to undo. ']},{''});
     csi.data.raw = csi_ifft(csi.data.raw); 
 elseif strcmp(domain,'time') && (phase_method ~= 3)
+    CSI_Log({[ 'MRS data is in time domain; Autophase method requires ',...
+               'frequency domain data. Converting to time domain and back, use backup',...
+               '(ctrl+z) to undo.'] },{''});
+         
     csi.data.raw = csi_fft(csi.data.raw); 
 end
 
@@ -3305,8 +3412,12 @@ array_mrsi = cell2mat(cell_mrsi_phased);
 % Write to csi-struct
 csi.data.raw = array_mrsi;
 
-% Correct data domain (II/II)
-if strcmp(domain,'time'), csi.data.raw = csi_ifft(csi.data.raw); end
+% Convert to starting data domain (II/II)
+if (phase_method == 3) && strcmp(domain,'freq')
+    csi.data.raw = csi_fft(csi.data.raw); 
+elseif strcmp(domain,'time') && (phase_method ~= 3) 
+    csi.data.raw = csi_ifft(csi.data.raw); 
+end
 
 % CLEAN UP % ------------------------------------ %
 
@@ -4335,6 +4446,15 @@ if nargin < 4 , backup= 1; end
 % Create backup
 if backup, CSI_backupSet(gui, 'Before voxel shift'); end
 
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'time')
+    CSI_Log({'MRS data is in time domain; '},...
+            {'Convert it to frequency domain to use this shift method.'});
+    return;
+end 
+
+
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
@@ -5225,7 +5345,7 @@ if nargin == 1, datatag = 'data'; end
 tfh = figure('Tag', ['CSIgui_table' datatag],'Name',...
             ['CSIgui - ' datatag],...
             'Color', 'Black','Toolbar', 'None', 'MenuBar', 'None',...
-            'NumberTitle', 'Off', 'Resize','Off'); 
+            'NumberTitle', 'Off', 'Resize','On'); 
 pos = get(tfh,'Position');
 tgui = guidata(tfh); tgui.fig = tfh;
 
@@ -5244,7 +5364,8 @@ for sl = 1:size(data,4)
 
     % Table object
     tgui.tab{sl}.table = uitable(tgui.tab{sl}.tabh,...
-        'Position', [30 20 pos(3:4)-60]); 
+        'Position', [30 20 pos(3:4)-60],...
+        'Units','Normalized'); 
     
     % ADD BUTTONS HERE: To save all data
     tgui.tab{sl}.savebutton = uicontrol(tgui.tab{sl}.tabh,...
@@ -8321,38 +8442,58 @@ tstate = gui.menubar.MRSI.domain.time.Checked;
 fstate = gui.menubar.MRSI.domain.frequency.Checked;
 
 % Set output argument domain
-if strcmp(tstate,'on'),     domain = 'time';
+if     strcmp(tstate,'on'), domain = 'time';
 elseif strcmp(fstate,'on'), domain = 'freq';
 else,                       domain = 'none';
 end
 
-% --- Set CSI domain; frequency or time
-function CSI_setDomain(hObj,evt)
-% Set the data domain of MRSI data to time or frequency e.g. spectrum or
-% FID.
 
+
+
+% --- Set CSI domain; frequency or time
+function CSI_setDomain(hObj, evt, varargin)
+% Set the data domain of MRSI data to time or frequency e.g. spectrum or
+% FID. hobj refers to CSIgui object.
+% Input: 
+%       evt.Source.Text (>MATLAB2017) = 'Frequency' or 'Time' 
+%       evt.Source.Label(<MATLAB2016) = 'Frequency' or 'Time' 
+% If varargin: 'Frequency'/'freq' or 'Time'/'time' variable evt will 
+% not be used.
+
+    
 % Get gui appdata.
 gui = guidata(hObj);
-
-% Get matlab year for correct field assessment.
-matyr = version('-Release');
-matyr = matyr(1:end-1); matyr = str2double(matyr);
-if matyr >= 2017
-    % Get clicked
-    evt_click = evt.Source.Text; 
+    
+if nargin > 2
+    evt_click = varargin{1}; 
 else
-    % Get clicked
-    evt_click = evt.Source.Label; 
+    % Get matlab year for correct field assessment.
+    matyr = version('-Release');
+    matyr = matyr(1:end-1); matyr = str2double(matyr);
+    if matyr >= 2017
+        % Get clicked
+        evt_click = evt.Source.Text; 
+    else
+        % Get clicked
+        evt_click = evt.Source.Label; 
+    end
 end
 
 % Set clicked property to on in menubar
+evt_click  = lower(evt_click(1:4));
 switch evt_click
-    case 'Frequency'
+    case 'freq'
         gui.menubar.MRSI.domain.frequency.Checked = 'on';
         gui.menubar.MRSI.domain.time.Checked = 'off';
-    case 'Time'
+        gui.popup_domain.Value = 2;
+    case 'time'
         gui.menubar.MRSI.domain.time.Checked = 'on';
         gui.menubar.MRSI.domain.frequency.Checked = 'off';
+        gui.popup_domain.Value = 3;
+    otherwise
+        gui.menubar.MRSI.domain.time.Checked = 'off';
+        gui.menubar.MRSI.domain.frequency.Checked = 'off';
+        gui.popup_domain.Value = 1;
 end
 
 % --- Get data in unit; real, imaginary, absolute phase
@@ -11824,3 +11965,17 @@ end
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi); 
 gui = guidata(gui.CSIgui_main);
+
+
+
+% --- Executes on selection change in popup_domain.
+function popup_domain_Callback(hobj, ~, ~)
+str = hobj.String{hobj.Value}; CSI_setDomain(hobj, [],  str);
+
+
+
+% --- Executes during object creation, after setting all properties.
+function popup_domain_CreateFcn(hobj, evt, gui)
+if ispc && isequal(get(hobj,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hobj,'BackgroundColor','white');
+end
