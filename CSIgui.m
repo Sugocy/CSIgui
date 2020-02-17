@@ -1,5 +1,7 @@
 function varargout = CSIgui(varargin)
 % Spectroscopy GUI; initial purpose to merge MRI and MRS data in Matlab.
+% See Zonedo.org or github for latest releases. Help file is present in the
+% "files" directory or via help in the GUI.
 %
 % Possible labels arguments:
 %            'data','list','csi','spec','image', 'mrs', 'labels'
@@ -7,7 +9,12 @@ function varargout = CSIgui(varargin)
 % Input:
 % CSIgui(datafield, label);
 %
-% UNDER DEVELOPMENT - 20181001
+% ------------------------------------------------------------------------
+% 2020/02 - CSIgui v2. Thesis.
+% Tools for quantitative MR imaging and spectroscopy for the improvement of
+% therapy evaluation in oncology.
+%
+% Quincy van Houtum, Msc.
 
 % Last Modified by GUIDE v2.5 20-Jan-2020 17:19:35
 
