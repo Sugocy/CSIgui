@@ -1,4 +1,5 @@
 function pos = ginputQ(N, fh)
+% ginput made by Quincy. Beta.
 
 % Get current fig if no obj given.
 if nargin ==1, fh = gcf; end

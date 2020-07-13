@@ -39,7 +39,7 @@ if nargin == 1
           else, go = 0; % quite while-loop.
           end
       end
-      dim = {dimi};
+      dim = num2cell(dim);
       
       % Set output labels in spar-info.
       forder = fieldnames(spar_info); spar_info.dim_labels = dim_label;
@@ -68,7 +68,8 @@ data = reshape(data,2,[]); data = complex(data(1,:),data(2,:));
 
 % Reshape according array-dimensions from either SPAR or second input.
 try data = squeeze(reshape(data,dim{:}));
-catch
+catch err
+    err
 warning('Reshaping of SDAT-data unsuccesfull! Raw-indexing returned.');
 end
 

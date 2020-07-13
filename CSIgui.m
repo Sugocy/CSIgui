@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, Msc.
 
-% Last Modified by GUIDE v2.5 20-Jan-2020 17:19:35
+% Last Modified by GUIDE v2.5 18-Jun-2020 17:52:13
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -1156,8 +1156,7 @@ if isfield(nfo, 'dim3_step'), csi.ori.res(2) = nfo.dim3_step; end
 csi.xaxis.nucleus = nfo.nucleus;
 csi.xaxis.BW = nfo.sample_frequency;
 
-
-                % --------- % Clean Up % --------- %
+           % --------- % Clean Up % --------- %
 
 % Save data
 setappdata(gui.CSIgui_main,'csi',csi); 
@@ -2494,8 +2493,10 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Userinput % --------------------------------- %
 uans = getUserInput_Popup({'Display type: ',...
-                           'Save line width data (.txt): '},...
-                         {{'Table', 'Graph'},{'No','Yes'}});
+                           'Save line width data (.txt): ',...
+                           'Use FWHM method: (BETA)'},...
+                         {{'Table', 'Graph'},{'No','Yes'},...
+                            {'Local minima', 'Intersect'}});
 if isempty(uans)
     CSI_Log({'Skipped line width calculations.'},{''}); return; 
 end
@@ -2504,6 +2505,8 @@ end
 dataDisp = uans{1};
 % Save data boolean
 switch uans{2}, case 'Yes', dataSave = 1; case 'No', dataSave = 0; end
+% Method
+lwmeth = uans{3};
 
 % Get data at peak of interest
 [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
@@ -2511,37 +2514,81 @@ switch uans{2}, case 'Yes', dataSave = 1; case 'No', dataSave = 0; end
 % Prepare Data % --------------------------------- %
 tmp = csi.data.raw;
 
-% Maximum in this range
-[~,mi] = max(real(doi),[],1);
 
-% Set maximum value as peak centre.
-peak_pos = mi+range(1);
-
-% Set peak width 
-peak_width = ceil(csi.xaxis.N/100);
-if peak_width < 3, peak_width = 3; end
+if strcmp('Local minima', lwmeth) % Local minima method
+    % doi:      data of peak of interest only
+    % tmp:      full data array
+    % range:    x-axis range of the peak of interest
     
-% Peak range used to find FWHM
-peak_pLow = num2cell(peak_pos - peak_width);
-peak_pHig = num2cell(peak_pos + peak_width);
-poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
+    % Maximum in this range
+    [~,mi] = max(real(doi),[],1);
 
-% Input cell data
-sz = size(tmp); 
-cell_layout = arrayfun(...
-    @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+    % Set the maximum value as peak centre.
+    peak_pos = mi+range(1);  % And correct doi-size vs full axis
 
-% Input axis
-ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
-% Set plotting off - Overload matlab otherwise!
-plot_off = repmat({0},size(tmp)); % plot_off{1,2,4,1} = 1;
+    % Set 1/2(peak width)
+    peak_width = ceil(csi.xaxis.N/100); % One percent of #samples
+    if peak_width < 3, peak_width = 3; end 
+    % If 1% of #samples is less than 3, 1/2*(peak width) set to 3.
+    
+    % Peak range used to find FWHM
+    peak_pLow = num2cell(peak_pos - peak_width);
+    peak_pHig = num2cell(peak_pos + peak_width);
+    % Peak of interest range in x-axis
+    poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
+
+    % Input cell data
+    sz = size(tmp); 
+    cell_layout = arrayfun(...
+        @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+    tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+
+    % Input axis
+    ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
+    % Set plotting off - Overload matlab otherwise!
+    plot_off = repmat({1},size(tmp)); % plot_off{1,2,4,1} = 1;
 
 
-% Calculate line width % --------------------------------- %
-linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
-    plot_off, 'Uniform',0);
+    % Calculate line width % --------------------------------- %
+    % Input: data/x-axis/peak range/plot
+    linewidth = cellfun(@csi_LineWidth, tmp, ax_inp, poi_range_perVox,...
+        plot_off, 'Uniform',0);
 
+elseif strcmp('Intersect', lwmeth)  % Intersect method
+    
+        % Maximum in this range
+    [~,mi] = max(real(doi),[],1);
+
+    % Set the maximum value as peak centre.
+    peak_pos = mi+range(1);  % And correct doi-size vs full axis
+
+    % Set 1/2(peak width)
+    peak_width = ceil(csi.xaxis.N/100); % One percent of #samples
+    if peak_width < 3, peak_width = 3; end 
+    % If 1% of #samples is less than 3, 1/2*(peak width) set to 3.
+    
+    % Peak range used to find FWHM
+    peak_pLow = num2cell(peak_pos - peak_width);
+    peak_pHig = num2cell(peak_pos + peak_width);
+    % Peak of interest range in x-axis
+    poi_range_perVox = cellfun(@(x,y) [x y], peak_pLow, peak_pHig,'uniform',0); 
+
+    % Input cell data
+    sz = size(tmp); 
+    cell_layout = arrayfun(...
+        @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+    tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+
+    % Input axis
+    ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
+    % Set plotting off - Overload matlab otherwise!
+    plot_off = repmat({0},size(tmp)); % plot_off{1,2,4,1} = 1;
+    
+    linewidth = cellfun(@csi_linewidth_intersect,...
+        tmp, ax_inp, poi_range_perVox,'Uniform',0);
+
+    
+end
 
 % Data display % --------------------------------- %
 switch dataDisp
@@ -2564,6 +2611,106 @@ if dataSave
     if fi == 0, return; end
     csi_writeText(cell2mat(linewidth), [fp fn]); 
 end
+
+
+% --- Executes on button press in button_CSI_ISIS.
+function button_CSI_ISIS_Callback(~, ~, gui)
+disp('This function is in development!');
+
+% Set a backup
+CSI_backupSet(gui, 'Before ISIS recon.')
+
+% Get app data
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% --- ADD AND SUB SCHEMES
+% New schemes can be added to the cell below and will automagically
+% appear in the selection process; 
+% 1 equals +/add; 0 equals -/subtract;
+% NB: 3T Philips AMC 2020: 1001 0110 scheme set to top for best results.
+schemes = flipud({[1, 0, 1, 0, 1, 0, 1, 0];... % 1 = +; 0 = -;
+                  [0, 1, 1, 0, 1, 0, 0, 1];...             
+                  [1, 0, 0, 1, 0, 1, 1, 0]});  % 1 = +; 0 = -;
+
+              
+% schemes = {[1 1 1 1 0 0 0 0];...
+% [1 1 1 0 0 0 0 1 ];...
+% [1 1 0 1 0 0 1 0];...
+% [1 0 1 1 0 1 0 0];...
+% [0 1 1 1 1 0 0 0];...
+% [1 1 0 0 0 0 1 1];...
+% [1 0 0 1 0 1 1 0];...
+% [0 0 1 1 1 1 0 0];...
+% [0 1 1 0 1 0 0 1];...
+% [1 0 1 0 0 1 0 1 ];...
+% [0 1 0 1 1 0 1 0];...
+% [1 0 0 0 0 1 1 1];...
+% [0 1 0 0 1 0 1 1];...
+% [0 0 1 0 1 1 0 1];...
+% [0 0 0 1 1 1 1 0];...
+% [0 0 0 0 1 1 1 1 ]};
+
+% schemes = allCombinations(repmat({[0 1]},8,1));
+% schemes = unique(schemes,'rows');
+% schemes = num2cell(schemes,2);
+              
+              
+% Scheme str
+schemes_str = cellfun(@int2str, schemes, 'uniform',0);
+schemes_str = strrep(schemes_str, '0', '-'); 
+schemes_str = strrep(schemes_str, '1', '+');       
+        
+% Userinput % --------------------------------- %
+uans = getUserInput_Popup({'Cycle dimension: ', 'Add subtract scheme: '},...
+                          {csi.data.labels(2:end), schemes_str});
+if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
+% Convert to integers
+udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
+usch = find(strcmp(schemes_str,uans{2}) == 1); 
+% udim = dimension/index of cycles given by user.
+% usch = index of scheme-list given by user.
+
+% Go nuts and add/subtract according to chosen scheme over the dimension
+% called udimstr at index udim.
+
+% Data to ISIS recon
+data = csi.data.raw; sz = size(data); 
+
+% Set chosen cycli index (udim) to the first index. 
+pvec = 1:numel(sz); pvec(udim) = []; pvec = [udim pvec];
+data = permute(data,pvec);
+% New data output size for empty variable
+sznew = size(data); sznew(1) = 1; 
+
+
+% Add and subtract using scheme of interest (SOI) at data-index udim.
+outp = zeros(sznew); soi = schemes{usch};
+misc_index = arrayfun(@(x) 1:x, sznew(2:end), 'uniform', 0);
+for kk = 1:sz(udim)
+    if soi(kk)  % Add
+       outp = outp + data(kk,misc_index{:});
+    else        % Subtract
+       outp = outp - data(kk,misc_index{:});
+    end  
+end
+ 
+% Permute to original index
+data = ipermute(outp,pvec);
+
+% Replace in appdata
+csi.data.raw = data; csi.data.dim = size(data);
+
+% Save data
+setappdata(gui.CSIgui_main, 'csi',csi);
+
+% Update info
+CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str{usch}} );
+
+
+
+
+
 
 
 % --- Executes on button press in button_CSI_setFrequency.
@@ -3357,7 +3504,7 @@ if isempty(poi), return; end
 uans = getUserInput_Popup({'Auto phasing method:'},...
     {{    'Match real part to maximum absolute signal.',...
           'Maximize real part of signal.',...
-          'Correct for TE delat in FID by shift.'}});   
+          'Correct for TE delay in FID by shift.'}});   
 if isempty(uans), CSI_Log({'Skipped zero-phasing.'},{''}) ; return; end
 
 switch uans{1}
@@ -7956,7 +8103,10 @@ end
 % Calculate axis-parameters
 ind = find(strcmp(csi.data.labels,'sec') == 1);
 if ~isempty(ind), xaxis.N = csi.data.dim(ind);
-else,             xaxis.N = csi.data.dim(1);
+else            
+    xaxis.N = csi.data.dim(1); % USE THE LARGEST INDEX AS SAMPLES.
+    [~, tmp] = max(csi.data.dim);
+    xaxis.N = csi.data.dim(tmp);
 end
 
 if isfield(xaxis, 'trans')
@@ -9227,6 +9377,12 @@ method = getUserInput_Popup({'Signal unit: '},{{'Real','Magnitude'}});
 if isempty(method), return; end
 switch method{1}, case 'Real', method = 1; case 'Magnitude', method = 0; end
 
+
+% Mask size
+masksz = getUserInput({'Mask size: '},{ '50'});
+if isempty(masksz), return; end
+masksz = str2double(masksz);
+
 % ----- % Calculate SNR  
 
 % Offset in y-axis used for plotting at peak positons
@@ -9258,7 +9414,7 @@ if strcmp(uans,'Automatic') % All peaks
     
     for kk = 1:np
         range = peak_pos(kk) + [-5 5]; % Range of the peak
-        snr(kk) = csi_SNR(data, 50, method, range);
+        snr(kk) = csi_SNR(data, masksz, method, range);
         % Plot SNR as text at peak location
         text(appdata1D.axes, peak_pos_plot(kk), data(peak_pos(kk))+yst, ...
             sprintf('%3.1f',snr(kk)),'FontSize',8,'FontWeight','Bold');
@@ -9308,9 +9464,18 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 [~, appdata1D, data] = CSI_1D_getData(obj1D);
 
 % Automatic or manual calculation?
-uans = getUserInput_Buttons('Calculate linewidth at FHWM:',...
-                           {'Automatic', 'Individual'});
+uans = getUserInput_Popup({'FWHM estimation method:',...
+                           'Calculate FWHM for one individual peak or all automagically:'},...
+                         {      {'Local minima', 'Intersection'},...
+                                {'Automatic', 'Individual'}});
 if isempty(uans), return; end
+
+if strcmp(uans{1}, 'Intersection')
+    panel_1D_FWHM_method_intersect(hObj);
+    return;
+else
+    uans = uans(2);
+end
 
 % Prep xaxis % -------- %
 
@@ -9333,9 +9498,7 @@ if strcmp(uans,'Individual')
     % Maximum in this range
     [~,mi] = max(real(data(range(1):range(2))));
     % Set max as peak centre.
-    range
-    mi
-    peak_pos = mi+range(1)
+    peak_pos = mi+range(1);
     
 elseif strcmp(uans,'Automatic')
     % Get peak positions automatically (Maximum of peak!)
@@ -9373,6 +9536,111 @@ hold(appdata1D.axes,'off');
 % Update in UI
 CSI_Log({'Lowest position to highest, FWHM: '},{lw'});
 
+
+
+
+function panel_1D_FWHM_method_intersect(hObj,~,~)
+
+% Get CSIgui 1D figure object
+obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
+% Do checks and get CSI_1D object, data_1D appdata and data array
+[~, appdata1D, data] = CSI_1D_getData(obj1D);
+
+
+% Get range from user (Unitless range given)
+range = CSI_getPeakOfInterest(appdata1D.axis);
+if isempty(range), return; end
+
+% Prep xaxis % -------- %
+
+% Use unitless or ppm
+if isfield(appdata1D.axis, 'ppm')
+    ax = appdata1D.axis.ppm;
+else                         
+    ax = appdata1D.axis.none;
+end
+
+
+% Baseline | Samples
+N = size(data,1); 
+bv = mean(real([data(1:round(N/20)); data(N-round(N/20):N)])); 
+bvline = cat(2,ax',repmat(bv,N,1));
+
+% MAXIMUM
+data_ranged = real(data(range(1):range(2)));
+[mv, mi] = max(data_ranged);
+% Set max as peak centre.
+peak_pos = mi+range(1)-1; % Data index
+xv = ax(peak_pos);        % In unit (ppm/unitless etc.)
+ax_ranged = ax(range(1):range(2));
+% FWHM ESTIMATE
+fwhm = mv - ((mv-bv)/2);
+fwhmline = cat(2,ax',repmat(fwhm,N,1));
+
+% PREPARE FIGURE % -------- %
+
+% Create new figure for user input
+fh = figure(); 
+% Plot the spectrum (reverse xaxis)
+spObj = plot(ax, real(data)); spObj.Parent.XDir = 'reverse'; hold on; 
+% Axes
+axObj = spObj.Parent;
+
+% PLOT MAXIMUM
+plot(axObj, xv,  mv,'or');
+    % datapoint
+cursorMode = datacursormode(fh);hdtip = cursorMode.createDatatip(spObj);
+hdtip.Position = [xv mv 0]; updateDataCursors(cursorMode);
+
+
+% PLOT BASELINE
+baseObj = plot(axObj, bvline(:,1),bvline(:,2),'--k');
+    % datapoint
+cursorMode = datacursormode(fh); hdtip = cursorMode.createDatatip(baseObj);
+hdtip.Position = [bvline(1,1) bv 0]; updateDataCursors(cursorMode);
+
+
+% PLOT FWHM ESTIMATE
+fwhmObj = plot(axObj, fwhmline(:,1),fwhmline(:,2),'--c');
+    % datapoint
+cursorMode = datacursormode(fh); hdtip = cursorMode.createDatatip(fwhmObj);
+hdtip.Position = [fwhmline(1,1) fwhm 0]; updateDataCursors(cursorMode);
+
+
+% Intersect FWHM line and DATA(range) (Estimate)
+[xest,yest] = polyxpoly(ax_ranged',data_ranged, fwhmline(:,1)', fwhmline(:,2)');
+
+% Plot results of found intersects
+plot(axObj, xest, yest, '-om');
+
+% The answer in PPM or unit-less: ALWAYS use the first two - if more
+% intersects are found it is shown in the plot. 
+if size(xest,1) == 1 % The peak is not within the range probabaly
+    fwhm_outp = NaN; 
+else
+    xest = [xest(1) xest(end)]; yest = [yest(1) yest(end)];
+    fwhm_outp = diff(xest); 
+end
+
+
+% Plot data in CSIgui 1D
+yst = diff(appdata1D.axes.YLim)/50; xst = diff(appdata1D.axes.XLim)/100;
+hold(appdata1D.axes,'on'); % Hold 1D plot figure
+plot(appdata1D.axes, xest, yest,'or');    % Plot marker
+text(appdata1D.axes, xest(1)-xst, yest(1)+yst, ...    % Plot text
+   sprintf('%2.3f',fwhm_outp),'FontSize',8,'FontWeight','Bold');
+
+% Update in UI
+if isnan(fwhm_outp)
+    fwhm_outp = 'Single intersect with FWHM found0 - redefine peak range';
+end
+CSI_Log({sprintf('FWHM @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
+        {fwhm_outp});
+
+
+%     function csi_fwhm_intersect
+%         function csi_fwhm_local
+    
 % --- Executes when user presses "Baseline" in panel_1D
 function panel_1D_Baseline(hObj,~)
 % Apply a baseline correction to the spectrum.
@@ -9550,7 +9818,7 @@ switch uanstype{1}
         else
             uansopts = getUserInput(...
             {'Standard deviation e.g. half length at FWHM: (Samples)'},...
-            {(appdatat1D.xaxis.N/4)});
+            {(appdata1D.xaxis.N/4)});
         end
     case 'Exponential'
         uansopts = getUserInput(...
@@ -9878,12 +10146,16 @@ csi = getappdata(gui.CSIgui_main,'csi');
 if isfield(csi.data, 'noise')
     
     if isfield(csi.data, 'backup_toview_noise')
+        
+        % Store noise
+        csi.data.noise = csi.data.raw;
+        
         % Return to original data
         csi.data.raw = csi.data.backup_toview_noise;
         % Remove the backup field.
         csi.data = rmfield(csi.data,'backup_toview_noise');
-        % Message
-        msg = 'Replaced noise data by backup of original.';
+                % Message
+        msg = 'Stored noise data and reverted to backup of original data.';
         % Set correct menu-label
         gui.menubar.MRSI.noise.Label = 'Import Noise..';
     else    
@@ -11955,6 +12227,7 @@ uans = getUserInput(...
     {   {'Spatial index in MRSI data: (kx ky kz) '},...
         {'Number of voxels to shift data: (x, y, z | col, row, slice'}},...
         {spat_dim, '1 0 0'} );
+if isempty(uans), return; end    
 % Proces input
 kspace = str2double(strsplit(uans{1}));
 shifts = str2double(strsplit(uans{2}));  
@@ -11986,3 +12259,121 @@ function popup_domain_CreateFcn(hobj, evt, gui)
 if ispc && isequal(get(hobj,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hobj,'BackgroundColor','white');
 end
+
+
+
+
+
+% --- Executes on button press in button_CSI_frequencyAlignment.
+function button_CSI_frequencyAlignment_Callback(~, ~, gui)
+% Align the seperate voxels to a specific peak e.g. frequency alignment or
+% peak alignment.
+
+display('This function is under construction')
+
+domain = CSI_getDomain(gui);
+if strcmp(domain, 'time')
+    CSI_Log({'MRS data is in time domain; '},...
+            {'change it to frequency domain to apply peak alignment.'});
+    return;
+end 
+
+% Create backup
+CSI_backupSet(gui, 'Before alignment.');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Userinput % -------------------------------------------- %
+
+% Get data of peak of interest
+[doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+
+% Which voxel to use as reference? Or highest SNR?
+uans = getUserInput_Popup(...
+           {'Reference voxel or voxels for shift: '},...
+                {{'Single voxel','Along a dimension'}});
+if isempty(uans), CSI_Log({'Skipped alignment.'},{''}); return; end
+
+switch uans{1}
+    case 'Single voxel'
+        
+        % Get reference voxel
+        uans = getUserInput(...
+           {'Voxel index: '},{ones(1,numel(size(csi.data.raw))-1)});
+        vox_ref = num2cell(str2num(uans{1}));
+        
+        % Get peak indices
+        [~, ind_peaks] = max(real(doi),[],1);
+
+        % Get reference index
+        ind_ref = ind_peaks(:,vox_ref{:});
+        
+        % Shift values
+        shiftval = ind_peaks - ind_ref;
+               
+        % Create cell of raw data
+        sz = size(csi.data.raw);
+        cell_layout = ...
+        arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+        % Creat cell of data.
+        data = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
+        
+        % circular shift
+        csi.data.raw = cell2mat(cellfun(@circshift, data, num2cell(-1.*shiftval),...
+            repmat({1},size(data)),'uniform', 0));
+
+        
+     case 'Along a dimension'
+         
+        % Get reference dimension
+        uans = getUserInput_Popup(...
+            {'Reference dimension: ', },...
+            {csi.data.labels(2:end)});
+        if isempty(uans), return; end
+        % Dimension of interest for voxel-reference
+        ind_dim = find(strcmp(csi.data.labels, uans{1})==1);
+         
+        % Get reference voxel
+        uans = getUserInput_Popup(...
+            {'Reference voxel in this dimension: ', },...
+            {{1:size(csi.data.raw,ind_dim)}});
+        if isempty(uans), return; end        
+                % Reference voxel for each voxel along ind_dim to shift to
+        ind_vox = str2double(uans{1});
+        
+          
+             
+        % Get peak indices
+        [~, ind_peaks] = max(real(doi),[],1);
+        
+        % Get reference voxel over ind_dim
+        sz = size(csi.data.raw);
+        tmp_ind = arrayfun(@(x) 1:x,sz,'uniform', 0);
+        tmp_ind{ind_dim} = ind_vox; tmp_ind{1} = 1;
+        % Reference to shift to  
+        ind_ref = ind_peaks(tmp_ind{:});
+        
+        % Shift values
+        shiftval = ind_peaks - ind_ref;
+        
+        % Convert data to cell
+          % Create cell of raw data
+        sz = size(csi.data.raw);
+        cell_layout = ...
+        arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+        % Creat cell of data.
+        data = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
+        
+        % Apply shift
+        csi.data.raw = cell2mat(cellfun(@circshift, data, num2cell(-1.*shiftval),...
+            repmat({1},size(data)),'uniform', 0));
+end
+
+        
+% Store data
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Show nfo
+CSI_Log({'Alignment unique shift values: '}, {unique(-1.*shiftval)'});

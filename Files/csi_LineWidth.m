@@ -112,7 +112,7 @@ if show_plot
     end
     % Plot fwhm in original
     hold(ax1,'on'); plot(ax1, fwhm_pos, fwhm_val,'or');
-
+    ax1.XDir = 'Reverse';
     
     % Plot peak of interest
     ax2 = subplot(3,1,2); 
