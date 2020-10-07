@@ -27,10 +27,10 @@ mrp = abs(std(diff(rp)));
 %      'MinSeparation',0);
  [loc_max_bool ]= islocalmax(rp,'MaxNumExtrema',nPeaks,'MinProminence',mrp,...
      'MinSeparation',0);
-% Convert boolean to lindear indexes
+% Convert boolean to linear indexes
 [peak_position,~] = find(loc_max_bool == 1); 
 % Values at position
 peak_values = rp(peak_position);
 
 %Plot found maxima
-% plot(peak_position, peak_values,'or');
+%plot(peak_position, peak_values,'or');

@@ -544,7 +544,7 @@ end
                        % --- % Parse the input % --- %
 
 if clear_log
-    set(gui.listbox_CSIinfo, 'String', {}); % Clear info in listbox.    
+    set(gui.listbox_CSIinfo, 'String', {''}); % Clear info in listbox.    
 end
 
 % Update LOG
@@ -2628,11 +2628,21 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % New schemes can be added to the cell below and will automagically
 % appear in the selection process; 
 % 1 equals +/add; 0 equals -/subtract;
-% NB: 3T Philips AMC 2020: 1001 0110 scheme set to top for best results.
-schemes = flipud({[1, 0, 1, 0, 1, 0, 1, 0];... % 1 = +; 0 = -;
-                  [0, 1, 1, 0, 1, 0, 0, 1];...             
-                  [1, 0, 0, 1, 0, 1, 1, 0]});  % 1 = +; 0 = -;
+% schemes = flipud({[1,0];... % 1D-ISIS e.g. a slab
+%                   [0,1];... % Test above
+%                   [1,1];... 
+%                   [1,0,1,0];... % Bar
+%                   [1,1,0,0];... 
+%                   [1,1,1,1];... 
+%                   [1, 1, 1, 1, 1, 1, 1, 1];...     
+%                   [1, 0, 1, 0, 1, 0, 1, 0];... % 1 = +; 0 = -;
+%                   [0, 1, 1, 0, 1, 0, 0, 1];...             
+%                   [1, 0, 0, 1, 0, 1, 1, 0]});  % 1 = +; 0 = -;
 
+
+schemes = flipud({[1,1];... 
+                  [1,1,1,1];... 
+                  [1,1,1,1,1,1,1,1]});
               
 % schemes = {[1 1 1 1 0 0 0 0];...
 % [1 1 1 0 0 0 0 1 ];...
@@ -2676,6 +2686,7 @@ usch = find(strcmp(schemes_str,uans{2}) == 1);
 
 % Data to ISIS recon
 data = csi.data.raw; sz = size(data); 
+% dr = real(data); dp = imag(data);
 
 % Set chosen cycli index (udim) to the first index. 
 pvec = 1:numel(sz); pvec(udim) = []; pvec = [udim pvec];
@@ -2684,16 +2695,21 @@ data = permute(data,pvec);
 sznew = size(data); sznew(1) = 1; 
 
 
+
+
+
 % Add and subtract using scheme of interest (SOI) at data-index udim.
 outp = zeros(sznew); soi = schemes{usch};
 misc_index = arrayfun(@(x) 1:x, sznew(2:end), 'uniform', 0);
 for kk = 1:sz(udim)
     if soi(kk)  % Add
        outp = outp + data(kk,misc_index{:});
+       
     else        % Subtract
        outp = outp - data(kk,misc_index{:});
     end  
 end
+
  
 % Permute to original index
 data = ipermute(outp,pvec);
