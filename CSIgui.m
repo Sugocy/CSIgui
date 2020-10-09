@@ -668,11 +668,11 @@ function success = parse_listdata(fp, fn, gui)
 % Created: csi-struct.
 
 [fp, fn, ~] = fileparts([fp '\' fn]); data_nfo = dir([fp '\' fn '.data']);
-if ((data_nfo.bytes/1024^2) > 400)
+if ((data_nfo.bytes/1024^2) > 500)
     
     % Load list/data file into memory: use other script for larger files to
     % ease memory usage.
-    [csi.data, csi.list] = csi_loadData_largeFile([fp '\' fn], 0);
+    [csi.data, csi.list] = csi_loadData_largeFiles([fp '\' fn], 0);
     
 else
 
