@@ -2624,6 +2624,10 @@ CSI_backupSet(gui, 'Before ISIS recon.')
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+
+
+% % % % % THIS IS OLD - NEEDS CLEAN UP --- QH 2020/10/12
+
 % --- ADD AND SUB SCHEMES
 % New schemes can be added to the cell below and will automagically
 % appear in the selection process; 
@@ -2643,63 +2647,52 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 schemes = flipud({[1,1];... 
                   [1,1,1,1];... 
                   [1,1,1,1,1,1,1,1]});
-              
-% schemes = {[1 1 1 1 0 0 0 0];...
-% [1 1 1 0 0 0 0 1 ];...
-% [1 1 0 1 0 0 1 0];...
-% [1 0 1 1 0 1 0 0];...
-% [0 1 1 1 1 0 0 0];...
-% [1 1 0 0 0 0 1 1];...
-% [1 0 0 1 0 1 1 0];...
-% [0 0 1 1 1 1 0 0];...
-% [0 1 1 0 1 0 0 1];...
-% [1 0 1 0 0 1 0 1 ];...
-% [0 1 0 1 1 0 1 0];...
-% [1 0 0 0 0 1 1 1];...
-% [0 1 0 0 1 0 1 1];...
-% [0 0 1 0 1 1 0 1];...
-% [0 0 0 1 1 1 1 0];...
-% [0 0 0 0 1 1 1 1 ]};
-
+ 
 % schemes = allCombinations(repmat({[0 1]},8,1));
 % schemes = unique(schemes,'rows');
 % schemes = num2cell(schemes,2);
-              
-              
 % Scheme str
-schemes_str = cellfun(@int2str, schemes, 'uniform',0);
-schemes_str = strrep(schemes_str, '0', '-'); 
-schemes_str = strrep(schemes_str, '1', '+');       
+% schemes_str = cellfun(@int2str, schemes, 'uniform',0);
+% schemes_str = strrep(schemes_str, '0', '-'); 
+% schemes_str = strrep(schemes_str, '1', '+');       
         
-% Userinput % --------------------------------- %
-uans = getUserInput_Popup({'Cycle dimension: ', 'Add subtract scheme: '},...
-                          {csi.data.labels(2:end), schemes_str});
-if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
-% Convert to integers
-udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
-usch = find(strcmp(schemes_str,uans{2}) == 1); 
+% % Userinput % --------------------------------- %
+% uans = getUserInput_Popup({'Cycle dimension: ', 'Add subtract scheme: '},...
+%                           {csi.data.labels(2:end), schemes_str});
+% if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
+% % Convert to integers
+% udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
+% usch = find(strcmp(schemes_str,uans{2}) == 1); 
 % udim = dimension/index of cycles given by user.
 % usch = index of scheme-list given by user.
+% soi = schemes{usch};
+
+
+
+uans = getUserInput_Popup({'Cycle dimension: '},{csi.data.labels(2:end)});
+if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
+
+% Add/Subtr scheme of ISIS data
+udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
+udimsz = size(csi.data.raw, udim); soi = ones(1, udimsz);
+
 
 % Go nuts and add/subtract according to chosen scheme over the dimension
 % called udimstr at index udim.
 
 % Data to ISIS recon
 data = csi.data.raw; sz = size(data); 
-% dr = real(data); dp = imag(data);
 
 % Set chosen cycli index (udim) to the first index. 
 pvec = 1:numel(sz); pvec(udim) = []; pvec = [udim pvec];
 data = permute(data,pvec);
+
 % New data output size for empty variable
 sznew = size(data); sznew(1) = 1; 
 
 
-
-
-
 % Add and subtract using scheme of interest (SOI) at data-index udim.
-outp = zeros(sznew); soi = schemes{usch};
+outp = zeros(sznew); 
 misc_index = arrayfun(@(x) 1:x, sznew(2:end), 'uniform', 0);
 for kk = 1:sz(udim)
     if soi(kk)  % Add
@@ -2721,7 +2714,8 @@ csi.data.raw = data; csi.data.dim = size(data);
 setappdata(gui.CSIgui_main, 'csi',csi);
 
 % Update info
-CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str{usch}} );
+schemes_str = repmat('+', 1, sz(udim));
+CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str} );
 
 
 
