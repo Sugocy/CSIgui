@@ -1,0 +1,11 @@
+setDomain=time;
+Bin;
+Apodization_FID;
+FFT;
+ISIS;
+AutoPhase;
+Combine;
+AutoPhase;
+setLabels;
+Combine;
+plotCSI;

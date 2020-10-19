@@ -3856,7 +3856,7 @@ uicontrol('Parent',gui_combCoil.fig,...
     'ForegroundColor',gui.colors.text_main,...
     'FontName','Helvetica',...
     'Callback',@CSI_Combine_wsvd_redirect_to_sourceArticle);
-
+uiwait(gui_combCoil.fig);
 
 function CSI_Combine_wsvd_redirect_to_sourceArticle(~,~)
 src = 'http://dx.doi.org/10.1002/mrm.22230';
@@ -9082,7 +9082,7 @@ bw = w-20; bh = 20; % Normalised w and h of button
 
 % Buttons, handles and their info description.
 bName = {'Phasing','FFT','iFFT','Apodization', 'Zero Fill', 'SNR',...
-         'Linewidth','Baseline','Shift', 'Data Display','Replace Voxel', 'Export'};
+         'Linewidth','Baseline','Shift', 'Smoothing','Data Display','Replace Voxel', 'Export'};
 bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_FFT, ...
          @panel_1D_iFFT, ...
@@ -9092,6 +9092,7 @@ bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_FWHM, ...
          @panel_1D_Baseline, ...
          @panel_1D_Shift,...
+         @panel_1D_Smooth,...
          @panel_1D_DataDisplay, ...
          @panel_1D_SaveToMain, ...
          @panel_1D_Export};
@@ -9103,7 +9104,8 @@ bInfo = {'Apply phasing corrections. Multiple methods available',...
          'Calculate Signal-to-Noise-ratio of the 1D spectrum.',...
          'Calculate the full width at half maximum of a peak.',...
          'Apply a baseline correction to the spectrum.',...
-         'Apply a time/frequency shift to the FID or spectrum.',...
+         'Apply a time/phase shift to the FID or spectrum.',...
+         'Denoise data by applying a Sgolay smoothing filter.',...
          'Change display settings of the 1D plot.',...
          'Replace voxel data in CSIgui with edited 1D data.',...
          'Export spectrum to file.'};
@@ -9992,9 +9994,43 @@ end
 % Show info to user
 CSI_Log({'CSIgui-1D:'},{'Saved 1D data to file.'});
 
+% --- Executes when user presses "Smooth" in panel_1D.
+function panel_1D_Smooth(hObj, ~)
+% PREP DATA % ---------------------------------- %
+
+% Get CSIgui 1D figure object
+obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
+
+% Do checks and get CSI_1D object, data_1D appdata and data array
+[CSI_1D_obj, appdata1D, dataOri] = CSI_1D_getData(obj1D);
+
+% Shift % ---------------------------------------- %
+data  = dataOri;
+
+datasmo = smoothdata(real(data),'sgolay', 'degree', 2);
+
+appdata1D.voxel.processed = datasmo;
+disp ERROR!!!!!QH20202
+% Save the complex result to the 1D-plot figure's appdata.
+setappdata(CSI_1D_obj, 'data1D', appdata1D);
+
+% Plot the 1D data
+CSI_1D_displayData(CSI_1D_obj)
+
+% Show info to user
+CSI_Log({'CSIgui-1D:'},{'Denoised data by smoothing.'});
+
+
 % --- Executes when user presses "Shift" in panel_1D.
 function panel_1D_Shift(hObj, ~)
-% Time to frequency domain.
+% Shift the FID to its first sin-amplitude or first maximum 
+%                         OR...
+% Use the TE to shift.
+%
+% BETA - Experimental function
+
+CSI_Log({'WARNING: "CSIgui-1D Shift" is an experimental function'},{''});
+
 
 % PREP DATA % ---------------------------------- %
 
@@ -10002,19 +10038,130 @@ function panel_1D_Shift(hObj, ~)
 obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 % Do checks and get CSI_1D object, data_1D appdata and data array
-[CSI_1D_obj, appdata1D, data] = CSI_1D_getData(obj1D);
+[CSI_1D_obj, appdata1D, dataOri] = CSI_1D_getData(obj1D);
 
 % Shift % ---------------------------------------- %
+data  = dataOri;
 
-[m,ii] = max(real(data)); sz = size(data,1);
-appdata1D.voxel.processed = zeros(sz,1);
-appdata1D.voxel.processed(1:(sz-ii+1)) = data(ii:end);
 
-% [m,ii] = max(real(data)); sz = size(data,1);
-% appdata1D.voxel.processed = circshift(data,-ii,1);
+uans = getUserInput_Popup({'Method: '},{{'Automatic','Use echotime (TE)'}});
+if isempty(uans), CSI_Log({'CSigui-1D: Skipped 1D Shift'},{''}); return; 
+end  
 
-% Apply 1D fourier transform
-% appdata1D.voxel.processed = circshift(data2shift,);
+switch uans{1}
+    case 'Automatic'
+        % Cheap approach - move data to position of maximum FID signal
+        sz = size(data,1); 
+        if isfield(appdata1D.xaxis, 'time')
+            ax = appdata1D.xaxis.time;
+        else
+            ax = appdata1D.xaxis.none;
+        end
+        % Sine fit - general
+        % sinefit = @(b,x)  b(1).*( sin( 2.*pi.*x./b(2) + 2*pi./b(3) ) ) + b(4);  
+        % % 1 sine wave amplitude (in units of y)
+        % % 2 period (in units of x)
+        % % 3 phase (phase is s(2)/(2*s(3)) in units of x)
+        % % 4 offset (in units of y)
+        % binit = [1 ax(10)-ax(1)  sqrt(ax(10)-ax(1)./2) 0];
+        % pfit = nlinfit(ax,real(data),sinefit,binit);
+        % figure(); plot(ax, sinefit(pfit,ax));
+
+        
+        % Add minimal prominence to peak find algorithm 
+        
+        % --> Use max/min to define peak prom. - less local - more global
+        % Use %FID size
+        
+        % FDITTING DATA HERE
+        
+        
+        % Smooth data
+        datasmo = smoothdata(real(data),'sgolay', 'degree', 1);
+
+        % Plot original data.
+        figure(); plot(ax, datasmo, '-b' ); hold on; plot(ax,real(data),'--y'); 
+
+        % Find peaks A
+        [pks, locs, w] = findpeaks(datasmo); 
+        % plot(locs,pks,'og');
+        pks_smooth = cat(2,locs,pks);
+
+        go = 1;  maxit=100; minpeak = zeros(1,maxit+1); 
+        minpeak(1) = median(w); 
+        npks = zeros(1,maxit+1); npks(1) = size(pks,1);
+        while (go > 0)
+
+            [pks, locs, w] = findpeaks(datasmo,'MinPeakDistance', minpeak(go));
+            npks(go) = size(pks,1);
+        %     plot(locs,pks,'sm');
+
+            minpeak(go+1) = mean(w);
+            go = go + 1;
+            
+            if go > 3  
+                if (npks(go) == npks(go-2)) || ...
+                  ((minpeak(go) == minpeak(go-1)) && ...
+                   (minpeak(go) == minpeak(go-2)) && ...
+                   (minpeak(go) == minpeak(go-3)) ) 
+
+                    go = 0; 
+                end
+            end
+
+            if go >= maxit, go = 0; end
+        end
+        shiftval = locs(1); % First guess of shift
+
+        % Look in range of this peak to original maximum.
+        df = round(median(w).*0.667); 
+        if (shiftval - df <= 0), leftrange = 1; else, leftrange = shiftval - df; end
+        [mm, shiftval] = max( real( data( leftrange:(shiftval + df) ) ) );
+        shiftval = shiftval + leftrange - 1;
+
+        % Save new data.
+        appdata1D.voxel.processed = zeros(sz,1);
+        appdata1D.voxel.processed(1:(sz-shiftval+1)) = dataOri(shiftval:end);
+
+
+
+        % Plot all nicely.
+        figure(); 
+        plot(ax,real(data),'-b','linewidth',1.8);  hold on; 
+        plot(ax,datasmo,'-y','linewidth',1.8); 
+        plot(ax(pks_smooth(:,1)),pks_smooth(:,2),'og','linewidth',1.8); 
+        plot(ax([1 shiftval]),[mm mm], '-om','linewidth',2);
+        pl = plot(ax,real(appdata1D.voxel.processed),'-r');
+        legend({ 'Original', 'Smooth', 'Used maxima', 'Shift-line', 'New data'});
+
+
+        dt = mean(diff(ax)); str = sprintf('Shifted: %1.6f | %3.0f', dt.*shiftval,...
+            shiftval);
+        text(ax(round(shiftval./2)), mm.*1.05, str, 'Color', [0.8 0.8 0.8]);
+
+        pl.Parent.Color = [ 0 0 0]; % Set bg black...
+        % [pfit,~, mu] = polyfit(ax, real(data),12);
+        % [yfit] =polyval(pfit,ax,[],mu);
+        % figure();plot(ax,yfit); hold on; plot(ax',real(data));
+        % plot(ax, real(data)-yfit);
+
+
+    case 'Use echotime (TE)'
+        uans = getUserInput({'Echotime, TE (ms):'},{0.5});
+        if isempty(uans), return; end
+        
+        TE = str2double(uans{1});
+        shiftval = round(TE./(mean(diff(appdata1D.xaxis.time)).*1000));
+        sz = size(data,1);
+        shiftval
+        % Save new data.
+        appdata1D.voxel.processed = zeros(sz,1);
+        appdata1D.voxel.processed(1:(sz-shiftval+1)) = dataOri(shiftval:end);
+        
+end
+% OOOOOOR TE
+% TE ==> TE./axis.dt = nShift in time domain
+
 
 % PLOT AND SAVE % ------------------------------ %
 
@@ -10025,7 +10172,9 @@ setappdata(CSI_1D_obj, 'data1D', appdata1D);
 CSI_1D_displayData(CSI_1D_obj)
 
 % Show info to user
-CSI_Log({'CSIgui-1D:'},{'Applied FFT.'});
+CSI_Log({'CSIgui-1D:'},{'Applied shift.'});
+
+
 
 % ---------------------------------------------------------------------- %
 
@@ -12038,28 +12187,64 @@ end
 %%% ----------- % ------------------------------------------------------ %
 
 % --- Executes on button press in button_TestSomething.
-function button_TestSomething_Callback(hObj, eventdata, gui)
-warndlg('Watch out! Developers testing button. Panic!');
+function button_TestSomething_Callback(hObj, evt, gui)
+warndlg('Watch out! Developer testing button. Panic!');
+
 
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 
 data = csi.data.raw;
-vox = data(:,8,7,3);
 
-disp dwakjdbnkawjdn
+% Load text file
+rt =mfilename('fullpath');
+fp = fileparts([rt '.m']);
 
-T2 = 1500; W = 0.1; shft = 0; amp = max(real(vox));
-par = [amp W shft T2];
-func = @(par,x) par(1).*sin((par(2).*x) - par(3)).* exp(-x/par(4));
-inp = 1:size(vox,1);
+[fn,fp] = uigetfile('*.txt', fp);
 
-% [fpar, R, J, covB, MSE, ErrorModel] = nlinfit(inp, real(vox)', func, par);
-fpar = polyfit(inp,real(vox)',42); fval = polyval(fpar,inp);
-figure(); plot(inp,func(par,inp) )
-figure(); plot(inp,real(vox)')
-figure(); plot(inp,fval,inp, real(vox)' )
+fid =  fopen([fp fn]);
+inp = fscanf(fid,'%s\n');
+fclose(fid);
+inp = strsplit(inp,';'); inp(end)=[];
+
+butfunc = fieldnames(gui);
+butfunc(~contains(butfunc,'button')) = [];
+
+% Process text file
+for kk = 1:size(inp,2)
+    tmp = inp{kk}; tmp = strsplit(tmp,'='); %1=func 2=inp
+    
+    inpfnc = tmp{1}; 
+    if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
+    
+    
+    qry = strcmp(butfunc, ['button_CSI_' inpfnc]);
+    if sum(qry)==0
+        switch inpfnc % Put all exceptions here
+            case 'setDomain'
+                CSI_setDomain(hObj, evt, inpvar); 
+        end
+    else
+       btn = butfunc(qry);
+       if ~isempty(btn) 
+           fnc2run = [btn{:} '_Callback'];
+           eval([ fnc2run '(hObj,evt,gui)']);
+           gui = guidata(hObj);
+       else
+           CSI_Log({'Could not parse scripted input:'},{[inpfnc ' | ' btn{:}]});
+       end
+        
+    end
+
+end
+
+
+
+
+disp lwlaedlw
+
+
 
 
 function an = sincQ(x)
