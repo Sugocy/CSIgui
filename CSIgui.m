@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, Msc.
 
-% Last Modified by GUIDE v2.5 18-Jun-2020 17:52:13
+% Last Modified by GUIDE v2.5 20-Oct-2020 15:53:25
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -739,10 +739,21 @@ function success = parse_text(fp, fn, gui)
 % Load textfile
 [csi.data.raw] = csi_readText([fp '\' fn '.txt']);
 
-% Check if loading succeeded.
+% Check if loading succeeded --> ELSE TRY JMRUI LOAD-TEXT FUNC
 if isnan(csi.data.raw)
-    CSI_Log({'Loading text-file failed.'},{''}); 
-    success = 0; return; 
+    CSI_Log({'Initial loading of text-file failed.'},...
+            {'Reading as JMRUI export text file.'}); 
+    csi.data.raw = csi_readText_jmrui([fp '\' fn '.txt']);
+    
+    if isnan(csi.data.raw)
+        success = 0; 
+        CSI_Log({'Initial and JMRUI-method loading of text-file failed.'},...
+                {''}); 
+        return; 
+    else
+        success = 1; 
+    end
+   
 else
     success = 1;
 end
@@ -12572,3 +12583,97 @@ setappdata(gui.CSIgui_main,'csi', csi);
 
 % Show nfo
 CSI_Log({'Alignment unique shift values: '}, {unique(-1.*shiftval)'});
+
+
+% --- Executes on button press in button_openAutoScript.
+function button_openAutoScript_Callback(hObj, evt, gui)
+% Load and execute autoscripting... 
+
+% Load text file
+rt =mfilename('fullpath');
+fp = fileparts([rt '.m']);
+
+[fn,fp,ind] = uigetfile('*.txt', 'defname', fp);
+if ind == 0, return; end
+
+fid =  fopen([fp fn]);
+inp = fscanf(fid,'%s\n');
+fclose(fid);
+inp = strsplit(inp,';'); inp(end)=[];
+
+butfunc = fieldnames(gui); butfunc(~contains(butfunc,'button')) = [];
+
+% Process text file
+for kk = 1:size(inp,2)
+    tmp = inp{kk}; tmp = strsplit(tmp,'='); %1=func 2=inp
+    
+    inpfnc = tmp{1}; 
+    if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
+    
+    
+    qry = strcmp(butfunc, ['button_CSI_' inpfnc]);
+    if sum(qry)==0
+        switch inpfnc % Put all exceptions here
+            case 'setDomain'
+                CSI_setDomain(hObj, evt, inpvar); 
+        end
+    else
+       btn = butfunc(qry);
+       if ~isempty(btn) 
+           fnc2run = [btn{:} '_Callback'];
+           eval([ fnc2run '(hObj,evt,gui)']);
+           gui = guidata(hObj); % Reload gui-struct...
+       else
+           CSI_Log({'Could not parse scripted input:'},...
+                   {[inpfnc ' | ' btn{:}]});
+       end
+        
+    end
+
+end
+
+
+
+% --- Executes on button press in button_CSI_delete.
+function button_CSI_delete_Callback(hObj, evt, gui)
+% Delete a part of the loaded MRS data matrix.
+
+% Create backup
+CSI_backupSet(gui, 'Before deleting data.');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get index to delete
+uans = getUserInput_Popup({'Index:'}, { csi.data.labels(2:numel(size(csi.data.raw))) } );
+if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
+ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
+
+uans = getUserInput(...
+{'Specify data index range to delete: (M:N or mutliple allowed)'},{'1'});
+if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
+tmp = strfind(uans{1},':');
+if isempty(tmp)
+    tbdeleted = str2double(strsplit(uans{1}));
+else
+    tmp = strsplit(uans{1},':');
+    tbdeleted = str2double(tmp{1}):str2double(tmp{2}); 
+end
+
+
+% Delete!
+sz = size(csi.data.raw); dimind = arrayfun(@(x) 1:x, sz, 'uniform', 0);
+tmp = dimind{ind}; tmp(tbdeleted) = []; dimind{ind} = tmp;
+csi.data.raw = csi.data.raw(dimind{:});
+
+% Store data
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Show nfo
+CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
+
+
+% --- Executes on button press in button_CSI_concatenate.
+function button_CSI_concatenate_Callback(hObject, eventdata, handles)
+% Concatenate specific dimensions of the MRS data matrix.

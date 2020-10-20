@@ -54,6 +54,7 @@ end
 fid = fopen(fp);                            % Open file ID 
 if fid == -1, data = NaN; warning('Text-file does not exist.'); return; end
 data_raw = fscanf(fid,'%f %f \n',[2 inf])'; % Read file
+if isempty(data_raw), data = NaN; return; end
 fclose(fid);                                % Close file ID
 
 %% Read data size file
