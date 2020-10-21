@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, Msc.
 
-% Last Modified by GUIDE v2.5 20-Oct-2020 15:53:25
+% Last Modified by GUIDE v2.5 21-Oct-2020 13:45:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -12675,5 +12675,100 @@ CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
 
 
 % --- Executes on button press in button_CSI_concatenate.
-function button_CSI_concatenate_Callback(hObject, eventdata, handles)
+function button_CSI_concatenate_Callback(hObj, evt, gui)
 % Concatenate specific dimensions of the MRS data matrix.
+
+
+% --- Executes on button press in button_CSI_FAdynamic.
+function button_CSI_FAdynamic_Callback(hObj, evt, gui)
+% Process FA dynamic data.
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Data
+data = csi.data.raw;
+
+% Get index to use
+uans = getUserInput_Popup({'Index:'}, ...
+                          { csi.data.labels(2:numel(size(csi.data.raw))) } );
+if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
+ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
+
+% Get xaxis data
+uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',''} );
+if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
+FAstart = str2double(uans{1});
+FAstep = str2double(uans{2});
+if ~isempty(uans{3})
+    xdat = str2double(strsplit(uans{3}));
+else
+    xdat = (FAstart:FAstep:( (FAstep.*(size(data,ind)-1) ) + FAstart));
+end
+
+% Min and max of spectrum
+mx = max(real(data)); mn = min(real(data));
+
+% Get zero crossing ...
+mxmn = abs(mn) > abs(mx);
+vals = NaN(1,size(mx,2));
+vals(mxmn==0) = mx(mxmn == 0); vals(mxmn) = mn(mxmn);
+
+
+
+% % Fit function
+% func = @(param,x) ...
+%     (param(1).*sin( (param(2).*x + param(3)))) + param(4);
+% 
+% % Initial parameters
+% init_amp = max(vals);
+% init_fre = pi./180;
+% init_per = std(vals);
+% init_off = 0;
+% 
+% % FIT SINE
+% param_init = [ init_amp , init_fre, init_per, init_off];
+% beta= nlinfit(xdat, vals, func, param_init);
+% 
+% % Get fit values
+% yfit = func(beta,xdat);
+
+% Plot polynomal and sinius and data
+par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
+
+[fitobject, gof]  = fit([0; xdat'],[0; vals'],'poly3');
+% [fitobject, gof]  = fit([ xdat'],[ vals'],'poly3');
+
+figure();
+plot(xdat, vals,'--b','LineWidth',1.5); hold on; 
+plot(fitobject);
+
+% plot(xdat, yfit,'--y','LineWidth',1.5); 
+% plot(xdat,fitval,'--g','LineWidth',1.5);
+
+
+%
+xdathr = (xdat(1):1:xdat(end));
+
+fitval_int = fitobject(xdathr);
+
+% fitval_int = interp1(xdat,fitval,xdathr,'spline');
+% plot(xdathr,fitval_int,'--c','LineWidth',1.4);
+
+hg = fitval_int > 0; lw = fitval_int < 0;
+
+hgind = find(hg,1,'last'); lwind = find(lw,1,'first');
+zero_crossing = round((hgind+lwind)./2);
+
+plot(xdathr(zero_crossing),fitval_int(zero_crossing),'om',...
+    'MarkerSize', 10,...
+    'LineWidth',2);
+text(xdathr(zero_crossing),(abs(median(vals))./2),...
+                    ['Zerocrossing: ' int2str(xdathr(zero_crossing))],...
+                    'Fontweight', 'bold','FontSize',8);
+
+plot([xdat(1) xdat(end)],[0 0], '--k','Linewidth',2);
+
+
+legend('data','Fit','Zerocrossing','Location','SouthWest');
