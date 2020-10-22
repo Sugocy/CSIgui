@@ -12683,6 +12683,7 @@ function button_CSI_concatenate_Callback(hObj, evt, gui)
 function button_CSI_FAdynamic_Callback(hObj, evt, gui)
 % Process FA dynamic data.
 
+
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
@@ -12690,85 +12691,197 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % Data
 data = csi.data.raw;
 
+                        % --- % Userinput % --- %
+
+% Get peak of interest
+[doi, doi_axis, range] = CSI_getDataAtPeak(data, csi.xaxis);
+if isnan(doi), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
+
 % Get index to use
-uans = getUserInput_Popup({'Index:'}, ...
-                          { csi.data.labels(2:numel(size(csi.data.raw))) } );
+uans = getUserInput_Popup({'Index of the FA dynamics:',...
+                           'Apply 0th-order phasing corrections:', ...
+                           'Is TR >>> T1 of the peak of interest:'},...
+                          {csi.data.labels(2:numel(size(csi.data.raw))),...
+                          {'Yes','No'},...
+                          {'No','Yes'}});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
+switch uans{2}
+    case 'Yes',phase_data = 1;
+    case 'No', phase_data = 0;
+end
+switch uans{3}
+    case 'Yes',T1Weighting = 0;
+    case 'No', T1Weighting = 1;
+end
 
-% Get xaxis data
-uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',''} );
+% Get FA dynamics data
+uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',''});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
-FAstart = str2double(uans{1});
-FAstep = str2double(uans{2});
+FAstart = str2double(uans{1}); FAstep = str2double(uans{2});
 if ~isempty(uans{3})
     xdat = str2double(strsplit(uans{3}));
 else
-    xdat = (FAstart:FAstep:( (FAstep.*(size(data,ind)-1) ) + FAstart));
+    FAstp = ((FAstep.*(size(data,ind)-1) ) + FAstart);
+    xdat = (FAstart:FAstep:FAstp);
 end
 
-% Min and max of spectrum
-mx = max(real(data)); mn = min(real(data));
 
-% Get zero crossing ...
-mxmn = abs(mn) > abs(mx);
+                        % --- % Processing % --- %
+
+% --- % PHASING
+
+% Keeps into account the negative signal after FA = 180deg;
+if phase_data
+
+    % MRSI data to cell format
+    sz = size(doi); N = sz(1);
+    cell_layout = arrayfun(@ones,...
+        ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+    doi_cell = mat2cell(doi, sz(1), cell_layout{:});
+
+    % Apply auto zerophase to each cell spectrum
+    doi_phased = cellfun(@csi_autoZeroPhase, ...
+                doi_cell, ...                              % data
+                repmat({1:N}, size(doi_cell)),...        % range
+                repmat({2},size(doi_cell)),...             % method
+                repmat({0},      size(doi_cell)),...       % plot
+                'UniformOutput', 0);      
+    doi_phased = cell2mat(doi_phased); 
+    % Spectra are in absorption mode!
+
+    mx = max(real(doi)); % find max values in peak range 
+    mn = min(real(doi)); % find min values in peak range
+
+    % --- % ZERO CROSSING #O
+    [~, mxmn] = findZeroCross(doi_phased);
+    indmin = find(mxmn==1); indmax = find(mxmn==0);
+
+    % After phasing to absorption mode...
+    % ..which spectrum has the lowest maximum signal?
+    mnph = max(real(doi_phased)); [~, lowest_max_signal_ind] = min(mnph);
+    indminPh = lowest_max_signal_ind+1:size(mnph,2);
+    indmaxPh = 1:size(mnph,2); indmaxPh(indminPh) = [];
+    if size(indmin,2) > size(indminPh,2)
+        indmin = indminPh; indmax = indmaxPh;
+    end
+
+    % I) Apply 180 degree phasechange
+    %    ...to all spectra passed zerocrossing
+    doi_min_mag = abs(doi_phased(:,indmin)); 
+    doi_min_pha = angle(doi_phased(:,indmin));
+    doi_min_pha_corr = doi_min_pha + (pi./180).*180;
+    doi_min_phased = complex(doi_min_mag.*cos(doi_min_pha_corr),...
+                             doi_min_mag.*sin(doi_min_pha_corr));
+
+    % Phased data                     
+    doi_main(:,indmax) = doi_phased(:,indmax); 
+    doi_main(:,indmin) = doi_min_phased;
+    
+else
+    doi_main = doi;
+end
+
+
+% --- % ZERO CROSSING #I
+
+% Find rough zerocrossing #II
+% This is a redo as if no phasing is selected by user, a new query for the
+% zerocrossing is necessary
+
+[zero_crossing, mxmn] = findZeroCross(doi_main);
+% indmin = find(mxmn==1); indmax = find(mxmn==0);
+    
+
+% --- % Values used for fitting
+mx = max(real(doi_main)); mn = min(real(doi_main));
 vals = NaN(1,size(mx,2));
 vals(mxmn==0) = mx(mxmn == 0); vals(mxmn) = mn(mxmn);
 
+% Add S(FA=0) = 0; to data
+vals = [0 vals]; xdat = [0 xdat];
+
+% X values at high res for zero-crossing and plot.
+xdatHR = xdat(1):1:xdat(end);
 
 
-% % Fit function
-% func = @(param,x) ...
-%     (param(1).*sin( (param(2).*x + param(3)))) + param(4);
-% 
-% % Initial parameters
-% init_amp = max(vals);
-% init_fre = pi./180;
-% init_per = std(vals);
-% init_off = 0;
-% 
-% % FIT SINE
-% param_init = [ init_amp , init_fre, init_per, init_off];
-% beta= nlinfit(xdat, vals, func, param_init);
-% 
-% % Get fit values
-% yfit = func(beta,xdat);
+% --- % FIT SINE
 
+% Fit function for sine
+func = @(param,x) ...
+    (param(1).*sind( (param(2).*x + param(3)))) + param(4);
+
+% Initial parameters
+init_amp = max(vals).*1.25; 
+init_fre = 1; %pi./180;
+init_per = std(vals);
+init_off = 0;
+
+
+% Weighting for fit.
+ww = 0.1; weights = zeros(size(xdat))+ww;
+weights(1) = ww.*50; weights(zero_crossing) = ww./10;
+if ~T1Weighting % No T1 weighting so maximum can be weighted.
+    weights(max(vals)==vals) = 8;
+end
+
+% FIT
+param_init = [ init_amp.*1.1 , init_fre, init_per, init_off];
+beta = nlinfit(xdat, vals, func, param_init,'Weights',weights);
+
+% High resolution fit-values
+fitvalHR = func(beta,xdatHR);
+
+
+% FIT POLY
 % Plot polynomal and sinius and data
-par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
+% par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
+% Fit the data and add zero at start! - always true: Signal(FA=0) = 0+noise;
+% [fobj, gof]  = fit([xdat, vals,'poly3');
+% fitval_int = fobj(xdathr);
 
-[fitobject, gof]  = fit([0; xdat'],[0; vals'],'poly3');
-% [fitobject, gof]  = fit([ xdat'],[ vals'],'poly3');
+% --- % ZERO CROSSING #FINAL
 
-figure();
-plot(xdat, vals,'--b','LineWidth',1.5); hold on; 
-plot(fitobject);
+% Closest to zero signal.
+[~,idx]= min(abs(fitvalHR));
 
-% plot(xdat, yfit,'--y','LineWidth',1.5); 
-% plot(xdat,fitval,'--g','LineWidth',1.5);
+% Find zero-crossing after the maximum signal spectrum/FAdyn
+[~, max_val_ind] = max(fitvalHR); 
+if idx < max_val_ind
+    [~, idx] = min( abs( fitvalHR(max_val_ind:end) ));
+    idx = idx + max_val_ind-1;
+end
+zero_crossing = idx;
+
+% --- % Plot
+% If there is a lot of data, this is gonna be awkward ;)
+
+figure(); subplot(2,1,1); 
+plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');hold on;
+plot(cat(1,zeros(size(doi_main,1),1),real(doi_main(:))));
 
 
-%
-xdathr = (xdat(1):1:xdat(end));
-
-fitval_int = fitobject(xdathr);
-
-% fitval_int = interp1(xdat,fitval,xdathr,'spline');
-% plot(xdathr,fitval_int,'--c','LineWidth',1.4);
-
-hg = fitval_int > 0; lw = fitval_int < 0;
-
-hgind = find(hg,1,'last'); lwind = find(lw,1,'first');
-zero_crossing = round((hgind+lwind)./2);
-
-plot(xdathr(zero_crossing),fitval_int(zero_crossing),'om',...
+subplot(2,1,2);
+plot(xdat, vals,'--ob','LineWidth',1.5); hold on; 
+plot(xdatHR,fitvalHR,'-r','Linewidth', 1.5);
+% plot(fobj);
+plot(xdatHR(zero_crossing),fitvalHR(zero_crossing),'om',...
     'MarkerSize', 10,...
     'LineWidth',2);
-text(xdathr(zero_crossing),(abs(median(vals))./2),...
-                    ['Zerocrossing: ' int2str(xdathr(zero_crossing))],...
+text(xdatHR(zero_crossing),(abs(median(vals))./2),...
+                    ['Zerocrossing: ' int2str(xdatHR(zero_crossing))],...
                     'Fontweight', 'bold','FontSize',8);
-
 plot([xdat(1) xdat(end)],[0 0], '--k','Linewidth',2);
-
-
 legend('data','Fit','Zerocrossing','Location','SouthWest');
+
+
+function [zerocross, mxmn] = findZeroCross(data)
+
+% --- % ZERO CROSSING #O
+[~, zerocross] = min(max(abs(real(data))));
+[~, max_val_ind] = max(max(real(data))); 
+if zerocross < max_val_ind
+    zerocross = findZeroCross( data(:,(max_val_ind:end)) )+ max_val_ind+1;
+end
+sz = size(data); sz(1) = [];
+mxmn = zeros(1,sz); mxmn(zerocross+1:end) = 1; mxmn = logical(mxmn);

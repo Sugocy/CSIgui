@@ -2,12 +2,14 @@ function spec = csi_autoZeroPhase(spec, poi, method, disp_on)
 % Quick and dirty method to apply zeroth order phase correcton.
 % The peak of interest can be described by a range or a single point. 
 %
-% input: spectrum, range, method, display results
+% Input:    spectrum, range, method(1|2), display results
+% Output:   spectrum phase
 %
 % Method 1: maximize the real component of the spectrum (default)
 % Method 2: match the real component to the spectrums maximum magnitude
 %
-% qhoutum2@umcutrecht.nl
+%
+% quincyvanhoutum@gmail.com
 
 % Default no visualization of data
 if nargin == 2, method = 1; disp_on = 0; end
