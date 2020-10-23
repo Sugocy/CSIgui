@@ -10,11 +10,11 @@ function varargout = CSIgui(varargin)
 % CSIgui(datafield, label);
 %
 % ------------------------------------------------------------------------
-% 2020/02 - CSIgui v2. Thesis.
+% 2020/10 - CSIgui v2.1 Pandemic.
 % Tools for quantitative MR imaging and spectroscopy for the improvement of
-% therapy evaluation in oncology.
+% therapy evaluation in oncology. doi(.org/) 10.33540/52
 %
-% Quincy van Houtum, Msc.
+% Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
 % Last Modified by GUIDE v2.5 21-Oct-2020 13:45:51
 
@@ -185,8 +185,6 @@ gui.menubar.MRSI.operations.sum = ...
 gui.menubar.MRSI.operations.avg = ...
     uimenu(gui.menubar.MRSI.operations.main, 'Label', 'Average',...
     'Enable', 'on','Callback', @button_CSI_Average_Callback);
-
-
 
 
 % 2.MRSI > Color Scaling (2D)
@@ -1105,7 +1103,7 @@ elseif isfield(nfo,'ACQAP_mm')
    csi.ori.offcenter(3) = [nfo.FH_H__mm];
 end       
     
-
+csi.nfo = nfo;
 
                 % --------- % Clean Up % --------- %
 
@@ -12693,46 +12691,148 @@ data = csi.data.raw;
 
                         % --- % Userinput % --- %
 
-% Get peak of interest
-[doi, doi_axis, range] = CSI_getDataAtPeak(data, csi.xaxis);
+% Get peak of interest - (data of interest; doi)
+doi = CSI_getDataAtPeak(data, csi.xaxis);
 if isnan(doi), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 
 % Get index to use
-uans = getUserInput_Popup({'Index of the FA dynamics:',...
-                           'Apply 0th-order phasing corrections:', ...
-                           'Is TR >>> T1 of the peak of interest:'},...
+uans = getUserInput_Popup({'Flip angle dynamics index:',...
+                           'Zeroth-order phase corrections:', ...
+                           'Fit equation:',...
+                           'Display graphs:'},...
                           {csi.data.labels(2:numel(size(csi.data.raw))),...
-                          {'Yes','No'},...
-                          {'No','Yes'}});
+                          {'Full','No','After zero-crossing'},...
+                          {'S(FA): Simple Sine',...
+                           'S(FA,TR,T1): MRS Signal equation',...
+                           'S(FA): Simple 3rd-deg polynomal'},...
+                          {'Yes','No'}});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
+
+% USER: Zeroth-order phasing
 switch uans{2}
-    case 'Yes',phase_data = 1;
+    case 'Full',phase_data = 1; 
     case 'No', phase_data = 0;
-end
-switch uans{3}
-    case 'Yes',T1Weighting = 0;
-    case 'No', T1Weighting = 1;
+    case 'After zero-crossing', phase_data = 2;
 end
 
-% Get FA dynamics data
+% USER: Fit Equation
+switch uans{3}
+    case 'S(FA): Simple Sine',               fit_method = 0;
+    case 'S(FA,TR,T1): MRS Signal equation', fit_method = 1;
+    case 'S(FA): Simple 3rd-deg polynomal',  fit_method = 2;
+end
+
+% USER: Plot
+switch uans{4}, case 'Yes', plot_data = 1; case 'No', plot_data = 0; end
+
+% USER: FA dynamics data (xaxis)
 uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',''});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 FAstart = str2double(uans{1}); FAstep = str2double(uans{2});
 if ~isempty(uans{3})
     xdat = str2double(strsplit(uans{3}));
 else
-    FAstp = ((FAstep.*(size(data,ind)-1) ) + FAstart);
-    xdat = (FAstart:FAstep:FAstp);
+    FAstp = ((FAstep.*(size(doi,ind)-1) ) + FAstart);
+    xdat  = (FAstart:FAstep:FAstp);
 end
 
+
+% USER: TR and T1?!
+if fit_method == 1
+    
+    % --- % Check if protocol nfo is available
+    if isfield(csi,'nfo')
+        if isfield(csi.nfo, 'TR')
+            if strcmpi(csi.nfo.TR, 'user defined')
+                fntmp = fieldnames(csi.nfo); 
+                TRind = find(strcmp(fntmp,'TR') == 1);
+                TR = (csi.nfo.(fntmp{TRind+1}));
+            else
+                TR = (csi.nfo.TR);
+            end
+        end
+    else
+        TR = '50';
+    end
+    
+    uans = getUserInput({'TR(ms):','T1(ms):'}, {TR,'6000'});
+    if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
+    TR = str2double(uans{1}); T1 = str2double(uans{2});
+else
+    TR = []; T1 = [];
+end
+                      % --- % Processing % --- %                
+                     
+% MRSI data to cell format
+% Each cell wMRS data with size #samples x #spectra with #spectra == #FA;
+sz = size(doi);
+cell_layout = arrayfun(@ones,...
+    ones(1,size(sz(3:end),2)),sz(3:end),'UniformOutput',0);
+doi_cell = mat2cell(doi, sz(1),sz(2), cell_layout{:});
+
+% Apply auto zerophase to each cell spectrum
+zc = cellfun( @CSI_FAdynamic, ...
+    repmat({xdat}, size(doi_cell)),...        % xdata (FA)
+    doi_cell,...                              % data
+    repmat({phase_data},size(doi_cell)),...   % phase_data
+    repmat({fit_method},size(doi_cell)),...   % fit_method
+    repmat({plot_data},size(doi_cell)),...    % plot_data
+    repmat({TR},size(doi_cell)),...           % TR  - for ratio TR/T1
+    repmat({T1},size(doi_cell)),...           % T1
+    'UniformOutput', 0);      
+
+
+
+function zc = CSI_FAdynamic(FA, data, phase_data, fit_method, plot_data, varargin)
+% Given a flip angle dynamic data set with increasing flip angle for each
+% spectrum at a specific index, this function...
+%
+% ...will return a graph with the peak signal over FA 
+% including a fit and the corresponding zero-crossing which translates 
+% to the 180deg flip angle.
+%
+% Input:
+%
+%       1. FA = Flip angles (x-axis)
+%       2. data = spectrum for each FA
+%       3. phase_data = 1 or 0; 
+%                    |phase data prior to processing yes or no  (See Ph.])
+%       4. fit_method = 0, 1 or 2;
+%                    |(1) -REQUIRES varargin(1)=TR and varargin(2)=T1;
+%                    |Sine (0) or MR signal equation (1) or Poly (2)
+%       5. plot_data
+%
+% T1.] If TR is many orders larger than the T1 of the peak metabolite in
+% question the T1 weighting in the signal over the FA will be neglible to
+% almost zero. Otherwise, the sine can be skewed without change in the zero
+% crossing of the signal trend over FA.
+% >>> If set to 1; the maximum signal(FA) ( 90deg && amlitude of sine) 
+%     will have increased weighting in the fitting algorithm.
+%
+%
+% Ph.]
+%
+%
+% fitmethod: 0 = sine, 1 = MR signal equation, 2 = 3rd-deg polynomal.
+%
+% vThesis - https://doi.org/10.1002/nbm.4178 - Use fit_method 2
+% Q. van Houtum, PhD; quincyvanhoutum@gmail.com
+
+
+if (nargin > 5) && (fit_method == 1)
+    TR = varargin{1}; T1 = varargin{2};
+end
+   
+% Ease of coding..
+xdat = FA; doi = data;
 
                         % --- % Processing % --- %
 
 % --- % PHASING
 
 % Keeps into account the negative signal after FA = 180deg;
-if phase_data
+if phase_data == 1
 
     % MRSI data to cell format
     sz = size(doi); N = sz(1);
@@ -12778,6 +12878,35 @@ if phase_data
     doi_main(:,indmax) = doi_phased(:,indmax); 
     doi_main(:,indmin) = doi_min_phased;
     
+elseif phase_data == 2
+    
+    
+     % --- % ZERO CROSSING #O
+    [~, mxmn] = findZeroCross(doi);
+    indmin = find(mxmn==1); indmax = find(mxmn==0);
+
+    % After phasing to absorption mode...
+    % ..which spectrum has the lowest maximum signal?
+    mnph = max(real(doi)); [~, lowest_max_signal_ind] = min(mnph);
+    indminPh = lowest_max_signal_ind+1:size(mnph,2);
+    indmaxPh = 1:size(mnph,2); indmaxPh(indminPh) = [];
+    if size(indmin,2) > size(indminPh,2)
+        indmin = indminPh; indmax = indmaxPh;
+    end
+
+    % I) Apply 180 degree phasechange
+    %    ...to all spectra passed zerocrossing
+    doi_min_mag = abs(doi(:,indmin)); 
+    doi_min_pha = angle(doi(:,indmin));
+    doi_min_pha_corr = doi_min_pha + (pi./180).*180;
+    doi_min_phased = complex(doi_min_mag.*cos(doi_min_pha_corr),...
+                             doi_min_mag.*sin(doi_min_pha_corr));
+
+    % Phased data                     
+    doi_main(:,indmax) = doi(:,indmax); 
+    doi_main(:,indmin) = doi_min_phased;
+    
+    
 else
     doi_main = doi;
 end
@@ -12788,58 +12917,95 @@ end
 % Find rough zerocrossing #II
 % This is a redo as if no phasing is selected by user, a new query for the
 % zerocrossing is necessary
+[~, mxmn] = findZeroCross(doi_main);
 
-[zero_crossing, mxmn] = findZeroCross(doi_main);
-% indmin = find(mxmn==1); indmax = find(mxmn==0);
-    
 
-% --- % Values used for fitting
+
+% --- % Fit Values
 mx = max(real(doi_main)); mn = min(real(doi_main));
 vals = NaN(1,size(mx,2));
 vals(mxmn==0) = mx(mxmn == 0); vals(mxmn) = mn(mxmn);
 
-% Add S(FA=0) = 0; to data
+% Add S(FA=0) = 0 to data
 vals = [0 vals]; xdat = [0 xdat];
 
 % X values at high res for zero-crossing and plot.
 xdatHR = xdat(1):1:xdat(end);
 
+% Weighting for fit: manual
+% ww = 0.1; weights = zeros(size(xdat))+ww;
+% weights(1) = ww.*50; weights(zero_crossing) = ww./10;
+% weights(max(vals)==vals) = ww.*50;
 
-% --- % FIT SINE
-
-% Fit function for sine
-func = @(param,x) ...
-    (param(1).*sind( (param(2).*x + param(3)))) + param(4);
-
-% Initial parameters
-init_amp = max(vals).*1.25; 
-init_fre = 1; %pi./180;
-init_per = std(vals);
-init_off = 0;
+% Weighting for fit: SNR
+snrw = max(abs(real(doi)))./ abs(std(real(doi)));
+weights = [max(snrw) snrw];
 
 
-% Weighting for fit.
-ww = 0.1; weights = zeros(size(xdat))+ww;
-weights(1) = ww.*50; weights(zero_crossing) = ww./10;
-if ~T1Weighting % No T1 weighting so maximum can be weighted.
-    weights(max(vals)==vals) = 8;
+if fit_method == 0
+    % --- % FIT SINE
+
+    % Fit function for sine
+    func = @(param,x) ...
+        (param(1).*sind( (param(2).*x + param(3)))) + param(4);
+
+    % Initial parameters
+    init_amp = max(vals).*1.25; 
+    init_fre = 1;
+    init_per = std(vals);
+    init_off = 0;
+
+    % FIT
+    param_init = [ init_amp.*1.1 , init_fre, init_per, init_off];
+    beta = nlinfit(xdat, vals, func, param_init,'Weights',weights);
+
+    % High resolution fit-values
+    fitvalHR = func(beta,xdatHR);
+
+elseif fit_method == 1
+    % --- % Fit MR signal equation 
+    
+    % Ratio TR/T1
+    rat = (TR.*10^-3)./(T1.*10^-3);
+
+    % Fit function for MR signal: par(1:2) = [Amplitude Period]
+    func = @(par, FA) par(1).*(sind(FA + par(2)) .* ...
+        ( (1-exp(-1.*rat) )  ./ ( 1 - exp(-1.*rat).*cosd(FA + par(2))) ));
+    
+    % Fit function for MR signal: par(1:2) = [Amplitude Period RatioTR/T1]
+    func = @(par, FA) par(1).*(sind(FA + par(2)) .* ...
+        ( (1-exp(-1.*par(3)) )  ./ ( 1 - exp(-1.*par(3)).*cosd(FA + par(2))) ));
+    
+        % Initial parameters
+    init_amp = max(vals).*2; 
+    init_per = std(vals);
+    init_rat = rat;
+    
+    % FIT
+    param_init = [ init_amp.*1.1 init_per init_rat];
+    [beta, R, J] = nlinfit(xdat, vals, func, param_init,'Weights',weights);
+    
+    % Statistics
+    ratio_CI = nlparci(beta,R,'jacobian',J);
+    T1_fit = (TR./beta(3)); T1_CI = sort(TR./ratio_CI(3,:));
+    
+    T1_fit
+    T1_CI
+    
+    % High resolution fit-values
+    fitvalHR = func(beta,xdatHR);
+
+
+elseif fit_method == 2
+    % --- % FIT POLY
+    
+    % Plot polynomal and sinius and data
+    par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
+    % Fit the data and add zero at start! - always true: Signal(FA=0) = 0+noise;
+    [fobj, gof] = fit(xdat, vals,'poly3');
+    fitval_int = fobj(xdathr);
+    
 end
-
-% FIT
-param_init = [ init_amp.*1.1 , init_fre, init_per, init_off];
-beta = nlinfit(xdat, vals, func, param_init,'Weights',weights);
-
-% High resolution fit-values
-fitvalHR = func(beta,xdatHR);
-
-
-% FIT POLY
-% Plot polynomal and sinius and data
-% par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
-% Fit the data and add zero at start! - always true: Signal(FA=0) = 0+noise;
-% [fobj, gof]  = fit([xdat, vals,'poly3');
-% fitval_int = fobj(xdathr);
-
 % --- % ZERO CROSSING #FINAL
 
 % Closest to zero signal.
@@ -12853,26 +13019,34 @@ if idx < max_val_ind
 end
 zero_crossing = idx;
 
+
+% --- % Output
+zc = zero_crossing;
+
 % --- % Plot
 % If there is a lot of data, this is gonna be awkward ;)
 
-figure(); subplot(2,1,1); 
-plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');hold on;
-plot(cat(1,zeros(size(doi_main,1),1),real(doi_main(:))));
+if plot_data
+
+    figure(); subplot(2,1,1); 
+    plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');hold on;
+    plot(cat(1,zeros(size(doi_main,1),1),real(doi_main(:))));
 
 
-subplot(2,1,2);
-plot(xdat, vals,'--ob','LineWidth',1.5); hold on; 
-plot(xdatHR,fitvalHR,'-r','Linewidth', 1.5);
-% plot(fobj);
-plot(xdatHR(zero_crossing),fitvalHR(zero_crossing),'om',...
-    'MarkerSize', 10,...
-    'LineWidth',2);
-text(xdatHR(zero_crossing),(abs(median(vals))./2),...
+    subplot(2,1,2);
+    plot(xdat, vals,'--ob','LineWidth',1.5); hold on; 
+    plot(xdatHR,fitvalHR,'-r','Linewidth', 1.5);
+    % plot(fobj);
+    plot(xdatHR(zero_crossing),fitvalHR(zero_crossing),'om',...
+        'MarkerSize', 10,...
+        'LineWidth',2);
+    text(xdatHR(zero_crossing),(abs(median(vals))./2),...
                     ['Zerocrossing: ' int2str(xdatHR(zero_crossing))],...
-                    'Fontweight', 'bold','FontSize',8);
-plot([xdat(1) xdat(end)],[0 0], '--k','Linewidth',2);
-legend('data','Fit','Zerocrossing','Location','SouthWest');
+                     'Fontweight', 'bold','FontSize',8);
+    plot([xdat(1) xdat(end)],[0 0], '--k','Linewidth',2);
+    legend('data','Fit','Zerocrossing','Location','SouthWest');
+
+end
 
 
 function [zerocross, mxmn] = findZeroCross(data)
