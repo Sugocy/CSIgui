@@ -12675,6 +12675,58 @@ CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
 % --- Executes on button press in button_CSI_concatenate.
 function button_CSI_concatenate_Callback(hObj, evt, gui)
 % Concatenate specific dimensions of the MRS data matrix.
+% Create backup
+CSI_backupSet(gui, 'Before deleting data.');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get indexes to merge
+uans = getUserInput_Popup({'Dimension to merge #1:','Dimension to merge #2:'},...
+                          { csi.data.labels(2:numel(size(csi.data.raw))),...
+                            csi.data.labels(2:numel(size(csi.data.raw)))} );
+if isempty(uans), CSI_Log({'Aborted concatening data.'},{''}); return; end
+ind1 = find(strcmp(uans{1},csi.data.labels)); lab1 = uans{1};
+ind2 = find(strcmp(uans{2},csi.data.labels)); lab2 = uans{2};
+if isequal(ind1,ind2), CSI_Log({'Cant merge the same indexes!'},{''});return; end
+
+% Merge!
+sz = size(csi.data.raw); 
+nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
+
+sznew = sz;
+sznew(ind1) = sz(ind1)+sz(ind2);
+sznew(ind2) = [];
+
+
+tmp = [];
+nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
+for qq = 1:ind2
+    
+    for kk = 1:ind1
+        nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
+        
+        nDimC{ind2} = qq;
+        cat(ind1, csi.data.raw(nDimC{:}), csi.data.raw(nDimC{:}))
+        
+        
+    end
+    
+end
+
+a = csi.data.raw;
+
+csi.data.raw = reshape(csi.data.raw,sznew);
+prod(sz)
+% Store data
+setappdata(gui.CSIgui_main,'csi', csi);
+
+
+
+% Show nfo
+CSI_Log({'Merged data (dimension|index): '}, ...
+    {[lab1 ' & ' lab2 ' | ' int2str(ind1) ' & ' int2str(ind1)]});
 
 
 % --- Executes on button press in button_CSI_FAdynamic.
@@ -13002,8 +13054,8 @@ elseif fit_method == 2
     % Plot polynomal and sinius and data
     par = polyfit(xdat, vals,3); % fitval = polyval(par,xdat);
     % Fit the data and add zero at start! - always true: Signal(FA=0) = 0+noise;
-    [fobj, gof] = fit(xdat, vals,'poly3');
-    fitval_int = fobj(xdathr);
+    [fobj, ~] = fit(xdat, vals,'poly3');
+    fitvalHR = fobj(xdathr);
     
 end
 % --- % ZERO CROSSING #FINAL
