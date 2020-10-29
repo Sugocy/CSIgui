@@ -12676,7 +12676,7 @@ CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
 function button_CSI_concatenate_Callback(hObj, evt, gui)
 % Concatenate specific dimensions of the MRS data matrix.
 % Create backup
-CSI_backupSet(gui, 'Before deleting data.');
+CSI_backupSet(gui, 'Before concatenating data.');
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -12693,40 +12693,25 @@ if isequal(ind1,ind2), CSI_Log({'Cant merge the same indexes!'},{''});return; en
 
 % Merge!
 sz = size(csi.data.raw); 
-nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
-
-sznew = sz;
-sznew(ind1) = sz(ind1)+sz(ind2);
-sznew(ind2) = [];
-
-
-tmp = [];
-nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
-for qq = 1:ind2
-    
-    for kk = 1:ind1
-        nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0)
-        
-        nDimC{ind2} = qq;
-        cat(ind1, csi.data.raw(nDimC{:}), csi.data.raw(nDimC{:}))
-        
-        
-    end
-    
+sznew = sz; sznew(ind1) = sz(ind2).*sz(ind1); sznew(ind2) = 1;
+nDimC = cellfun(@(x) 1:x, num2cell(sz),'UniformOutput',0); tmp = [];
+for aa = 1:sz(ind2)
+    tmpind = nDimC; tmpind{ind2} = aa;
+    if aa == 1
+        tmp = csi.data.raw(tmpind{:});
+    else
+        tmp = cat(ind1,tmp,csi.data.raw(tmpind{:}));
+    end    
 end
+csi.data.dim = sznew; csi.data.raw = tmp;
 
-a = csi.data.raw;
-
-csi.data.raw = reshape(csi.data.raw,sznew);
-prod(sz)
 % Store data
 setappdata(gui.CSIgui_main,'csi', csi);
 
 
-
 % Show nfo
 CSI_Log({'Merged data (dimension|index): '}, ...
-    {[lab1 ' & ' lab2 ' | ' int2str(ind1) ' & ' int2str(ind1)]});
+    {[lab1 ' & ' lab2 ' | ' int2str(ind1) ' & ' int2str(ind2)]});
 
 
 % --- Executes on button press in button_CSI_FAdynamic.
@@ -12747,16 +12732,20 @@ data = csi.data.raw;
 doi = CSI_getDataAtPeak(data, csi.xaxis);
 if isnan(doi), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 
+
+
 % Get index to use
 uans = getUserInput_Popup({'Flip angle dynamics index:',...
                            'Zeroth-order phase corrections:', ...
                            'Fit equation:',...
+                           'Add data point S(FA=0) = 0:',...
                            'Display graphs:'},...
                           {csi.data.labels(2:numel(size(csi.data.raw))),...
                           {'Full','No','After zero-crossing'},...
                           {'S(FA): Simple Sine',...
                            'S(FA,TR,T1): MRS Signal equation',...
                            'S(FA): Simple 3rd-deg polynomal'},...
+                          {'Yes','No'},...
                           {'Yes','No'}});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
@@ -12775,11 +12764,20 @@ switch uans{3}
     case 'S(FA): Simple 3rd-deg polynomal',  fit_method = 2;
 end
 
+% USER: Add zero@zero
+switch uans{4}, case 'Yes', add_zero = 1; case 'No', add_zero = 0; end
+
 % USER: Plot
-switch uans{4}, case 'Yes', plot_data = 1; case 'No', plot_data = 0; end
+switch uans{5}, case 'Yes', plot_data = 1; case 'No', plot_data = 0; end
 
 % USER: FA dynamics data (xaxis)
-uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',''});
+if isfield(csi.xaxis,'FA')
+    FAdef = int2str(csi.xaxis.FA);
+else
+    FAdef = '';
+end
+
+uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',FAdef});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 FAstart = str2double(uans{1}); FAstep = str2double(uans{2});
 if ~isempty(uans{3})
@@ -12788,6 +12786,10 @@ else
     FAstp = ((FAstep.*(size(doi,ind)-1) ) + FAstart);
     xdat  = (FAstart:FAstep:FAstp);
 end
+
+csi.xaxis.FA = xdat; % Store xaxis data.
+setappdata(gui.CSIgui_main,'csi',csi);   
+
 
 
 % USER: TR and T1?!
@@ -12824,19 +12826,31 @@ cell_layout = arrayfun(@ones,...
 doi_cell = mat2cell(doi, sz(1),sz(2), cell_layout{:});
 
 % Apply auto zerophase to each cell spectrum
-zc = cellfun( @CSI_FAdynamic, ...
+outp = cellfun( @CSI_FAdynamic, ...
     repmat({xdat}, size(doi_cell)),...        % xdata (FA)
     doi_cell,...                              % data
     repmat({phase_data},size(doi_cell)),...   % phase_data
     repmat({fit_method},size(doi_cell)),...   % fit_method
+    repmat({add_zero},size(doi_cell)),...     % Add S(FA=0)=0;
     repmat({plot_data},size(doi_cell)),...    % plot_data
     repmat({TR},size(doi_cell)),...           % TR  - for ratio TR/T1
     repmat({T1},size(doi_cell)),...           % T1
     'UniformOutput', 0);      
 
+% Display output
+fns = fieldnames(outp{1});
+
+for kk = 1:size(outp,1)
+    for li = 1:size(fns,1)
+        tmp = outp{kk};
+        CSI_Log({[fns{li} ': ' ] },{tmp.(fns{li})});
+    end
+end
 
 
-function zc = CSI_FAdynamic(FA, data, phase_data, fit_method, plot_data, varargin)
+
+function outp = CSI_FAdynamic(FA, data, phase_data, fit_method, add_zero, ...
+    plot_data, varargin)
 % Given a flip angle dynamic data set with increasing flip angle for each
 % spectrum at a specific index, this function...
 %
@@ -12846,22 +12860,20 @@ function zc = CSI_FAdynamic(FA, data, phase_data, fit_method, plot_data, varargi
 %
 % Input:
 %
-%       1. FA = Flip angles (x-axis)
-%       2. data = spectrum for each FA
-%       3. phase_data = 1 or 0; 
+%       1. FA           = Flip angles (x-axis)
+%       2. data         = spectrum for each FA
+%       3. phase_data   = 1 or 0; 
 %                    |phase data prior to processing yes or no  (See Ph.])
-%       4. fit_method = 0, 1 or 2;
+%       4. fit_method   = 0, 1 or 2;
 %                    |(1) -REQUIRES varargin(1)=TR and varargin(2)=T1;
 %                    |Sine (0) or MR signal equation (1) or Poly (2)
+%       5. add_zero     = Adds S(FA=0) = 0 to data before fitting.
 %       5. plot_data
 %
 % T1.] If TR is many orders larger than the T1 of the peak metabolite in
 % question the T1 weighting in the signal over the FA will be neglible to
 % almost zero. Otherwise, the sine can be skewed without change in the zero
 % crossing of the signal trend over FA.
-% >>> If set to 1; the maximum signal(FA) ( 90deg && amlitude of sine) 
-%     will have increased weighting in the fitting algorithm.
-%
 %
 % Ph.]
 %
@@ -12872,7 +12884,7 @@ function zc = CSI_FAdynamic(FA, data, phase_data, fit_method, plot_data, varargi
 % Q. van Houtum, PhD; quincyvanhoutum@gmail.com
 
 
-if (nargin > 5) && (fit_method == 1)
+if (nargin > 6) && (fit_method == 1)
     TR = varargin{1}; T1 = varargin{2};
 end
    
@@ -12902,8 +12914,8 @@ if phase_data == 1
     doi_phased = cell2mat(doi_phased); 
     % Spectra are in absorption mode!
 
-    mx = max(real(doi)); % find max values in peak range 
-    mn = min(real(doi)); % find min values in peak range
+%     mx = max(real(doi)); % find max values in peak range 
+%     mn = min(real(doi)); % find min values in peak range
 
     % --- % ZERO CROSSING #O
     [~, mxmn] = findZeroCross(doi_phased);
@@ -12978,8 +12990,10 @@ mx = max(real(doi_main)); mn = min(real(doi_main));
 vals = NaN(1,size(mx,2));
 vals(mxmn==0) = mx(mxmn == 0); vals(mxmn) = mn(mxmn);
 
-% Add S(FA=0) = 0 to data
-vals = [0 vals]; xdat = [0 xdat];
+if add_zero
+    % Add S(FA=0) = 0 to data
+    vals = [0 vals]; xdat = [0 xdat];
+end
 
 % X values at high res for zero-crossing and plot.
 xdatHR = xdat(1):1:xdat(end);
@@ -12991,7 +13005,7 @@ xdatHR = xdat(1):1:xdat(end);
 
 % Weighting for fit: SNR
 snrw = max(abs(real(doi)))./ abs(std(real(doi)));
-weights = [max(snrw) snrw];
+if add_zero, weights = [max(snrw) snrw]; else, weights = snrw; end
 
 
 if fit_method == 0
@@ -13027,12 +13041,12 @@ elseif fit_method == 1
     % Fit function for MR signal: par(1:2) = [Amplitude Period RatioTR/T1]
     func = @(par, FA) par(1).*(sind(FA + par(2)) .* ...
         ( (1-exp(-1.*par(3)) )  ./ ( 1 - exp(-1.*par(3)).*cosd(FA + par(2))) ));
-    
-        % Initial parameters
+
+    % Initial parameters
     init_amp = max(vals).*2; 
     init_per = std(vals);
-    init_rat = rat;
-    
+    init_rat = rat; 
+
     % FIT
     param_init = [ init_amp.*1.1 init_per init_rat];
     [beta, R, J] = nlinfit(xdat, vals, func, param_init,'Weights',weights);
@@ -13040,9 +13054,7 @@ elseif fit_method == 1
     % Statistics
     ratio_CI = nlparci(beta,R,'jacobian',J);
     T1_fit = (TR./beta(3)); T1_CI = sort(TR./ratio_CI(3,:));
-    
-    T1_fit
-    T1_CI
+    % Are used for output struct outp
     
     % High resolution fit-values
     fitvalHR = func(beta,xdatHR);
@@ -13073,7 +13085,14 @@ zero_crossing = idx;
 
 
 % --- % Output
-zc = zero_crossing;
+outp.zerocrossing = zero_crossing;
+
+outpstr = {'T1_fit','T1_CI'};
+for kk = 1:size(outpstr,2)
+    if exist(outpstr{kk},'var')
+        outp.(outpstr{kk}) = eval(outpstr{kk});
+    end
+end
 
 % --- % Plot
 % If there is a lot of data, this is gonna be awkward ;)
