@@ -12839,7 +12839,7 @@ outp = cellfun( @CSI_FAdynamic, ...
 
 % Display output
 fns = fieldnames(outp{1});
-
+outp{1}
 for kk = 1:size(outp,1)
     for li = 1:size(fns,1)
         tmp = outp{kk};
@@ -13081,7 +13081,7 @@ if idx < max_val_ind
     [~, idx] = min( abs( fitvalHR(max_val_ind:end) ));
     idx = idx + max_val_ind-1;
 end
-zero_crossing = idx;
+zero_crossing = xdatHR(idx);
 
 
 % --- % Output
@@ -13098,25 +13098,22 @@ end
 % If there is a lot of data, this is gonna be awkward ;)
 
 if plot_data
-
     figure(); subplot(2,1,1); 
     plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');hold on;
     plot(cat(1,zeros(size(doi_main,1),1),real(doi_main(:))));
-
-
+    
     subplot(2,1,2);
     plot(xdat, vals,'--ob','LineWidth',1.5); hold on; 
     plot(xdatHR,fitvalHR,'-r','Linewidth', 1.5);
     % plot(fobj);
-    plot(xdatHR(zero_crossing),fitvalHR(zero_crossing),'om',...
+    plot(zero_crossing,fitvalHR(zero_crossing),'om',...
         'MarkerSize', 10,...
         'LineWidth',2);
-    text(xdatHR(zero_crossing),(abs(median(vals))./2),...
-                    ['Zerocrossing: ' int2str(xdatHR(zero_crossing))],...
+    text(zero_crossing,(abs(median(vals))./2),...
+                    ['Zerocrossing: ' num2str(zero_crossing)],...
                      'Fontweight', 'bold','FontSize',8);
     plot([xdat(1) xdat(end)],[0 0], '--k','Linewidth',2);
     legend('data','Fit','Zerocrossing','Location','SouthWest');
-
 end
 
 
