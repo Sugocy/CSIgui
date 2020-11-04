@@ -12838,10 +12838,10 @@ outp = cellfun( @CSI_FAdynamic, ...
     'UniformOutput', 0);      
 
 % Display output
+outp = squeeze(outp); outp = reshape(outp,[],1);
 fns = fieldnames(outp{1});
-outp{1}
-for kk = 1:size(outp,1)
-    for li = 1:size(fns,1)
+for kk = 1:size(outp,1) % Outp loop
+    for li = 1:size(fns,1) % Field loop
         tmp = outp{kk};
         CSI_Log({[fns{li} ': ' ] },{tmp.(fns{li})});
     end
@@ -13004,7 +13004,7 @@ xdatHR = xdat(1):1:xdat(end);
 % weights(max(vals)==vals) = ww.*50;
 
 % Weighting for fit: SNR
-snrw = max(abs(real(doi)))./ abs(std(real(doi)));
+snrw = max(abs(real(doi_main)))./ abs(std(real(doi_main)));
 if add_zero, weights = [max(snrw) snrw]; else, weights = snrw; end
 
 
@@ -13049,11 +13049,12 @@ elseif fit_method == 1
 
     % FIT
     param_init = [ init_amp.*1.1 init_per init_rat];
-    [beta, R, J] = nlinfit(xdat, vals, func, param_init,'Weights',weights);
+    [beta, R, J,~, MSE] = nlinfit(xdat, vals, func, param_init,'Weights',weights);
     
     % Statistics
     ratio_CI = nlparci(beta,R,'jacobian',J);
     T1_fit = (TR./beta(3)); T1_CI = sort(TR./ratio_CI(3,:));
+    
     % Are used for output struct outp
     
     % High resolution fit-values
@@ -13087,7 +13088,7 @@ zero_crossing = xdatHR(idx);
 % --- % Output
 outp.zerocrossing = zero_crossing;
 
-outpstr = {'T1_fit','T1_CI'};
+outpstr = {'T1_fit','T1_CI', 'MSE'};
 for kk = 1:size(outpstr,2)
     if exist(outpstr{kk},'var')
         outp.(outpstr{kk}) = eval(outpstr{kk});
@@ -13101,6 +13102,7 @@ if plot_data
     figure(); subplot(2,1,1); 
     plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');hold on;
     plot(cat(1,zeros(size(doi_main,1),1),real(doi_main(:))));
+    legend('Original','Phased');
     
     subplot(2,1,2);
     plot(xdat, vals,'--ob','LineWidth',1.5); hold on; 
