@@ -347,6 +347,11 @@ gui.menubar.About.help = ...
 gui.menubar.About.about = ...
     uimenu(gui.menubar.About.main,'Label', 'About', 'Separator','on',...
         'Callback', @openAbout, 'Enable', 'On');
+    
+gui.menubar.About.github = ...
+    uimenu(gui.menubar.About.main,'Label', 'Github', 'Separator','off',...
+        'Callback', @openGithub, 'Enable', 'On');
+    
 
 end
 
@@ -1284,7 +1289,9 @@ set(aboutfig, 'position', [x y w h],'Unit','Normalized');
         'HorizontalAlignment','Left');
             
 
-    
+function openGithub(hObj,~,~)
+web('https://github.com/Sugocy/CSIgui', '-browser');
+
     
 % getUserInput EDITS GUI % --------------------------------------------- %
 % ---------------------------------------------------------------------- %
