@@ -572,7 +572,7 @@ elseif strcmp(ext,'.list') || strcmp(ext,'.data')              % LIST/DATA
     % Calculate xaxis data struct
     CSI_2D_Scaling_calc_xaxis(hObj, [], 1); % Automatic
     % Data domain set to 2 = frequency
-    domain = 2; 
+    domain = 3; 
     
 elseif strcmp(ext,'.mat')                                      % MAT
     
@@ -588,8 +588,8 @@ elseif strcmpi(ext,'.sdat') || strcmpi(ext,'.spar')            % SDAT/SPAR
     % Calculate xaxis data struct
     CSI_2D_Scaling_calc_xaxis(hObj,[],1);
     
-    % Data domain set to 2 = frequency
-    domain = 2; 
+    % Data domain set to 1 = none 2 = frequency 3 = time
+    domain = 3; 
     
 elseif strcmpi(ext, '.txt')                                    % TEXT
     
@@ -607,7 +607,7 @@ elseif strcmpi(ext,'userinput')                                % USER
     success = parse_userinput(gui);
     
     % Data domain set to 2 = frequency
-    domain = 2; 
+    domain = 1; 
     
 else                                                           % ERROR 
     % Update LOG and return
@@ -631,17 +631,17 @@ gui = guidata(hObj);
 
                            % --- GUI updating --- %
                            
-% Set domain
+% Set domain - MRS data
 if exist('domain', 'var')
     if     domain == 2, evt.Source.Text = 'Frequency';        
     elseif domain == 3, evt.Source.Text = 'Time';   
     end
-    gui.popup_domain.Value = domain; 
+    gui.popup_domain.Value = domain;  guidata(hObj,gui); 
     CSI_setDomain(hObj,evt);
 end
 
 % Fresh gui data
-guidata(hObj,gui);  
+gui = guidata(hObj);  
 
 % Update visuals              
 maxL = 40; % Max name-length
@@ -745,7 +745,7 @@ function success = parse_text(fp, fn, gui)
 % Check if loading succeeded --> ELSE TRY JMRUI LOAD-TEXT FUNC
 if isnan(csi.data.raw)
     CSI_Log({'Initial loading of text-file failed.'},...
-            {'Reading as JMRUI export text file.'}); 
+            {'Reading data as a JMRUI-exported text-file.'}); 
     csi.data.raw = csi_readText_jmrui([fp '\' fn '.txt']);
     
     if isnan(csi.data.raw)
@@ -1287,9 +1287,9 @@ set(aboutfig, 'position', [x y w h],'Unit','Normalized');
         'position', [0.1 0.1 0.8 0.8], 'String', about_text,...
         'ForegroundColor', clr_tx, 'BackgroundColor', clr_bg,...
         'HorizontalAlignment','Left');
-            
-
-function openGithub(hObj,~,~)
+          
+% --- Execute by user click in menubar
+function openGithub(~,~,~)
 web('https://github.com/Sugocy/CSIgui', '-browser');
 
     
@@ -2317,7 +2317,7 @@ switch uans{1}
     case 'Peak'
         
         % Get peak of interest
-        doi = CSI_getDataAtPeak(data, csi.xaxis);
+        doi = CSI_getDataAtPeak(data, csi.xaxis,[],gui);
         if isnan(doi), return; end
                 
         switch uans{2}
@@ -2325,7 +2325,7 @@ switch uans{1}
             case 'per voxel'
                 
                 % Peak maximum to normalize to.
-                max_val = max(real(doi),[],1); 
+                max_val = num2cell(max(real(doi),[],1)); 
                 % Normalize
                 datac = cellfun(@(x,y) x./y, datac, max_val, 'Uniform', 0);
                 
@@ -3523,7 +3523,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % USER INPUT % ---------------------------------- %
 
 % Get peak of interest.
-[poi] = CSI_getPeakOfInterest(csi.xaxis);
+[poi] = CSI_getPeakOfInterest(csi.xaxis, gui);
 if isempty(poi), return; end
 
 % Get method of auto-phasing
@@ -4259,7 +4259,7 @@ data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
 % SELECT PEAK% -------------------------------- %
 
 if selectPeak
-    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis,[],gui);
 else
     doi   = csi.data.raw;
     range = [csi.xaxis.none(1) csi.xaxis.none(end)]; 
@@ -4414,7 +4414,7 @@ csi = getappdata(gui.CSIgui_main,'csi');
            % POI, mask-size, snr-method & display-method
 
 % POI: Peak of SNR
-range_none = CSI_getPeakOfInterest(csi.xaxis);
+range_none = CSI_getPeakOfInterest(csi.xaxis, gui);
 if isempty(range_none), return; end
 
 % SNR Noise mask
@@ -8695,17 +8695,21 @@ end
 
 
 % --- Get data at peak of interest
-function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range)
+function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range, gui)
 % Input 1: Spec is the full spectrum;
 % Input 2: xaxis can be empty and a arbitrary range will be used otherwise 
 %          a ppm-axis for the spec data is expected.
 % Input 3: range can be empty and the user will be asked to enter a range
 %          otherwise the index range is requested (low to high - not ppm)
 
+if nargin < 4 % No GUI input
+    gui = [];
+end
+
 % Get peak of interest from user if absent
-if nargin <= 2
+if nargin <= 2 || isempty(range)
     % Get range from user.
-    range = CSI_getPeakOfInterest(xaxis); 
+    range = CSI_getPeakOfInterest(xaxis,gui); 
     
     % If no range is found
     if isempty(range)
@@ -8728,22 +8732,42 @@ else,                    doi_axis = range(1):range(2);
 end
 
 % --- Get peak of interest from user
-function range = CSI_getPeakOfInterest(xaxis, poi_tag)
+function range = CSI_getPeakOfInterest(xaxis, gui)
 % Returns a peak of interest from the user using the xaxis field of CSIgui.
 % 
 % Output: unitless index range, not the ppm range.
 % This output can be used as an index in xaxis.unitless or ppm;
 
-if nargin == 1, poi_tag = ''; end
+if nargin == 1, poi_tag = 'noGui'; gui = []; end
+if ischar(gui), poi_tag = gui; gui = []; else, poi_tag = ''; end
+
+% Check for previous POI value setting
+poi_def = NaN;
+if isstruct(gui)
+    if isappdata(gui.CSIgui_main,'CSIsettings')
+        CSIsettings = getappdata(gui.CSIgui_main, 'CSIsettings')
+        if isfield(CSIsettings,'poi')
+            poi_def = CSIsettings.poi;
+        end
+    end
+end
 
 if isfield(xaxis, 'ppm')
-    ppm = 1;
-    unit_str = '(ppm):'; unit_ans = [xaxis.ppm(1) xaxis.ppm(end)];
+    ppm = 1; unit_str = '(ppm):'; 
+    if isnan(poi_def)
+        unit_ans = [xaxis.ppm(1) xaxis.ppm(end)];
+    else
+        unit_ans = xaxis.ppm(poi_def);
+    end
 else
-    ppm = 0;
-    unit_str = '(Unitless):'; unit_ans = [1 xaxis.none(end)+1];
+    ppm = 0; unit_str = '(Unitless):'; 
+    if isnan(poi_def)
+        unit_ans = [1 xaxis.none(end)+1];
+    else
+        unit_ans = poi_def;
+    end
 end
-unit_str = ['Peak range of interest ' unit_str ' ' poi_tag];
+unit_str = ['Peak range of interest ' unit_str ': ' poi_tag];
 
 % Get range from user
 uans = getUserInput({unit_str},{unit_ans});
@@ -8763,6 +8787,21 @@ end
 
 % Sort the range from low to high
 range = poi; 
+
+
+% --- CSIsettings --- %
+% Store selected POI range! 
+% If POI range is required again, this will be the default answer!
+if (~isempty(gui)) && (isstruct(gui))
+    if isappdata(gui.CSIgui_main,'CSIsettings')
+        CSIsettings = getappdata(gui.CSIgui_main,'CSIsettings');
+    else
+        CSIsettings = struct;
+    end
+    CSIsettings.poi = range;
+    setappdata(gui.CSIgui_main,'CSIsettings',CSIsettings);
+end
+
 
 % --- Convert FID/ECHO poi to FID/ECHO poi 
 function [doi, doi_axis, doi_range] = CSI_getDataAtPeak_Stored(range, gui)
@@ -8810,7 +8849,7 @@ end
 
 % Get peak of interest data using converted range
 [doi, doi_axis, doi_range] = ...
-    CSI_getDataAtPeak(data, xaxis_stored, range_converted);
+    CSI_getDataAtPeak(data, xaxis_stored, range_converted, gui);
 
 
 
@@ -12615,8 +12654,13 @@ for kk = 1:size(inp,2)
     inpfnc = tmp{1}; 
     if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
     
+    if strcmp('plotCSI',inpfnc)% Make this an exception list!
+        qrystr = ['button_' inpfnc];
+    else
+        qrystr = ['button_CSI_' inpfnc];
+    end
+    qry = strcmp(butfunc, qrystr);
     
-    qry = strcmp(butfunc, ['button_CSI_' inpfnc]);
     if sum(qry)==0
         switch inpfnc % Put all exceptions here
             case 'setDomain'
@@ -13061,13 +13105,11 @@ elseif fit_method == 1
     % Statistics
     ratio_CI = nlparci(beta,R,'jacobian',J);
     T1_fit = (TR./beta(3)); T1_CI = sort(TR./ratio_CI(3,:));
-    
-    % Are used for output struct outp
+    % The vars ARE used as outp icm with eval-func ... I dare!
     
     % High resolution fit-values
     fitvalHR = func(beta,xdatHR);
-
-
+    
 elseif fit_method == 2
     % --- % FIT POLY
     
