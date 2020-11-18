@@ -2309,15 +2309,15 @@ sz = size(dataR); cell_layout = ...
 arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
 
 % Create cell of data.
-datac = mat2cell(dataR, sz(1), cell_layout{:});
-
+datacR = mat2cell(dataR, sz(1), cell_layout{:});
+datacI = mat2cell(dataI, sz(1), cell_layout{:});
 
 
 switch uans{1}
     case 'Peak'
         
         % Get peak of interest
-        doi = CSI_getDataAtPeak(data, csi.xaxis,[],gui);
+        doi = CSI_getDataAtPeak(data, csi.xaxis);
         if isnan(doi), return; end
                 
         switch uans{2}
@@ -2325,17 +2325,21 @@ switch uans{1}
             case 'per voxel'
                 
                 % Peak maximum to normalize to.
-                max_val = num2cell(max(real(doi),[],1)); 
-                % Normalize
-                datac = cellfun(@(x,y) x./y, datac, max_val, 'Uniform', 0);
+                max_valR = num2cell(max(real(doi),[],1)); 
+                max_valI = num2cell(max(imag(doi),[],1));
+                datacR = cellfun(@(x,y) x./y, datacR, max_valR, 'Uniform', 0);
+                datacI = cellfun(@(x,y) x./y, datacI, max_valI, 'Uniform', 0);
                 
             case 'in volume'
                   
                 
                 % Peak maximum in volume to normalize to.
-                max_val = max(real(doi(:)),[],1); 
-                datac = cellfun(@(x,y) x./y, ...
-                    datac,repmat({max_val},size(datac)), 'Uniform', 0);
+                max_valR = max(real(doi(:)),[],1); 
+                datacR = cellfun(@(x,y) x./y, ...
+                    datacR,repmat({max_valR},size(datacR)), 'Uniform', 0);
+                max_valI = max(imag(doi(:)),[],1); 
+                datacI = cellfun(@(x,y) x./y, ...
+                    datacI,repmat({max_valI},size(datacI)), 'Uniform', 0);
                 
         end
     case 'Maximum'
@@ -2344,13 +2348,16 @@ switch uans{1}
             case 'per voxel'
                 
                 % Normalize to maximum of each voxel
-                datac = cellfun(@(x) x./max(x(:)), datac, 'Uniform', 0);
+                datacR = cellfun(@(x) x./max(x(:)), datacR, 'Uniform', 0);
+                datacI = cellfun(@(x) x./max(x(:)), datacI, 'Uniform', 0);
                 
             case 'in volume'
                 
                 % Normalize to maximum in volume
-                datac = cellfun(@(x,y) x./max(y), datac, ...
-                    repmat({max(dataR(:))},size(datac)), 'Uniform', 0);
+                datacR = cellfun(@(x,y) x./max(y), datacR, ...
+                    repmat({max(dataR(:))},size(datacR)), 'Uniform', 0);
+                datacI = cellfun(@(x,y) x./max(y), datacI, ...
+                    repmat({max(dataI(:))},size(datacI)), 'Uniform', 0);
         end
         
     case 'Noise'
@@ -2367,21 +2374,25 @@ switch uans{1}
 
                 % Normalize to noise per voxel
                 % Noise = absolute std of last N samples
-                noise = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
-                    datac,'Uniform',0);
-                datac = cellfun(@(x,y) x./y, datac, noise, 'Uniform', 0);
+                noiseR = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
+                    datacR,'Uniform',0);
+                datacR = cellfun(@(x,y) x./y, datacR, noiseR, 'Uniform', 0);
 
+                noiseI = cellfun(@(x) abs(std(x(end-msksz+1:end))), ...
+                    datacI,'Uniform',0);
+                datacI = cellfun(@(x,y) x./y, datacI, noiseI, 'Uniform', 0);
+                
                 % Save noise if requested.
                 if strcmp(savenoise,'y')
                     currdir = cd; filt = {'*.mat','MATLAB File (*.mat)'};
                     [fn, fp] = uiputfile(filt,'Save Noise Data',currdir);
-                    save([fp '\' fn],'noise');
+                    save([fp '\' fn],'noiseI','noiseR');
                 end
         
             case 'in volume'
                 
                 % Volume
-                CSI_Log({'Under construction.'},{''})
+                CSI_Log({'Unavailable; Under construction.'},{''})
         end
         
     case 'Value'
@@ -2394,14 +2405,18 @@ switch uans{1}
         val = str2double(tuans{1});
         
         % Normalized each voxel by entered value
-        datac = cellfun(@(x,y) x./y, datac,...
-            repmat({val},size(datac)), 'Uniform', 0);
+        datacR = cellfun(@(x,y) x./y, datacR,...
+            repmat({val},size(datacR)), 'Uniform', 0);
+        datacI = cellfun(@(x,y) x./y, datacI,...
+            repmat({val},size(datacI)), 'Uniform', 0);
         
-        CSI_Log({'Normalized data by user-value: '},{val});
+        CSI_Log({'Normalized data with user-value: '},{val});
 end
 
 % Replace with original data
-dataR = cell2mat(datac); data = complex(dataR, dataI); % Complex data set
+dataR = cell2mat(datacR); 
+dataI = cell2mat(datacI);
+data = complex(dataR, dataI); % Complex data set
 csi.data.raw = data;
 
 % Save appdata.
@@ -3294,7 +3309,7 @@ if combine_fe
             max_fid = max(data_fid,[],1); 
             
             % ECHO: get peak in echo data
-            doi_echo = CSI_getDataAtPeak_Stored(doi_xaxis, gui);
+            doi_echo = CSI_getDataAtPeak_Stored(doi_xaxis);
             
             % ECHO: Convert echo data and calculate maximum
             data_echo = CSI_getUnit(doi_echo, data_unit);
@@ -3307,7 +3322,7 @@ if combine_fe
             max_echo = max(data_echo,[],1); 
             
             % FID: get peak in FID data
-            doi_fid = CSI_getDataAtPeak_Stored(doi_xaxis, gui);
+            doi_fid = CSI_getDataAtPeak_Stored(doi_xaxis);
             
             % FID: Convert FID data and calculate maximum
             data_fid = CSI_getUnit(doi_fid, data_unit);
@@ -3523,7 +3538,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % USER INPUT % ---------------------------------- %
 
 % Get peak of interest.
-[poi] = CSI_getPeakOfInterest(csi.xaxis, gui);
+[poi] = CSI_getPeakOfInterest(csi.xaxis, 'Automatic zeroth-order phasing');
 if isempty(poi), return; end
 
 % Get method of auto-phasing
@@ -4414,7 +4429,7 @@ csi = getappdata(gui.CSIgui_main,'csi');
            % POI, mask-size, snr-method & display-method
 
 % POI: Peak of SNR
-range_none = CSI_getPeakOfInterest(csi.xaxis, gui);
+range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
 if isempty(range_none), return; end
 
 % SNR Noise mask
@@ -8695,26 +8710,23 @@ end
 
 
 % --- Get data at peak of interest
-function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range, gui)
+function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range)
 % Input 1: Spec is the full spectrum;
-% Input 2: xaxis can be empty and a arbitrary range will be used otherwise 
+% Input 2: xaxis can be empty and an arbitrary range will be used otherwise 
 %          a ppm-axis for the spec data is expected.
 % Input 3: range can be empty and the user will be asked to enter a range
 %          otherwise the index range is requested (low to high - not ppm)
 
-if nargin < 4 % No GUI input
-    gui = [];
-end
 
 % Get peak of interest from user if absent
 if nargin <= 2 || isempty(range)
     % Get range from user.
-    range = CSI_getPeakOfInterest(xaxis,gui); 
+    range = CSI_getPeakOfInterest(xaxis); 
     
     % If no range is found
     if isempty(range)
-        CSI_Log({'No data in given range.'},{'Returning.'});
-        doi = NaN; doi_axis = NaN; range = NaN; return;
+    CSI_Log({'CSI_getDataAtPeak: No data in given range.'},{'Returning.'});
+    doi = NaN; doi_axis = NaN; range = NaN; return;
     end
 end
 
@@ -8732,26 +8744,41 @@ else,                    doi_axis = range(1):range(2);
 end
 
 % --- Get peak of interest from user
-function range = CSI_getPeakOfInterest(xaxis, gui)
+function range = CSI_getPeakOfInterest(xaxis, poi_tag)
 % Returns a peak of interest from the user using the xaxis field of CSIgui.
 % 
-% Output: unitless index range, not the ppm range.
-% This output can be used as an index in xaxis.unitless or ppm;
+% Input: 
+% #1    xaxis struct with unitless index of data and/or corresponding ppm
+%       or other unity.
+%
+% #2    OPTIONAL - if not given; no tag will be displayed in the questions
+%                  dialog screen.
+%       Tag for questions dialog
+%
+% Output: unitless index range, ! not the ppm range !
+% The output can be used as an index in xaxis.unitless or ppm;
+%
+% Will be changed so the storage of POI is taken care of automagically
+%
+% USES CSIpar(ameters) appdata.
 
-if nargin == 1, poi_tag = 'noGui'; gui = []; end
-if ischar(gui), poi_tag = gui; gui = []; else, poi_tag = ''; end
 
-% Check for previous POI value setting
-poi_def = NaN;
-if isstruct(gui)
-    if isappdata(gui.CSIgui_main,'CSIsettings')
-        CSIsettings = getappdata(gui.CSIgui_main, 'CSIsettings')
-        if isfield(CSIsettings,'poi')
-            poi_def = CSIsettings.poi;
+% Process input
+if nargin == 1, poi_tag = ''; end
+
+% Stored POI?
+% 1. GET CSIgui-settings 2. GET poi_default
+CSIguiObj = findobj('Name','CSIgui');poi_def = NaN;
+if ~isempty(CSIguiObj) && ishandle(CSIguiObj)
+    if isappdata(CSIguiObj,'CSIpar')
+        CSIpar = getappdata(CSIguiObj,'CSIpar');
+        if isfield(CSIpar,'poi')
+            poi_def = CSIpar.poi;
         end
-    end
+    end       
 end
 
+% Checksum for PPM-field or unitless!
 if isfield(xaxis, 'ppm')
     ppm = 1; unit_str = '(ppm):'; 
     if isnan(poi_def)
@@ -8767,6 +8794,7 @@ else
         unit_ans = poi_def;
     end
 end
+% For UserInput dialog NFO.
 unit_str = ['Peak range of interest ' unit_str ': ' poi_tag];
 
 % Get range from user
@@ -8788,19 +8816,23 @@ end
 % Sort the range from low to high
 range = poi; 
 
+% --- CSIparameters --- %
 
-% --- CSIsettings --- %
-% Store selected POI range! 
-% If POI range is required again, this will be the default answer!
-if (~isempty(gui)) && (isstruct(gui))
-    if isappdata(gui.CSIgui_main,'CSIsettings')
-        CSIsettings = getappdata(gui.CSIgui_main,'CSIsettings');
+% Store userinput POI
+% 1. GET CSIgui-settings if not available 2. SET poi to CSIpar.POI
+if ~exist('CSIpar', 'var')
+    CSIguiObj = findobj('Name','CSIgui'); 
+    if ~isempty(CSIguiObj) && ishandle(CSIguiObj)
+        CSIpar = getappdata(CSIguiObj,'CSIpar'); % Empty or struct;
     else
-        CSIsettings = struct;
+        CSIpar = NaN; % No CSIguiObj available - set to NaN; dont store.
     end
-    CSIsettings.poi = range;
-    setappdata(gui.CSIgui_main,'CSIsettings',CSIsettings);
 end
+if isempty(CSIpar) || isstruct(CSIpar) % If empty or not NaN;
+    CSIpar.poi = poi;
+    setappdata(CSIguiObj,'CSIpar',CSIpar);
+end
+
 
 
 % --- Convert FID/ECHO poi to FID/ECHO poi 
@@ -8849,7 +8881,7 @@ end
 
 % Get peak of interest data using converted range
 [doi, doi_axis, doi_range] = ...
-    CSI_getDataAtPeak(data, xaxis_stored, range_converted, gui);
+    CSI_getDataAtPeak(data, xaxis_stored, range_converted);
 
 
 
@@ -9333,7 +9365,8 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % USER INPUT % ---------------------------------- %
 
 % Get peak of interest.
-range = CSI_getPeakOfInterest(appdata1D.axis);
+range = CSI_getPeakOfInterest(appdata1D.axis, ...
+                              'CSIgui-1D: Automatic phase correction');
 
 uans = getUserInput_Popup({'Method'},{{1,2}});
 if isempty(uans), return; end
@@ -9492,7 +9525,7 @@ else % Individual peak
     % ----- % Calculate SNR
     
     % Get range from user (easy to use the dataAtPeak function)
-    range = CSI_getPeakOfInterest(appdata1D.axis);
+    range = CSI_getPeakOfInterest(appdata1D.axis,'CSIgui-1D: SNR');
     if isempty(range), return; end
     
     % Calculate SNR
@@ -9559,7 +9592,7 @@ end
 if strcmp(uans,'Individual')
     
     % Get range from user (Unitless range given)
-    range = CSI_getPeakOfInterest(appdata1D.axis);
+    range = CSI_getPeakOfInterest(appdata1D.axis,'CSIgui-1D: FWHM');
     if isempty(range), return; end
     
     % Maximum in this range
@@ -9615,7 +9648,7 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 
 % Get range from user (Unitless range given)
-range = CSI_getPeakOfInterest(appdata1D.axis);
+range = CSI_getPeakOfInterest(appdata1D.axis,'FWHM');
 if isempty(range), return; end
 
 % Prep xaxis % -------- %
