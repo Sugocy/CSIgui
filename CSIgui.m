@@ -1107,6 +1107,8 @@ elseif isfield(nfo,'ACQAP_mm')
    csi.ori.res(3) = nfo.ACQFH_mm;     
    csi.ori.offcenter(3) = [nfo.FH_H__mm];
 end       
+
+
     
 csi.nfo = nfo;
 
@@ -2748,13 +2750,7 @@ setappdata(gui.CSIgui_main, 'csi',csi);
 schemes_str = repmat('+', 1, sz(udim));
 CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str} );
 
-
-
-
-
-
-
-% --- Executes on button press in button_CSI_setFrequency.
+% --- Executes on button press in button_CSI_setParameters.
 function button_CSI_setFrequency_Callback(hObject, eventdata, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 CSI_2D_Scaling_calc_xaxis(hObject, eventdata);
@@ -8100,7 +8096,7 @@ if auto == 0
     else, an{1}= '31P';  
     end    
     if isfield(xaxis,'tesla'),  an{2} = xaxis.tesla;   
-    else, an{2}= '7T';   
+    else, an{2}= '7';   
     end
     if isfield(xaxis,'BW'),     an{3} = xaxis.BW;      
     else, an{3}= '8000'; 
@@ -12854,12 +12850,18 @@ switch uans{4}, case 'Yes', add_zero = 1; case 'No', add_zero = 0; end
 % USER: Plot
 switch uans{5}, case 'Yes', plot_data = 1; case 'No', plot_data = 0; end
 
+
+
 % USER: FA dynamics data (xaxis)
 if isfield(csi.xaxis,'FA')
     FAdef = int2str(csi.xaxis.FA);
-else
+elseif isfield(csi,'nfo') && isfield(csi.nfo, 'startingFA_deg')
+    FAdef = ...
+    csi.nfo.startingFA_deg + ( (1:csi.nfo.nrFAs)-1 ).*(csi.nfo.FASpacing_deg);
+else 
     FAdef = '';
 end
+
 
 uans = getUserInput({'Start FA:','Stepsize:','Custom FA:'}, {'20','20',FAdef});
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
