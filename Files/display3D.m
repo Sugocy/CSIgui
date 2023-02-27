@@ -21,7 +21,7 @@
 %%%    'Right mouse'    Revert to default contrast of the current array
 
 % ------- Initiate display 3D
-function display3D(data,varargin)
+function fh = display3D(data,varargin)
 % Display 3D data quickly in a 2D plot with option to navigate through the
 % data.
 

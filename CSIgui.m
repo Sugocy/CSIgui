@@ -632,7 +632,7 @@ gui = guidata(hObj);
                            % --- GUI updating --- %
                            
 % Set domain - MRS data
-if exist('domain', 'var')
+if exist('domain', 'var') && exist('evt','var')
     if     domain == 2, evt.Source.Text = 'Frequency';        
     elseif domain == 3, evt.Source.Text = 'Time';   
     end
