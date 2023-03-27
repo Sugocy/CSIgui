@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 21-Oct-2020 13:45:51
+% Last Modified by GUIDE v2.5 06-Mar-2023 14:01:01
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -469,11 +469,13 @@ if ~isfield(gui, 'inp')
     % Select-file UI.
     [fn, fp, fi] = uigetfile({'*.*','All Files (*.*)';...
      '*.list;*.data;*.LIST;*.DATA',...
-                'RAW MRS files (*.list, *.data)';...
+                'Raw MRS files Philips (*.list, *.data)';...
      '*.dcm;*.DCM;*.par;*.rec;*.PAR;*.REC',...
                 'Image files (*.dcm, *.par, *.rec)';...
      '*.spar;*.SPAR;*.sdat;*.SDAT',...
-                'MRS files (*.sdat, *.spar)';...
+                'MRS files Philips (*.sdat, *.spar)';...
+     '*.dat;*.DAT;',...
+                'Raw MRS file Siemens (*.dat)';...
      '*.txt;*.TXT;',...
                 'Text files (*.txt)'},...
      'Select a file', fp); 
@@ -547,7 +549,7 @@ end
                        % --- % Parse the input % --- %
 
 if clear_log
-    set(gui.listbox_CSIinfo, 'String', {''}); % Clear info in listbox.    
+    set(gui.listbox_CSIinfo, 'String', {''}, 'value', 1); % Clear info in listbox.    
 end
 
 % Update LOG
@@ -609,6 +611,17 @@ elseif strcmpi(ext,'userinput')                                % USER
     % Data domain set to 2 = frequency
     domain = 1; 
     
+elseif strcmpi(ext,'.dat')                                     % DAT-file
+    
+    % Parse the dat-file
+    success = parse_datfile(fp, fn, gui);
+   
+    % Calculate xaxis data struct
+    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    
+    % Frequency domain - kspace
+    domain = 2; 
+    
 else                                                           % ERROR 
     % Update LOG and return
     CSI_Log({'Warning. File format not supported.'},{ext});
@@ -663,6 +676,83 @@ if isappdata(gui.CSIgui_main,'mri')
         
     end
 end
+
+
+% --- Parse DAT file
+function success = parse_datfile(fp, fn, gui)
+% Load dat-file from Siemens platform into memory using the mapVBVD
+% function from Philipp Ehses
+
+% Twix-loading
+twix = mapVBVD([fp '\' fn '.dat']);
+
+% Header
+csi.twix = twix.hdr;
+
+% % Parameters of interest.
+% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
+% csi.twix.Dicom.flReadoutOSFactor % Oversampling
+% csi.twix.Dicom.tPatientPosition % Patient position (FFS/HFS)
+% % Spectra parameters; incl final matrix size; FOV dimensions
+% csi.twix.MeasYaps.sSpecPara 
+% csi.twix.MeasYaps.sRXSPEC.alDwellTime % Dwelltime
+% csi.twix.MeasYaps.alTR % Repetitiontime
+% csi.twix.MeasYaps.alTD % Dwelltime
+% csi.twix.MeasYaps.alTE % Echotime
+% twix.hdr.Config.TR
+% twix.hdr.Config.TE
+
+% Read data dimension and labels
+dims = num2cell(twix.image.dataSize);
+dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
+
+% dimension labels from header
+dims_txt = twix.image.dataDims;
+dims_txt = dims_txt(twix.image.dataSize>1);
+
+% Correct data labels from twix-file.
+% Labels in dat-file
+labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
+% Library for other name
+labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
+dims_txt_corrected = cell(1,size(dims_txt,2));
+for ti = 1:size(dims_txt,2)        
+    ind = strcmpi(labels_dat_file, dims_txt{ti});
+    if sum(ind) > 0
+        dims_txt_corrected{ti} = labels_match_library{ind};
+    end
+end
+csi.data.labels = dims_txt_corrected;
+
+% MRS-data
+tmp = squeeze(twix.image(dims_rng{:}));
+
+% Free up memory
+clear('twix')
+
+% Data sizes.
+nfo = whos('tmp'); 
+matlab_nfo = memory;
+
+if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
+    % Array is too large for matlab-array-memory
+    fprintf('CSIgui: data requires much memory. Loading as single.\n')
+    csi.data.raw = tmp; 
+else
+    % Array will fit matlab-max-array-memory
+    csi.data.raw = double(tmp);    
+end
+clear('tmp')
+csi.data.dim = size(csi.data.raw);
+
+success = 0;
+if csi.data.dim(1) > 0, success = 1; end
+
+% Meta-data
+csi.ext = 'dat'; csi.filename = fn; % Save filename
+
+% Save CSI data in app-data
+setappdata(gui.CSIgui_main,'csi',csi);  
 
 % --- Parse LIST/DATA file
 function success = parse_listdata(fp, fn, gui)
@@ -961,6 +1051,8 @@ if isfield(gui.inp,'csi') || ...
 
     % Calculate xaxis from available data
     CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+    gui = guidata(gui.CSIgui_main);
+    csi = getappdata(gui.CSIgui_main,'csi'); 
     
     % Parse succes
     succes = 1;
@@ -1966,7 +2058,6 @@ if isempty(uans), return; end
 
 % Set option
 shift_opt = str2double(uans{1});
-% shift_opt = 2; % SET TO AUTOMATIC
 
 % K-space index: find the spatial dimensions/indexes: ask if not found.
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -2042,17 +2133,18 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Get user input
 uans = getUserInput_Popup(...
-           {'Correct for N term?','Shift before and after FFT? (Echo)'},...
-           {{'No','Yes'},{'No','Yes'}});
+           {'Correct for N term?',...
+            'Correct for onesided fft in spectroscopy?',...
+            'Shift before and after FFT? (Echo)'},...
+           {{'No','Yes'},{'Yes','No'},{'No','Yes'}});
 if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 
-if strcmpi(uans{1},'yes'),correct_N = 1; else, correct_N = 0; end
-if strcmpi(uans{2},'yes'),dbl_shift = 1; else, dbl_shift = 0; end
-
-
+if strcmpi(uans{1},'yes'), correct_N = 1; else, correct_N = 0; end
+if strcmpi(uans{2},'yes'), onesided = 1;  else, onesided = 0; end
+if strcmpi(uans{3},'yes'), dbl_shift = 1; else, dbl_shift = 0; end
 
 % Apply FFT
-csi.data.raw = csi_fft(csi.data.raw,correct_N,dbl_shift);
+csi.data.raw = csi_fft(csi.data.raw, correct_N, onesided, dbl_shift);
 
 % CLEANUP % ---------------------------------------- %
 
@@ -2067,7 +2159,7 @@ CSI_Log({'Forward FFT applied.'},{''});
 % --- Executes on button press in button_CSI_iFFT.
 function button_CSI_iFFT_Callback(~, ~, gui, backup)
 % Apply inverse fourier to transform MRS data from the frequency domain to
-% the spatial domain.
+% the time domain.
 %
 % Uses csi_ifft();
 if nargin < 4 , backup= 1; end
@@ -2089,10 +2181,18 @@ if backup, CSI_backupSet(gui, 'Before inverse FFT.'); end
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+% USER DATA % -------------------------- %
+
+uans = getUserInput_Popup(...
+           {'Correct for onesided fft in spectroscopy?'},...
+           {{'Yes','No'}});
+if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
+if strcmpi(uans{1},'yes'), onesided = 1;  else, onesided = 0; end
+
 % iFFT % ------------------------------- %
 
 % Apply iFFT
-csi.data.raw = csi_ifft(csi.data.raw);
+csi.data.raw = csi_ifft(csi.data.raw, onesided);
 
 % CLEAN UP % --------------------------- %
 
@@ -3507,10 +3607,6 @@ setappdata(gui.CSIgui_main,'csi',csi);
 % Recalculate xaxis data
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
-% adjwandkawdnawnd
-% if function above is set to auto, it sets the wrong limits 
-% NEEDS UPDATING.
-
 % Update info
 CSI_Log({'Applied zero filling. Sample size increased to'},{N});
 
@@ -3593,7 +3689,7 @@ else
     data = cell_mrsi;
     [~,ind] = cellfun(@max,data,'uniform', 0);
 %     sz = size(data); sz(1) = size(data{1},1);    
-    cell_mrsi_phased = cellfun(@csi_shift_phasing,data,ind,'uniform',0); 
+    cell_mrsi_phased = cellfun(CSI_shift_phasing,data,ind,'uniform',0); 
 
 end
 
@@ -3618,7 +3714,7 @@ setappdata(gui.CSIgui_main,'csi',csi);
 % Update info to user.
 CSI_Log({'Applied automatic zero order phase correction:'},uans);
 
-function new = csi_shift_phasing(data,shift_index)
+function new = CSI_shift_phasing(data,shift_index)
 new = zeros(size(data,1),1);
 new(1:(size(data,1)-shift_index+1))= data(shift_index:end); 
 
@@ -3963,10 +4059,13 @@ dim_cell{chind} = ch_incl;
 
 % ------- Summate the channel dimensions over all included channels.
 csi.data.raw = sum(csi.data.raw(dim_cell{:}),chind);
+csi.data.dim = size(csi.data.raw);
 
 % ------- Create mean from summated if requested
 if ~sum_only , csi.data.raw = csi.data.raw./size(ch_incl,2);
 end
+
+
 
 % ------- Update APP and APP data
 setappdata(gui.CSIgui_main, 'csi', csi);
@@ -4037,9 +4136,17 @@ CSI_Log({'WSVD; Created a backup before combining channels.'},...
 
 % Get user input for noise component
 uans = getUserInput({'Use the noise prescans? (y/n):','Noise mask size:',...
-                     'Exclude channels:'},{'y',50,''}); 
-if isempty(uans), CSI_Log({'Skipped combining channels.'},{''}) ; return; end
+                     'Exclude channels:'},{'n',150,''}); 
+if isempty(uans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
                 
+
+% Get user input for displaying results
+results_to_show = ...
+    {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
+disp_ans = getUserInput_Popup(results_to_show,...
+    {{'Yes','No'},{'No','Yes'},{'No','Yes'}}); 
+if isempty(disp_ans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
+
 % Get num mask size and channels to exclude.
 mask_size = str2double(uans{2}); 
 % Use prescans or create a noise mask per voxel. 
@@ -4048,11 +4155,11 @@ if strcmp(uans{1}, 'y')
     if isfield(csi.data, 'noise')
         mask = 0; 
         CSI_Log({'WSVD; Using the full noise pre-scans'},...
-                       {'to calculate noise covariance matrix'});
+                   {'to calculate noise covariance matrix'});
     else
         mask = 1;
         CSI_Log({'WSVD; Prescans unavailable.'},...
-                       {'Using mask to calculate noise covariance matrix.'});
+                   {'Using mask to calculate noise covariance matrix.'});
     end
 else
     mask = 1;
@@ -4123,12 +4230,6 @@ comb = struct; comb.data = zeros(szr(1),nvox);
 comb.qual = zeros(nvox,1); comb.ampl = zeros(nvox, size(ch_incl,2)); 
 comb.W = zeros(size(ch_incl,2), nvox); 
 
-% phaseRefChannel
-% Debug
-% elseif isfield(options,'noiseCov') && strcmp(options.noiseCov,'diag')
-% Use only the noise variances (not off diagonal elements)...
-% noiseCov=diag(diag(cov(rawSpectra(noiseMask,:))));
-
 % WSVD loop. 
 % Apply for every indices excluding the channel index: e.g. every voxel.
 for vi = 1:nvox
@@ -4137,12 +4238,17 @@ for vi = 1:nvox
     
     % Create noise coVariance matrix.
     if mask == 1 % Use mask
-        noiseMask = ndimf-mask_size:ndimf-1;
-        noiseCov = cov(tmp_spec(noiseMask,:)); 
+        
+        noiseMask = ndimf-mask_size+1:ndimf;
+        % noiseCov = cov(tmp_spec(noiseMask,:));
+        noiseCov=diag(diag(cov(tmp_spec(noiseMask,:))));
+           
     else         % Use noise pre-scans
+        
         % FFT of noise prescans. (all channels)
         noise_spec = csi_fft(csi.data.noise);
         noiseMask = 1:ndimf; noiseCov = cov(noise_spec(:,ch_incl));              
+           
     end
 
     % WSVD algorithm
@@ -4164,37 +4270,61 @@ tmp = reshape(comb.data, sz_cell); % prod(sz_cell) == numel(comb.data)!
 % Reorder back to starting order of index dimensions.
 % Using the label-change during the first reshaping permute, find the
 % permute vector to go back to initial state.
-
-% Check if no repeated labels are present
-if size(unique(csi.data.labels)) ~= size(csi.data.labels)
-    unilab = unique(csi.data.labels);
-    for kk = 1:unilab
-        
-    end
-    
-end
-
 cur2prev_permv = csi_findDimLabel(tmp_label, csi.data.labels);
-
+cur2prev_permv(isnan(cur2prev_permv)) = [];
 csi.data.raw   = permute(tmp,cur2prev_permv);
 
 % Update csi.data.dim data.
-new_dim = NaN(1,size(csi.data.dim,2));
-for kk = 1:size(csi.data.dim,2), new_dim(kk) = size(csi.data.raw,kk); end
-csi.data.dim = new_dim; 
+csi.data.dim = size(csi.data.raw); 
 
-% REMAINING ISSUE: Quality; Amplitude; Weight.
-% Save? Export? Use for what?
+
+% Display resulting statical data % --------------------------------- %
+
+if strcmp(disp_ans{1}, 'Yes')
+    % One quality value per voxel
+    qual = reshape(comb.qual, [1 sz_cell(2:end)]); 
+    qual = permute(qual , cur2prev_permv);
+    % Plot as map
+    CSI_dataAsTabs(gui, qual, 'WSVD Quality',csi.data.labels, [0 1]);
+end
+
+if strcmp(disp_ans{2}, 'Yes')
+    % N amplitudes (number of channels) for each voxel
+    amp = reshape(comb.ampl, [size(comb.ampl,2) sz_cell(2:end)]);
+    amp = permute(amp , cur2prev_permv);
+    ndims = numel(size(amp));
+    amp = permute(amp , [ndims+1 2:ndims 1]); 
+    % Plot as table
+    CSI_dataAsTable(real(amp), 'WSVD Amplitudes real-values')
+    CSI_dataAsTable(imag(amp), 'WSVD Amplitudes imag-values')
+end
+
+if strcmp(disp_ans{3}, 'Yes')
+    % N weights (number of channels) for each voxel
+    W = reshape(comb.W', [size(comb.W,1) sz_cell(2:end)]);
+    W = permute(W , cur2prev_permv);
+    ndims = numel(size(W));
+    W = permute(W , [ndims+1 2:ndims 1]); 
+    % Plot as table
+    CSI_dataAsTable(real(W), 'WSVD Weights real-values')
+    CSI_dataAsTable(imag(W), 'WSVD Weights imag-values')
+end
 
 % Save data % ------------------------------------------------------- %
 
 % Set CSI app data
 setappdata(gui.CSIgui_main, 'csi', csi);
 
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+%gui = guidata(gui.CSIgui_main);
+%csi = getappdata(gui.CSIgui_main,'csi'); 
+
 % Display info to user
 CSI_Log({'WSVD; Channels are combined.',...
                 'WSVD; Average quality:','WSVD; Included channels:'},...
-                {'',mean(comb.qual,1),ch_incl});            
+                {'',mean(comb.qual(:)),ch_incl});   
+            % Display info to user
+CSI_Log({'WSVD; Close 2D plot before replotting!'},{''});  
             
 
             
@@ -4270,7 +4400,7 @@ data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
 % SELECT PEAK% -------------------------------- %
 
 if selectPeak
-    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis,[],gui);
+    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 else
     doi   = csi.data.raw;
     range = [csi.xaxis.none(1) csi.xaxis.none(end)]; 
@@ -5341,6 +5471,8 @@ for ci = 1:plot_par.dim(1)     % Column loop.
        
     end % for row loop
 end     % for column loop
+
+toolbar_create(figure_object)
 end     % for slice loop
 
 % --- Executes by functions to graphically display data/slice
@@ -5396,7 +5528,6 @@ plot_par.select_all_dim = nDimCtmp;
 
 % Create Figure % ----------------- %
 plot_par = CSI_2D_setFigure(plot_par, [], datatag);
-
             
 % Data unit % --------------------- % 
 % As data is given, no additional data unit is applied and real-data is
@@ -5422,7 +5553,12 @@ for sli = 1:size(data,4) % ----------------- %
     % Data: get slice-data % ---------------- %  
       
     % Create cell for indexing outside the spatial-dimensions 
-    if numel(plot_par.dim) >3, nDimC = num2cell(plot_par.dim(4:end));
+    if numel(plot_par.dim) >3
+        % Dirty quick edit QvH
+        sz = size(data);
+        nDimC = num2cell(sz(5:end));
+        
+        %nDimC = num2cell(plot_par.dim(4:end));
     else, nDimC = {1};
     end
     % To linear vector per cell.
@@ -5504,7 +5640,7 @@ for sli = 1:size(data,4) % ----------------- %
         xpos_text = plot_par.ax{ri,ci}.XLim(end);
         text(plot_par.ax{ri,ci}, xpos_text, ylimit(2), ...
              sprintf('Mean: %2.2g\n Min|Max: %2.2g|%2.2g',...
-             nanmean(plot_data(:)), max(plot_data(:)), min(plot_data(:))),...
+             nanmean(plot_data(:)), min(plot_data(:)), max(plot_data(:))),...
              'Color', [0.6 0.6 0.6],'FontSize',8,'FontWeight','Bold',...
              'HorizontalAlignment', 'Right','VerticalAlignment', 'Top');    
         
@@ -5516,6 +5652,12 @@ for sli = 1:size(data,4) % ----------------- %
         end % row loop
     end % column loop
 end % slice loop
+
+%tgui.fig.ToolBar = 'figure';
+toolbar_create(plot_par.fh)
+
+
+
 
 % --- Executes by functions to display data as a table
 function CSI_dataAsTable(data, datatag)
@@ -5624,6 +5766,9 @@ end % End table/slice loop.
 
 % Save GUI data to figure.
 guidata(tgui.fig, tgui);
+
+%tgui.fig.ToolBar = 'figure';
+toolbar_create(tgui.fig)
 
 % --- Executes by CSI_tableData.
 function [sliceArray, sliceIndex] = slices2rowArray(data, split)
@@ -7107,7 +7252,7 @@ switch scaleby
         plot_par.scale_color = 0;
     case 'sli' % Scale by slice
         % Calc limits in slice
-        max_per_voxel = max(vol_data(:,:,:,plot_par.plotindex{:}),[],1);
+        max_per_voxel = max(vol_data(:,:,:,plot_par.select_all_dim{:}),[],1);
         data_ylimits_color = [min(max_per_voxel(:)) max(max_per_voxel(:))];           
         plot_par.scale_color = 1;
     case 'sta' % Static color
@@ -8029,29 +8174,29 @@ if isempty(clrs_range), clrs_range = data_limits(1); end
 
 % --- Executed by parameters button callback and several other scripts
 function CSI_2D_Scaling_calc_xaxis(hObject, ~, auto)
-% Creates struct xaxis which contains all frequenty information and
-% corresponding axis for display.
+% Creates struct xaxis which contains all frequency information and
+% corresponding axis for visualization.
 %
 % If auto equals 1, no user answer is required; 
-% works only for SPAR/SDAT files or if specific frequency info is 
-% available. Without this data, only arbitrary units are returned.
+%   Works if specific frequency info is available. (Userinput or spar)
+%   Without this data, only arbitrary units are returned.
 
 % If no automatic option is given, turn if off.
 if nargin <= 2, auto = 0; end
 
-% Get time axis.
+% Get gui-data
 gui = guidata(hObject); 
 
-% Require csi: data, samples, csisl
+% Require csi: data, samples, csi
 csi = getappdata(gui.CSIgui_main,'csi'); 
 if isempty(csi), return; end
 
-% Xaxis structure
+% x-axis structure
 xaxis = struct;
 
 % Store previous static data
-if isfield(csi, 'xaxis')
-    foi = {'BW','nucleus','trans','gyro','tesla','xlimit', 'shift'};
+if isfield(csi, 'xaxis') % If already present, copy some data.
+    foi = {'BW','nucleus','trans','gyro','tesla', 'shift'};
     for kk = 1:size(foi,2)
         tmp = foi{kk};
         if isfield(csi.xaxis, tmp)
@@ -8060,8 +8205,7 @@ if isfield(csi, 'xaxis')
     end
 end
 
-% READ HEADER % ------------------------------------------ %
-% Works for SPAR file only.
+% READ SPAR-header % ------------------------------------------ %
 if strcmp(csi.ext ,'spar') || strcmp(csi.ext ,'sdat') 
     
     % Get from header file: BW, nucleus, transmit freq
@@ -8081,6 +8225,29 @@ if strcmp(csi.ext ,'spar') || strcmp(csi.ext ,'sdat')
     
     % Calc magnet strength
     xaxis.tesla = xaxis.trans./xaxis.gyro;
+end
+
+% READ DAT-Header (Siemens) ----------------------------------- %
+if strcmp(csi.ext, 'dat')
+    % Nucleus
+    xaxis.nucleus = csi.twix.Config.Nucleus;
+    % Magnet strength
+    xaxis.tesla = csi.twix.Dicom.flMagneticFieldStrength;
+    
+    % Bandwidth (Receiver)
+    dwelltime = csi.twix.Config.DwellTime;
+    samples = csi.data.dim(1);
+    xaxis.BW = dwelltime./samples;
+    
+    switch xaxis.nucleus 
+        case '1H',  xaxis.gyro = 42.57747892*10^6;
+        case '2H',  xaxis.gyro = 6.536*10^6;
+        case '31P', xaxis.gyro = 17.235*10^6;
+        case '23Na',xaxis.gyro = 11.262*10^6;
+        case '19F', xaxis.gryo = 40.052*10^6;
+        otherwise,  xaxis.gyro = 42.57747892*10^6;
+    end 
+    xaxis.trans = xaxis.tesla * xaxis.gyro;    
 end
 
 % USER INPUT % ------------------------------------------ %
@@ -8105,7 +8272,7 @@ if auto == 0
     else, an{4}= '0';    
     end
 
-    % Display UI and get user input
+    % Display UI to get user input
     inp = getUserInput(qry, an);
     if isempty(inp)
         CSI_Log({'Skipped setting parameters.'},{''}); return; 
@@ -8135,13 +8302,23 @@ else
     end
 end
 
+% -------------------------------------------------------- %
 % CALC AXES % -------------------------------------------- %
+% -------------------------------------------------------- %
 
-% Calculate axis-parameters
-ind = find(strcmp(csi.data.labels,'sec') == 1);
+%%% Calculate axis-parameters
+
+% Find dimension with FID/Spectrum
+fid_dim_label = {'sec','fid', 'spec'}; ind = [];
+for lbi = 1:size(fid_dim_label,2)
+    if isempty(ind)
+        ind = find(strcmp(csi.data.labels,fid_dim_label(lbi)) == 1);
+    end
+end
+
+% Set length of spectro-data
 if ~isempty(ind), xaxis.N = csi.data.dim(ind);
-else            
-    xaxis.N = csi.data.dim(1); % USE THE LARGEST INDEX AS SAMPLES.
+else % If not found - use largest dimension            
     [~, tmp] = max(csi.data.dim);
     xaxis.N = csi.data.dim(tmp);
 end
@@ -8171,7 +8348,7 @@ if isfield(xaxis, 'trans')
     end
 else
     xaxis.none = (0 : (xaxis.N)-1);
-    if ~isfield(xaxis,'xlimit')
+    if ~isfield(xaxis,'xlimit') || (xaxis.xlimit(2) ~= csi.data.dim(1)-1)
         xaxis.xlimit = [xaxis.none(1) xaxis.none(end)];
     end
 end
@@ -8188,8 +8365,6 @@ csi.xaxis = xaxis; % Contains frequency details of MRS data
 
 % Save in appdata
 setappdata(gui.CSIgui_main,'csi',csi);
-
-
 
 
 % (Additional window for editting 2D plot options.) --------------------- %
@@ -8713,7 +8888,6 @@ function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range)
 % Input 3: range can be empty and the user will be asked to enter a range
 %          otherwise the index range is requested (low to high - not ppm)
 
-
 % Get peak of interest from user if absent
 if nargin <= 2 || isempty(range)
     % Get range from user.
@@ -8764,7 +8938,7 @@ if nargin == 1, poi_tag = ''; end
 
 % Stored POI?
 % 1. GET CSIgui-settings 2. GET poi_default
-CSIguiObj = findobj('Name','CSIgui');poi_def = NaN;
+CSIguiObj = findobj('Name','CSIgui'); poi_def = NaN;
 if ~isempty(CSIguiObj) && ishandle(CSIguiObj)
     if isappdata(CSIguiObj,'CSIpar')
         CSIpar = getappdata(CSIguiObj,'CSIpar');
@@ -8791,7 +8965,7 @@ else
     end
 end
 % For UserInput dialog NFO.
-unit_str = ['Peak range of interest ' unit_str ': ' poi_tag];
+unit_str = ['Peak range of interest ' unit_str ' ' poi_tag];
 
 % Get range from user
 uans = getUserInput({unit_str},{unit_ans});
@@ -9247,9 +9421,8 @@ function panel_1D_PhasingMethod(hObj, ~)
 % Gives the user choice to correct zeroth and first order phases manually,
 % automatic (zeroth only) or apply manual phasing to all.
 
-
 uans = getUserInput_Popup({'Choose desired phasing method: '},...
-                    {{'Manual', 'Automatic', 'Phase All'}});
+                    {{'Manual', 'Automatic', 'Phase Parts'}});
 if isempty(uans), return; end  
 
 switch uans{1}
@@ -9257,7 +9430,7 @@ switch uans{1}
         panel_1D_PhaseCorrection_Manual(hObj);
     case 'Automatic'
         panel_1D_PhaseCorrection_Auto(hObj);
-    case 'Phase All'
+    case 'Phase Parts'
         panel_1D_PhaseCorrection_ApplyToAll(hObj);
 end
 
@@ -9317,6 +9490,15 @@ if isempty(CSImain_obj)
 end
 csi = getappdata(CSImain_obj, 'csi');
 
+% Get user input for volume or slice phasing
+uans = getUserInput_Popup({'Apply phasing to: '},...
+                         {{'Full volume', 'Current slice'}});
+if uans{1} == 0, return; end
+if strcmp(uans{1}, 'Full volume'), vol_or_sli = 0;
+else, vol_or_sli = 1;
+end
+% vol_or_sli = 0 for volume and vol_or_sli = 1 for slice.
+
 % FUNCTION PROCESS STARTS % ----------------------------- %
 
 % 1. Check for available phasing corrections data
@@ -9330,10 +9512,32 @@ end
 % 2. Apply phasing to all voxels.
 magn = abs(csi.data.raw); pha = angle(csi.data.raw);
 
-% Add zero order phase correction
-pha_new = pha + appdata1D.phasing.zero;
-% Add first order phase correction
-pha_new = pha_new + appdata1D.phasing.first;
+if vol_or_sli == 0
+
+    % Add zero order phase correction
+    pha_new = pha + appdata1D.phasing.zero;
+    % Add first order phase correction
+    pha_new = pha_new + appdata1D.phasing.first;
+    
+elseif vol_or_sli == 1    
+    
+    % Get current visualized slice
+    if sum(appdata1D.voxel.index) == 0, return; end 
+    ind = num2cell([size(pha,1) appdata1D.voxel.index]); % C/R/D4/D5 etc
+    
+    % fid, x/c, y/r, slice and the rest
+    dims = num2cell(size(pha));    
+    dims_range =cellfun(@(x) 1:x, dims,'uniform',0);
+    for kk = 4:size(dims,2)
+        dims_range{kk} = ind{kk};
+    end
+    
+    % Add zero order phase correction
+    pha_new = pha(dims_range{:}) + appdata1D.phasing.zero;
+    % Add first order phase correction
+    pha_new = pha_new(dims_range{:}) + appdata1D.phasing.first;
+end
+
 % Create complex data
 csi.data.raw = complex(magn.*cos(pha_new), magn.*sin(pha_new));
 
@@ -9541,6 +9745,7 @@ else % Individual peak
     % Plot marker at peak location
     hold(appdata1D.axes,'on'); plot(appdata1D.axes, ind, real(val), 'or');
     % Plot SNR as text at peak location
+    
     text(appdata1D.axes, ind, val+yst, ...
        sprintf('%3.1f',snr),'FontSize',8,'FontWeight','Bold');
 end
@@ -9728,7 +9933,7 @@ text(appdata1D.axes, xest(1)-xst, yest(1)+yst, ...    % Plot text
 
 % Update in UI
 if isnan(fwhm_outp)
-    fwhm_outp = 'Single intersect with FWHM found0 - redefine peak range';
+    fwhm_outp = 'Single intersect with FWHM found - redefine peak range';
 end
 CSI_Log({sprintf('FWHM @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
         {fwhm_outp});
@@ -9829,13 +10034,29 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % Do checks and get CSI_1D object, data_1D appdata and data array
 [CSI_1D_obj, appdata1D, data2fft] = CSI_1D_getData(obj1D);
 
+
+% USER DATA % ---------------------------------- % 
+
+% Get user input
+uans = getUserInput_Popup(...
+           {'Correct for N term?',...
+            'Correct for onesided fft in spectroscopy?',...
+            'Shift before and after FFT? (Echo)'},...
+           {{'No','Yes'},{'Yes','No'},{'No','Yes'}});
+if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
+
+if strcmpi(uans{1},'yes'), correct_N = 1; else, correct_N = 0; end
+if strcmpi(uans{2},'yes'), onesided = 1;  else, onesided = 0; end
+if strcmpi(uans{3},'yes'), dbl_shift = 1; else, dbl_shift = 0; end
+
+
 % FFT % ---------------------------------------- %
 
 % Create a N x 1 vector!
 if size(data2fft,2) > size(data2fft,1), data2fft = data2fft'; end
 
 % Apply 1D fourier transform
-appdata1D.voxel.processed = csi_fft(data2fft);
+appdata1D.voxel.processed = csi_fft(data2fft,correct_N,onesided,dbl_shift);
 
 % PLOT AND SAVE % ------------------------------ %
 
@@ -9859,13 +10080,21 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % Do checks and get CSI_1D object, data_1D appdata and data array
 [CSI_1D_obj, appdata1D, data2ifft] = CSI_1D_getData(obj1D);
 
+% USER DATA % -------------------------- %
+
+uans = getUserInput_Popup(...
+           {'Correct for onesided fft in spectroscopy?'},...
+           {{'Yes','No'}});
+if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
+if strcmpi(uans{1},'yes'), onesided = 1;  else, onesided = 0; end
+
 % iFFT % --------------------------------------- %
 
 % Create a N x 1 vector.
 if size(data2ifft,2) > size(data2ifft,1), data2ifft = data2ifft'; end
 
 % Apply 1D fourier transform
-appdata1D.voxel.processed = csi_ifft(data2ifft);
+appdata1D.voxel.processed = csi_ifft(data2ifft,onesided);
 
 % PLOT AND SAVE % ------------------------------ %
 
@@ -12729,7 +12958,7 @@ if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
 
 uans = getUserInput(...
-{'Specify data index range to delete: (M:N or mutliple allowed)'},{'1'});
+{'Specify data index to delete: (M:N or mutliple allowed)'},{'1'});
 if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
 tmp = strfind(uans{1},':');
 if isempty(tmp)
@@ -12739,14 +12968,18 @@ else
     tbdeleted = str2double(tmp{1}):str2double(tmp{2}); 
 end
 
-
 % Delete!
 sz = size(csi.data.raw); dimind = arrayfun(@(x) 1:x, sz, 'uniform', 0);
 tmp = dimind{ind}; tmp(tbdeleted) = []; dimind{ind} = tmp;
+% Update data and dim
 csi.data.raw = csi.data.raw(dimind{:});
+csi.data.dim = size(csi.data.raw);
 
 % Store data
 setappdata(gui.CSIgui_main,'csi', csi);
+
+% Update X-axis data
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
@@ -12932,7 +13165,6 @@ for kk = 1:size(outp,1) % Outp loop
         CSI_Log({[fns{li} ': ' ] },{tmp.(fns{li})});
     end
 end
-
 
 
 function outp = CSI_FAdynamic(FA, data, phase_data, fit_method, add_zero, ...
@@ -13213,3 +13445,654 @@ if zerocross < max_val_ind
 end
 sz = size(data); sz(1) = [];
 mxmn = zeros(1,sz); mxmn(zerocross+1:end) = 1; mxmn = logical(mxmn);
+
+
+% --- Executes on button press in button_CSI_RemoveOS.
+function button_CSI_RemoveOS_Callback(hObj, ~, gui, backup)
+% A very crude way of removing oversamling from the data:
+% Given a new value for dimension of interest doi, cut the data from start
+% to the new value and store it.
+%
+% Possible upgrade: allow removing/cutting of a range.
+% Example: column of size 11 requires OS removal of first data point and
+% last two data points to end up with column size 8.
+
+% Create backup
+CSI_backupSet(gui, 'Before removing oversampling.');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% ------------------------------------------------- %
+
+% 1. Get dimensions to remove OS: doi
+uans = getUserInput_Popup({'Index:'}, {csi.data.labels} );
+if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
+ind = find(strcmp(uans{1},csi.data.labels)); ind_lab = uans{1};
+
+
+% 2. Get value of OS to remove: osval
+uans = getUserInput({'New size of dimension:'},...
+                    {round(csi.data.dim(ind)./2)});
+if isempty(uans),CSI_Log({'Aborted OS removal.'},{''}); return; end
+osval = str2double(uans{1});
+
+% 3. Apply on given dim: csi.data.raw @ doi = 1:osval
+sz = csi.data.dim; sz(ind) = osval;
+rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+
+% Cut the data with the new value
+csi.data.raw = csi.data.raw(rng{:});
+
+% 4. Update csi.data.dim size 
+csi.data.dim = size(csi.data.raw);
+
+% ------------------------------------------------- %
+
+% Store data %
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Update X-axis data
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+
+% Show nfo
+CSI_Log({'Removed oversampling (dimension | size): '}, ...
+        {[ind_lab, '/', num2str(osval)]});
+
+% --- Executes on button press in button_CSI_MapB1.
+function button_CSI_MapB1_Callback(hObj, ~, gui, backup)
+% Given two CSI measurements with M1(a) and M2(2a), calculate the flipangle
+% using: inv-cos(m2/2m1) = FA
+%
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% ------------------------------------------------- %
+
+% -- USERINPUT -- %
+
+% \\ Get peak of interest
+range = CSI_getPeakOfInterest(csi.xaxis, 'Calculate B1-maps');
+if isempty(range), return; end
+[doi] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis, range);
+
+% \\ Index of interest and data type
+uans = getUserInput_Popup({'Data type (calculations): ',...
+                           'Display type: ','Data type (results): '},...
+                         {{'Real', 'Magnitude','Complex'},...
+                          {'Map','Table','Graph'},...
+                          {'Real', 'Magnitude', 'Imaginary', 'Real raw','Imaginary raw'}});
+if isempty(uans), CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; end
+
+% \\ B1 index
+B_ind = find(strcmpi(csi.data.labels,'b1'));
+if isempty(B_ind)
+    B_ind = getUserInput_Popup({'Data B1 index'},{csi.data.labels});
+    if isempty(B_ind)
+        CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
+    end 
+    B_ind  = find(strcmp(csi.data.labels,B_ind)==1);
+end
+
+% \\ SNR Filtering
+filter_snr = getUserInput({'Minimum value for SNR Filtering: [0 = off]'},{'0'});
+if isempty(filter_snr)
+    CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
+end
+
+% \\ Color Range
+if strcmpi(uans{2}, 'map')
+    color_range = getUserInput({'Color map range [or auto]:'},{'0 90'});
+    if isempty(color_range)
+        CSI_Log({'Skipped B1-map calculations.'},{''});
+        return; 
+    end
+    if ~strcmp(color_range,'auto')
+        color_range = str2double(strsplit(color_range{1},' '));
+    else
+        color_range = color_range{:};
+    end
+end
+
+
+
+% -- PROCESS USERINPUT -- %
+
+% -- Datatype: DATA CONVERTED TO DATATYPE
+switch uans{1}
+    case 'Real',      doi = real(doi);
+    case 'Magnitude', doi = abs(doi);
+end
+
+% -- CALCULATIONS  -- % B1
+
+% \\ Get maximum value of peak of interest
+CSI_Log({'Calculating B1 per voxel, please be patient.'},{''});
+
+% Max value
+mx_val = max(doi,[],1);
+
+% \\ Split the data by B_ind
+doi_ranges = cellfun(@(x) 1:x, num2cell(csi.data.dim),'uniform', 0);
+doi_ranges{1} = 1;
+Mone_range = doi_ranges; Mone_range{B_ind} = 1;
+Mtwo_range = doi_ranges; Mtwo_range{B_ind} = 2;
+
+Mone = mx_val(Mone_range{:});
+Mtwo = mx_val(Mtwo_range{:});
+
+% \\ Calculate using acos(M2/2*M1)
+inner = Mtwo ./ (Mone.*2);
+FA = acosd(inner);
+
+
+
+% -- CALCULATIONS  -- % SNR
+
+if str2double(filter_snr) ~= 0
+    
+    snr_limit = str2double(filter_snr);
+    
+    % Display Info %
+    CSI_Log({'Calculating SNR per voxel, and filtering using SNR limit:'},...
+            {snr_limit});
+
+    % Noise mask
+    mask_size = round(csi.data.dim(1)./10);
+
+    % Using high-FA data for SNR
+    snr_dims = doi_ranges; snr_dims(1) = [];
+    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; snr_dims{B_ind} = 2;
+
+    % Calculate using noise mask
+    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, range);
+    % Convert NaNs to zero
+    SNR_all(isnan(SNR_all)) = 0; 
+    
+    % Filter boolean 
+    SNR_bool = SNR_all < snr_limit;
+    
+    % Filter data
+    FA(SNR_bool) = NaN;
+
+end
+
+% Store FA
+FA_main = FA;
+% Imaginary FA
+imag_FA = imag(FA);
+% Real FA
+real_FA = real(FA);
+% Absolute FA
+abso_FA = abs(FA);
+% Real without any voxel containing imaginary results
+real_FA_noImag = real_FA;
+real_FA_noImag(real_FA == 0) = NaN;
+% Imaginary without any voxel containing real results
+imag_FA_noReal = imag_FA;
+imag_FA_noReal(imag_FA == 0) = NaN;
+
+% Process result to data-type 
+switch uans{3}
+    case 'Real'
+        FA_out = real_FA_noImag;
+    case 'Magnitude'
+        FA_out = abso_FA;
+    case 'Imaginary'
+        FA_out = imag_FA_noReal;
+    case 'Real raw'
+        FA_out = real_FA;
+    case 'Imaginary raw'
+        FA_out = imag_FA;
+end
+
+% Some statistics
+B_mean = nanmean(FA_out(:)); B_std = nanstd(FA_out(:));
+tmp = FA_out(:); [B_mod,B_freq,C]= mode(round(tmp(~isnan(tmp)))); 
+if size(C{1},1) > 1
+    B_mod = C{1}'; 
+end
+
+% -------------------------------------------- Display
+CSI_Log({'Plotting B1 map data, please be patient.'},{''});
+switch uans{2}
+    case 'Map'
+        CSI_dataAsTabs(gui, FA_out, 'B1-maps',csi.data.labels, color_range);        
+    case 'Table'
+        CSI_dataAsTable(FA_out, 'Flipangle')
+    case 'Graph' 
+        CSI_dataAsGraph(FA_out, gui, 'Flipangle')
+end
+
+
+% Show nfo
+CSI_Log({'Mean B1:', 'St. dev B1:', 'Median B1:','Median B1 frequency:', ...
+         'Calculated B1-maps from data.'},...
+         {B_mean, B_std, B_mod, B_freq, ''});
+    
+
+% --- Executed by data visualization with seperate figures functions
+function toolbar_create(figure_object)
+% Add a toolbar to a figure with datacursor mode and save-figure as button.
+% Uses functions: toolbar_dataPointer, toolbar_saveFigure.
+
+
+% Create toolbar in figure
+tb = uitoolbar(figure_object);
+
+% Data pointer toggle button for toolbar
+tt_data = uitoggletool(tb); % Toggle button - pointer
+tt_data_icon = imread('Images\mouse_pointer.png');
+tt_data_icon = imresize(tt_data_icon,[20,20]);
+tt_data_icon(tt_data_icon == max(tt_data_icon(:))) = ...
+    round(max(tt_data_icon(:))*0.94);
+tt_data.CData = tt_data_icon;
+tt_data.ClickedCallback = @toolbar_dataPointer;
+tt_data.TooltipString = 'Toggle data cursor.';
+
+% Save figure button for toolbar
+tt_save = uipushtool(tb); % Push button - save data
+tt_save_icon = imread('Images\floppy_disk.png');
+tt_save_icon = imresize(tt_save_icon,[20,20]);
+tt_save_icon(tt_save_icon ==  max(tt_save_icon(:))) = ...
+    round(max(tt_save_icon(:))*0.94);
+tt_save.CData = tt_save_icon;
+tt_save.ClickedCallback = @toolbar_saveFigure;
+tt_save.TooltipString = ...
+    'Save figure. NB. Transparency is lost when saving as matlab-figures.';
+
+% Restore transparency button for toolbar
+tt_alpha = uipushtool(tb); % Push button - save data
+tt_alpha_icon = imread('Images\wrench.png');
+tt_alpha_icon = imresize(tt_alpha_icon,[20,20]);
+tt_alpha_icon(tt_alpha_icon ==  max(tt_alpha_icon(:))) = ...
+    round(max(tt_alpha_icon(:))*0.94);
+tt_alpha.CData = tt_alpha_icon;
+tt_alpha.ClickedCallback = @toolbar_fixTransparency;
+tt_alpha.TooltipString = ...
+    'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
+
+% --- Executes on press of toolbar's save Figure button
+function toolbar_saveFigure(src, ~)
+% Save figure when clicking save button in toolbar.
+%
+% ISSUE: Figure's of matlab are not saved with their transparency value.
+% This means any transparent background or field will disappear when
+% opened afterward.
+
+% Get figure object
+fig = src.Parent.Parent;
+
+% Get save-location
+[fn,fp,index] = uiputfile(...
+    {'*.fig','Matlab'; '*.png','PNG'; '*.jpeg','JPEG'},'Save figure.');
+if  index == 0, return; end
+
+% Save figure
+[~,~,ext] = fileparts(fn); ext = ext(2:end);
+export_fig([fp '\' fn], '-transparent',['-' ext],'-nocrop','-m1', fig);
+
+% --- Executes on press of toolbar's data Pointer toggle.
+function toolbar_dataPointer(src, ~)
+% Toggles the data cursor in a figure using the src-button.
+datacursormode(src.Parent.Parent, 'toggle');
+
+% --- Executes on press of toolbar's fix transparency button.
+function toolbar_fixTransparency(src,~)
+% Loop all axes in the figure and set transparency element.
+
+% Tabgroup
+tabgroup = src.Parent.Parent.Children(2);
+% Number of tabs
+nTabs = size(tabgroup.Children);
+for tabi = 1:nTabs
+    % Tab-obj
+    tab = tabgroup.Children(tabi);
+    % Children in tab: contains axes
+    tab_childs = tab.Children;
+    % Number of children
+    nChildren = size(tab_childs,1);
+    for kk = 1:nChildren
+        if strcmp(tab_childs(kk).Type,'axes')
+            tab_childs(kk).Color = [tab_childs(kk).Color 0.33];
+        end
+    end
+end
+
+
+
+    
+function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
+% Data is shown as a color map and also a numeric representation in the
+% figure window. 
+%
+% gui           = CSIgui its gui-object requiring only gui.colors.
+% data          = data in of size N-D with Val x X x Y x Z for the 
+%                 first 4 indexes.
+% tag           = tag/name for the figure window.
+% labels        = labels of the data for naming >4-indexes in the window.
+% color_range   = range for color-map colors; 'auto' or [low-lim up-lim];
+%
+% Uses the following function: (in order of use)
+%
+% CSI_dataAsTabs_create_figure: creates the figure with a background color
+% and set specific options to the figure.
+%   
+% CSI_dataAsTabs_create_griddedTabs: Create a tab per slice including a 
+% voxel-grid overlay and create plot_par variable. 
+%
+% CSI_dataAsTabs_addVoxelAxis: Add a transparent axis to each voxel/slice
+%
+% Then plots the data as colormaps by changing the background color of the
+% voxel-axis. Uses a transparency.
+
+if nargin < 5, color_range = 'auto'; end
+
+% Data-Dimensions safety
+dim = size(data); 
+if numel(dim) <= 2
+    CSI_log({'Aborted. Function dataAsTab requires 2D or 3D data',...
+             'Reshape the data as such to enable maps.'},{''}); return; 
+end
+
+
+
+% Number of tab-windows
+nwindows = 1; index_range = {1};
+if numel(dim) > 4
+    nwindows = dim(5); 
+    if numel(dim) > 5
+        % Data ranges
+        index_range = cellfun(@(x) 1:x, ...
+            num2cell(dim(6:end)), 'uniform', 0); 
+    end
+end
+
+
+% Restore data
+data_main = data; tag_main = tag;
+loi = labels{5};
+
+fh_all = cell(1,nwindows);
+for kk = 1:nwindows
+        %data = data_main(:,:,:,:,kk);
+        % Get data for nwindow-kk (one dimension above slices) and all
+        % subsequent dimension.
+        data = data_main(:,:,:,:,kk, index_range{:});
+        tag = sprintf('%s - %s - %i', tag_main, loi, kk);
+
+            % -------- % Figure: Create window % ----------------------- %
+
+% Create a figure with specific settings for tabs
+fh = CSI_dataAsTabs_create_figure(tag, gui.colors.main);
+
+
+            % -------- % Figure: Create tabs % ------------------------- %
+           
+% Create a tab per slice including a voxel-grid overlay and
+% create plot_par            
+CSI_dataAsTabs_create_griddedTabs(fh, data, gui.colors) ;       
+
+
+            % -------- % Figure: Create axis/voxel % ------------------- %                
+
+% Add a transparent axis to each voxel per slice
+tgui = CSI_dataAsTabs_addVoxelAxis(fh);
+
+
+            % --------- % Plot Data As Map % --------------------------- %
+
+% Color map data
+clr_map = jet(128);
+if ischar(color_range)   % Automatic color-range
+    clr_val = linspace(0,max(data(:)),size(clr_map,1));            
+else
+    clr_val = linspace(color_range(1),color_range(2),size(clr_map,1));      
+end
+            
+
+plot_par = tgui.plot_par;
+for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
+    
+    % Current tab - its index in tab format
+    % This index lacks the slice+1 index (or the dim 1 above the slice
+    % dimension). Therefor it requires correction regards pointing to data.
+    tab_index = plot_par.tabs_index_table(tabi,:);
+    tab_index_cell = num2cell(tab_index);
+    
+    % For data indexing - convert tab_index_cell to correct index-dims.
+    sli = tab_index_cell{1};
+    if size(tab_index_cell,2) > 2
+        tab_index_for_data = tab_index_cell(2:end);
+    else
+        tab_index_for_data = {1};
+    end
+    
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % VOXEL VALUE
+            vox_val = data(:,ci,ri,sli,:,tab_index_for_data{:});
+            
+            % Get color from value2color-table
+            [~, clr_ind]= min(abs(clr_val-vox_val));
+            
+            % Add value in center of voxel
+            % // Set limit of yaxis
+            ylimit = [0 2*vox_val]; ylimit(isnan(ylimit)) =  1;
+            if ylimit(2) <= ylimit(1), ylimit(2) = ylimit(1)+1; end
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLim = ylimit;
+            
+            % // Set limit of xaxis
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLim = [0 2];
+            
+            % // plot value
+            plot(tgui.plot_par.ax{ri,ci,tab_index_cell{:}},...
+                1,vox_val, '.', 'MarkerSize', 0.5, ...
+                                'Color', [clr_map(clr_ind,:) 0.33])
+            
+            % // Turn off all axis cosmetic;
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YTick = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XTick = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLabel = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLabel = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Box = 'off';
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XColor = ...
+                plot_par.colors.main;
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YColor = ...
+                plot_par.colors.main;
+            
+            
+            % Set background color of axis according to colormap            
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Color = ...
+                [clr_map(clr_ind,:) 0.33];            
+            
+
+        end 
+    end 
+end
+
+
+% Save tgui-data to gui itself 
+% NB. Should use setappdata if data is involved!
+guidata(fh, tgui);
+
+% Save current object to tab-gui
+fh_all{kk} = tgui;
+
+% Create toolbar in figure
+toolbar_create(tgui.fig);
+
+
+end % end of nsub loop. %
+
+
+% Plot colorbar
+colorbarQ(clr_map, clr_val);
+
+function fh = CSI_dataAsTabs_create_figure(tag, clr)
+% Create a window for the dataAsTab functions
+% tag: name of the figure
+% clr: background color
+
+% Input handling
+if nargin < 2, clr = [0,0,0]; end
+
+% -------- % Figure: Create window % -------- %
+
+% Create figure
+fh = figure('Tag', tag ,'Name', tag ,...
+            'Color', clr, 'Toolbar', 'None',...
+            'MenuBar', 'None', 'NumberTitle', 'Off');                   
+
+% 1. Default figure size and screen pixel size
+def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
+% 2. Ratio to define figure height to def_size
+fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
+% 4. Position of figure.
+fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
+% 5. Apply
+set(fh, 'Position', [fig_ps fig_sz]); 
+
+function tgui = CSI_dataAsTabs_create_griddedTabs(fh, data, clrs)
+% Add tabs and a grid to the figure
+% 
+% gui is gui-object from CSIgui
+% fg is the figure from CSI_dataAsTabs_create_figure()
+% 
+
+% Create tab group
+tgui = struct;
+tgui.tabg = uitabgroup(fh); 
+
+
+% Plotting parameters
+plot_par = struct;
+plot_par.colors   = clrs;              
+plot_par.dim      = size(data);           % Data dimensions
+plot_par.dim(1)   = [];                   % Remove data index e.g. 1
+plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
+
+
+% Tab total parameters.
+tabs_to_plot = prod(plot_par.dim(5:end)) * plot_par.dim(3);
+index_table = cell(1,tabs_to_plot);
+index_range = cellfun(@(x) 1:x, ...
+    num2cell([plot_par.dim(3) plot_par.dim(5:end)]), 'uniform', 0); 
+
+% This array contains all indexes for each slice (first column) and all
+% subsequent indexes except the slice+1 index - which is depicted as a
+% seperate window.
+indArray = slice2rowIndex(index_range);
+
+
+% for kk = 1:plot_par.dim(3) % Number of slices  
+%     index_table{kk} = indArray;
+% end
+plot_par.tabs_index_table = indArray;
+plot_par.tabs_total = tabs_to_plot;
+
+
+            % -------- % Figure: Calculate Axis Grid % ----------------- %
+% Calculate the mesh-grid for the slice representing the voxels
+
+% Resolution without any correction of linewidth
+plot_par.res = 1./plot_par.dim(1:2); 
+
+% Loop X, Y and Z
+% X, Y and Z == data/csi-space. Position in figure starts at
+% point zero (0). Resolution equals the nr of CSI-voxels to plot in the row 
+% (y in image)and column (x in image) dimension of the figure. 
+for kk = 1:numel(plot_par.res)
+    plot_par.range{kk} = ...
+    0 : plot_par.res(kk) : ...
+       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
+end
+
+% Caluclate a grid for each axis in the figure representing the voxels in
+% CSI data.
+[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
+plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
+
+% 1D Correction 
+% Transpose x/col and y/row. Creats Nx1 vs 1xN lists of the
+% axis grid coordinates.
+if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
+
+
+
+            % --------- % Figure: Loop slices/tabs % ------------------- %
+% Adds a tab to the figure for all slices and other dimension (excluding 
+% the index slice+1; which is seperated into different windows.
+for tabi = 1:plot_par.tabs_total % Loop each tab 
+    
+    % Plotting index
+    tmp_plotindex_tabs = plot_par.tabs_index_table(tabi,:);
+    tmp_plotindex_tabs_cell = num2cell(tmp_plotindex_tabs);
+    
+    % Create a tab in the tabgroup for this slices
+    tgui.tabh{tmp_plotindex_tabs_cell{:}} = ...
+        uitab(tgui.tabg, 'Title', int2str(tmp_plotindex_tabs),...
+        'BackgroundColor', plot_par.colors.main,...
+        'ForegroundColor', plot_par.colors.text_title);
+
+    % Plot voxel grid
+    % Input: target figure, target figure size, data dimensions, range and color.
+    CSI_2D_grid(tgui.tabh{tmp_plotindex_tabs_cell{:}},...
+        fh.Position(3:4), plot_par.dim, ...
+        plot_par.range, plot_par.colors.text_title);
+
+end % End of slice/tabs loop
+
+tgui.plot_par = plot_par; tgui.fig = fh;
+
+% Add 
+guidata(fh, tgui);
+
+function tgui = CSI_dataAsTabs_addVoxelAxis(fh)
+% Add to a transparent axis to each voxel per slice
+
+% Get GUI data of figure
+tgui = guidata(fh);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
+
+% Storage for each axis.
+ax = cell(plot_par.dim);
+
+% Loop each tab of figure
+for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
+    
+    tab_index = plot_par.tabs_index_table(sli,:);
+    tab_index_cell = num2cell(tab_index);
+    
+    % Plot csi voxel per axis in plot_par.grid
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % AXIS DETAILS 
+            % X and Y position in the figure of the axis to plot.
+            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
+            % Position of axis to plot
+            pos = [x y plot_par.res(1) plot_par.res(2)];
+            % Create axis with pos(3,4) size at pos(1,2) position
+            if ~ishandle(tgui.tabh{tab_index_cell{:}}), return; end
+            ax{ri,ci,tab_index_cell{:}} = axes('parent',tgui.tabh{tab_index_cell{:}},'position',pos);           
+
+            % AXIS COSMETICS
+            set(ax{ri,ci,tab_index_cell{:}},...
+                   'Color','None',...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off');             
+
+        end 
+    end 
+end
+tgui.plot_par.ax = ax; guidata(fh, tgui);
+
+

@@ -93,6 +93,8 @@ else
 end
 
 [noiseVec, noiseVal] = eig(noiseCov);
+% [V,D] = eig(A) returns diagonal matrix D of eigenvalues and matrix V 
+% whose columns are the corresponding right eigenvectors, so that A*V = V*D.
 
 scaleMatrixFft = noiseVec*diag(sqrt(0.5)./sqrt(diag(noiseVal)));
 invScaleMatrixFft = inv(scaleMatrixFft);

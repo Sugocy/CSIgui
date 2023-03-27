@@ -1,9 +1,9 @@
-function spec = csi_fft(fid, correct_N, double_shift)	
+function spec = csi_fft(fid, corr_N, corr_onesided, double_shift)	
 %%%% Description:                    Forward Fourier of FIDs in CSI volume.
 %%% Creator: Ir. Q. van Houtum       Version: 1.2          Date: 2017-07
 %%% --------------------------------------------------------------------
 %%% Backward fourier of spectra ordered in space (1-ND). Expects the
-%%% frequence dimension to be on index 1.
+%%% frequency dimension/FID samples to be on index 1.
 %%%
 %%% Input:      spec - Array with each FID on the first dimension.
 %%%                    (fres x M x N x P x ...) 
@@ -13,17 +13,23 @@ function spec = csi_fft(fid, correct_N, double_shift)
 %%%                 the center of the spectrum. Each FID will be converted 
 %%%                 to a cell-array with size (M x N x P ...) whereafter 
 %%%                 the fft-method is applied on each cell. No loops, fast.
-%%%                 
-%%% Contact: qhoutum2@umcutrecht.nl    
+%%%
+%%% corr_N:         Correct for the 1/#samples (N) in the FFT. Off by
+%%%                 default.
+%%% double_shift:   Shift the FID twice for handling (symmetric) echoes. 
+%%%                 Disables onesided_cor if enabled.
+%%% corr_onesided:  Correct for onesided FFT in spectroscopy. On by
+%%%                 default. Sample at t = 0 is halfed before fft.
+%%%
+%%% Contact: quincyvanhoutum@gmail.com
 %%% See also: csi_ifft(spec);
 
-if nargin == 1,     correct_N = 0; double_shift = 0;    
-elseif nargin == 2,                double_shift = 0;
-    
+if     nargin == 1,     corr_N = 0; corr_onesided = 1; double_shift = 0; 
+elseif nargin == 2,                 corr_onesided = 1; double_shift = 0;
+elseif nargin == 3,                                    double_shift = 0;
 end
 
-%% Convert FID to cell
-% ONLY IF REQUIRED
+%% Convert FID to cell if array
 
 if ~iscell(fid)
     was_cell = 0;
@@ -36,28 +42,36 @@ if ~iscell(fid)
 
     % Creat cell of data.
     fid = mat2cell(fid, sz(1), cell_layout{:}); 
-
 else
     was_cell = 1;
 end
 
 %% FFT over all FIDS.
 % 1. Check for pre-fft shift
-% 2. FFT
-% 3. Shift 
-% 4. Check for N-factor correction
+% 2. Check for onesided FFT correction
+% 3. FFT
+% 4. Shift 
+% 5. Check for N-factor correction
 
 % Apply pre-shift (applicable to echoes)
-if double_shift, fid = cellfun(@fftshift, fid, 'UniformOutput', 0); end
+if double_shift
+    fid = cellfun(@fftshift, fid, 'UniformOutput', 0); 
+    corr_onesided = 0;
+end
+
+% Correct for t = 0 because of non-symmetrical e.g. one-sided fft. 
+if corr_onesided
+    fid = cellfun(@(x) x .* [0.5 ones(1,size(x,1)-1)]', fid, 'Uniform', 0);
+end
 
 % FFT
-spec = cellfun(@fft,      fid,  'UniformOutput', 0);                        % Forward Fast Fourier
+spec = cellfun(@fft,      fid,  'UniformOutput', 0);                        % Fast Forward Fourier
 
 % FFT Shift
 spec = cellfun(@fftshift, spec, 'UniformOutput', 0);                        % Shift zero-freq to centrum of spectrum
 
 % Correct N-factor 
-if correct_N
+if corr_N
     spec = cellfun(@times, ...
         spec, repmat({1/sz(1)},size(spec)),'UniformOutput',0);              % Swap the 1/N factor convention in the inverse Fourier
 end

@@ -78,11 +78,11 @@ if mockup == 0
     fprintf('Proceeding with calculated ppm-axis.\n');
 elseif mockup == 1 % Create mockup x-axis for data.
     x.N = size(spec,1); x.ppm = 1:x.N;
-    fprintf('Proceeding with unitless x-axis.\n');
+%     fprintf('Proceeding with unitless x-axis.\n');
 elseif mockup == 2
-    % Nothing!
-    % x.N & x.ppm already exist;
-    fprintf('Proceeding with given x-axis.\n');
+%     % Nothing!
+%     % x.N & x.ppm already exist;
+%     fprintf('Proceeding with given x-axis.\n');
 end
 
 

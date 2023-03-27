@@ -1,4 +1,4 @@
-function fid = csi_ifft(spec)	
+function fid = csi_ifft(spec, corr_onesided)	
 %%%% Description:                            Inverse Fourier of CSI data.
 %%% Creator: Ir. Q. van Houtum       Version: 1.2          Date: 2017-07
 %%% --------------------------------------------------------------------
@@ -13,10 +13,14 @@ function fid = csi_ifft(spec)
 %%%                 Each spectrum will be converted to a cell-array with
 %%%                 size (M x N x P ...) whereafter the ifft-method is 
 %%%                 applied on each cell. No loops, fast.
+%%%
+%%% corr_onesided:  Correct for onesided FFT in spectroscopy. On by
+%%%                 default. Sample at t = 0 is double after ifft.
 %%% 
-%%% Contact: qhoutum2@umcutrecht.nl                     
+%%% Contact: quincyvanhoutum@gmail.com                 
 %%% See also: csi_fft(fid);               
 
+if nargin == 1, corr_onesided = 1; end
 
 %% Convert SPEC to cell
 % ONLY IF REQUIRED
@@ -40,6 +44,11 @@ end
 % First inverse the data shift around 0 in csi_fft prior to ifft.
 fid = cellfun(@ifftshift, spec,  'UniformOutput', 0);  % Inverse shift.   
 fid = cellfun(@ifft,      fid,   'UniformOutput', 0);  % Inverse FFT                     
+
+% Correct for t = 0 because of non-symmetrical e.g. one-sided fft. 
+if corr_onesided
+    fid = cellfun(@(x) x .* [2 ones(1,size(x,1)-1)]', fid, 'Uniform', 0);
+end
 
 %% Convert FID to array
 % ONLY IF REQUIRED
