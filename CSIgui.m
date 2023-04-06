@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 06-Mar-2023 14:01:01
+% Last Modified by GUIDE v2.5 29-Mar-2023 08:36:46
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -555,10 +555,10 @@ end
 % Update LOG
 CSI_Log({['Loading ' ext(2:end) ' file.']}, {'Please wait.'});
 
-if strcmp(ext,'.dcm')                                          % DICOM
+if strcmp(ext,'.dcm') || strcmp(ext,'.ima')                    % DICOM
 
     % Parse dicom file
-    success = parse_dicom(fp, fn, gui);
+    success = parse_dicom(fp, [fn ext], gui);
     
 elseif strcmp(ext,'.par') || strcmp(ext,'.rec')                % PAR/REC
 
@@ -1087,7 +1087,7 @@ function success = parse_dicom(fp, fn, gui)
 % Created: mri-struct
 
 % Read and order dicom data
-[m,i,g] = dicomread7T({[fp '\' fn '.dcm']}); mri = struct;
+[m,i,g] = dicomread7T({[fp '\' fn]}); mri = struct;
 if isnan(m)
     CSI_Log({'Loading DICOM file failed.'},{''}); 
     success = 0; return; 
@@ -2629,7 +2629,7 @@ uans = getUserInput_Popup({'Display type: ',...
                            'Save line width data (.txt): ',...
                            'Use FWHM method: (BETA)'},...
                          {{'Table', 'Graph'},{'No','Yes'},...
-                            {'Local minima', 'Intersect'}});
+                            {'Local minima', 'Intersect (Beta)'}});
 if isempty(uans)
     CSI_Log({'Skipped line width calculations.'},{''}); return; 
 end
@@ -2679,7 +2679,7 @@ if strcmp('Local minima', lwmeth) % Local minima method
     % Input axis
     ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
     % Set plotting off - Overload matlab otherwise!
-    plot_off = repmat({1},size(tmp)); % plot_off{1,2,4,1} = 1;
+    plot_off = repmat({0},size(tmp)); % plot_off{1,2,4,1} = 1;
 
 
     % Calculate line width % --------------------------------- %
@@ -3694,10 +3694,10 @@ else
 end
 
 % MRSI data to array        
-array_mrsi = cell2mat(cell_mrsi_phased);
+csi.data.raw = cell2mat(cell_mrsi_phased);
 
 % Write to csi-struct
-csi.data.raw = array_mrsi;
+% csi.data.raw = array_mrsi;
 
 % Convert to starting data domain (II/II)
 if (phase_method == 3) && strcmp(domain,'freq')
@@ -4167,9 +4167,8 @@ end
 CSI_Log({'WSVD; Size of noise mask:'},{mask_size});
 
 
-
 % Number of samples and channels.
-nchan = size(csi.data.raw,ind_cha); ndimf = size(csi.data.raw,1);
+ndimf = size(csi.data.raw,1);
 
 % Exclusion of channels % ------------------------------------------- %
 
@@ -4183,17 +4182,17 @@ ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
 
 % If data not averaged - ask user if to do so.
 if ~isnan(ind_avg)
-if size(csi.data.dim, ind_avg) ~= 1
-    uans = getUserInput(...
-        {'Average channel data before WSVD? (y/n)'},{'y'});
-    if isempty(uans), uans{1} = 'n'; end
-    
-    % Average data
-    if strcmp(uans{1},'y')
-        csi.data.raw = mean(csi.data.raw,ind_avg);   % Average
-        CSI_Log({'WSVD: Averaged data over dimension: '},{ind_avg});
+    if size(csi.data.dim, ind_avg) ~= 1
+        uans = getUserInput(...
+            {'Average channel data before WSVD? (y/n)'},{'y'});
+        if isempty(uans), uans{1} = 'n'; end
+
+        % Average data
+        if strcmp(uans{1},'y')
+            csi.data.raw = mean(csi.data.raw,ind_avg);   % Average
+            CSI_Log({'WSVD: Averaged data over dimension: '},{ind_avg});
+        end
     end
-end
 end
 
 % Reshaping (1/2) % -------------------------------------------------- %
@@ -4218,6 +4217,8 @@ cell_layout = arrayfun(@ones,...
     ones(1,size(szr(3:end),2)),szr(3:end),'UniformOutput',0);
 % Convert to a cell matrix with {dt x nChan};
 tmp_cell = squeeze(mat2cell(tmp, szr(1), szr(2), cell_layout{:})); 
+% Free up memory.
+clear('tmp');
 
 % WSVD % ------------------------------------------------------------ %
 
@@ -4264,7 +4265,8 @@ end
 
 % Reshape to before cell array size with channel index size = 1.
 % tmp = array of spectra with channel dim at 2nd index
-sz_cell = size(tmp); sz_cell(2) = 1; sz_cell(1) = ndimf; 
+sz_cell = szr;
+sz_cell(2) = 1; sz_cell(1) = ndimf; 
 tmp = reshape(comb.data, sz_cell); % prod(sz_cell) == numel(comb.data)!
 
 % Reorder back to starting order of index dimensions.
@@ -4316,8 +4318,6 @@ end
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
-%gui = guidata(gui.CSIgui_main);
-%csi = getappdata(gui.CSIgui_main,'csi'); 
 
 % Display info to user
 CSI_Log({'WSVD; Channels are combined.',...
@@ -4567,7 +4567,8 @@ mask_size = str2double(uans{1});
 
 % SNR-method (real/magnitude) and display method (table or graph)
 uans = getUserInput_Popup({'SNR Signal unit: ','Display type: '},...
-                         {{'Real', 'Magnitude'},{'Graph','Table'}});
+                         {{'Real', 'Magnitude'},...
+                          {'Graph','Table', 'Map', 'Histogram'}});
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 
 dataDisp = lower(uans{2}); % Display method
@@ -4598,18 +4599,114 @@ switch dataDisp
     % Send to tableData function, to show each slice as a table.
     % If higher dimensions are available, the data will be concentonated
     % per slice. Graph may be better suited.
-    %CSI_tableData(SNR_all, 'SNR');
     CSI_dataAsTable(SNR_all, 'SNR')
-     
-    % Save full table to file.
-    %     save([datestr(now,'YYmmdd_HHMMSS') '_SNR.mat'],...
-    %         'SNR_all','ppm_range','mask_size');
     
     case 'graph'      % Graph % ----- %
-    % Send to displayData function, to show each slice as a graph.
-    % If higher dimensions only represent only 1 value/voxel, a dot is 
-    % shown. Adviced is using table in those cases.
-    CSI_dataAsGraph(SNR_all, gui, 'SNR');
+        % Send to displayData function, to show each slice as a graph.
+        % If higher dimensions only represent only 1 value/voxel, a dot is 
+        % shown. Adviced is using table in those cases.
+        CSI_dataAsGraph(SNR_all, gui, 'SNR');
+        %CSI_dataAsGraph2(data, data_text, datatag, gui, img)
+
+    case 'map'
+        % Send data to dataAsTaps and create maps in a tabbed figure for all 
+        % slices (or only the current slice plotted.
+
+
+        % ÚSERINPUT: what data to show.
+        uans = getUserInput_Popup(...
+            {'Data range to show: ','Color scale range: '},...
+           {{'All', 'Current slice'},...
+            {'Min to Max', 'Histogram optimized'}});                                                 
+        if isempty(uans), return; end
+        labels = csi.data.labels;
+        
+        % \\ Check data to visualize 
+        if strcmpi(uans{1},'Current slice')
+            % \\ Get current plotted slice index from CSIgui 2D-plot
+            % \\ Get curent slice data from SNR_all array.
+
+            % Get the panel-slider object and 2d-plot object
+            [~, gui2D] = CSI_2D_getDataSliders(gui);
+
+            % Plotted slice index of interest
+            sloi = gui2D.plotindex{1};
+
+            % Get data of interest.
+            snr_dim = size(SNR_all);    
+            snr_dim_range = arrayfun(@(x) 1:x,snr_dim, 'uniform',0);
+            snr_dim(4) = 1; snr_dim_range{4} = sloi;
+
+            % 2. Get data of interest from SNR_all.
+            SNR_cut = SNR_all(snr_dim_range{:});
+            permvec = 1:numel(snr_dim);
+            permvec(4) = []; permvec(end+1) = 4;
+            SNR_cut = permute(SNR_cut, permvec);
+
+            % Replace SNR-all with SNR-cut
+            SNR_all = SNR_cut;
+
+            % Update labels
+            labels{5} = int2str(sloi);
+        end         
+    
+        % \\ Calculate color-range of maps.
+        switch uans{2}
+            case 'Min to Max'
+                color_scale = [min(SNR_all(:)) max(SNR_all(:))];
+            case 'Histogram optimized'
+                [N, edges, bin] = histcounts(SNR_all(:));
+                bool = cumsum(N) <= 0.98*size(bin,1);
+                maxval = max(edges(bool));
+                color_scale = [min(SNR_all(:)) maxval];                         
+        end
+        
+        % Plot as tab
+        CSI_dataAsTabs(gui, SNR_all, 'SNR', labels, color_scale);
+
+    
+    case 'histogram'
+        % Plot data as histogram - simple display.    
+        fig = figure(); ax = axes(fig);
+        histogram(ax, SNR_all(:), 100);
+        title('SNR  Histogram'); xlabel('SNR Bins');
+
+end
+
+
+% --- Get 2D-CSI plot slider data
+function [pan_gui, gui2D] = CSI_2D_getDataSliders(gui)
+% FIGURE OBJECT % ------------------------------------------------------ %
+% Get 2D-plot figure its object, apply chosen options and save as image.
+
+% Check if 2D Plot is active (open).
+fig_obj =  findobj('type','figure','tag','CSIgui_plot2D');
+% If 2D Plot not active, open it.
+if isempty(fig_obj)
+    panel_2D_DataSliders([],[],gui); CSI_2D_initiate2D(); 
+end
+
+% Get 2D-Plot object and 2D-Panel figure
+fig_obj = findobj('type','figure','tag','CSIgui_plot2D');
+pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
+if ~isempty(pan_obj)
+    pan_gui = guidata(pan_obj);
+    gui2D = guidata(fig_obj);
+else
+    % Open slider panel
+    panel_2D_DataSliders([],[],gui);
+    % Get the object
+    pan_obj = findobj('type','figure','tag','CSIpanel_2D_DataToDisplay');
+    pan_gui = guidata(pan_obj);
+    % Get plot index for 2D plot figure gui data.
+    gui2D = guidata(fig_obj); gui2D.plotindex
+    
+    % Set sliders from values in current 2D-plot figure.
+    for sli = 1:size(pan_gui.sliders,2)
+        pan_gui.sliders{sli}.Value = gui2D.plotindex{sli};
+        pan_gui.texts{sli}.String = sprintf('%i/%i', gui2D.plotindex{sli},...
+            gui2D.dim(sli+2));
+    end
 end
 
 % --- Executes on button press in button_ws: export appdata to workspace.
@@ -5951,6 +6048,534 @@ end
 
 
 
+
+% --- Executed by data visualization with seperate figures functions
+function toolbar_create(figure_object)
+% Add a toolbar to a figure with datacursor mode and save-figure as button.
+% Uses functions: toolbar_dataPointer, toolbar_saveFigure.
+
+
+% Create toolbar in figure
+tb = uitoolbar(figure_object);
+
+% Data pointer toggle button for toolbar
+tt_data = uitoggletool(tb); % Toggle button - pointer
+tt_data_icon = imread('Images\mouse_pointer.png');
+tt_data_icon = imresize(tt_data_icon,[20,20]);
+tt_data_icon(tt_data_icon == max(tt_data_icon(:))) = ...
+    round(max(tt_data_icon(:))*0.94);
+tt_data.CData = tt_data_icon;
+tt_data.ClickedCallback = @toolbar_dataPointer;
+tt_data.TooltipString = 'Toggle data cursor.';
+
+% Save figure button for toolbar
+tt_save = uipushtool(tb); % Push button - save data
+tt_save_icon = imread('Images\floppy_disk.png');
+tt_save_icon = imresize(tt_save_icon,[20,20]);
+tt_save_icon(tt_save_icon ==  max(tt_save_icon(:))) = ...
+    round(max(tt_save_icon(:))*0.94);
+tt_save.CData = tt_save_icon;
+tt_save.ClickedCallback = @toolbar_saveFigure;
+tt_save.TooltipString = ...
+    'Save figure. NB. Transparency is lost when saving as matlab-figures.';
+
+% Save all tabs as image button for toolbar
+tt_save_all = uipushtool(tb); % Push button - save data
+tt_save_all_icon = imread('Images\floppy_disk_save_all.png');
+tt_save_all_icon = imresize(tt_save_all_icon,[20,20]);
+tt_save_all_icon(tt_save_all_icon ==  max(tt_save_all_icon(:))) = ...
+    round(max(tt_save_all_icon(:))*0.94);
+tt_save_all.CData = tt_save_all_icon;
+tt_save_all.ClickedCallback = @toolbar_saveFigure_allTabs;
+tt_save_all.TooltipString = ...
+    'Save all tabs to image-file automagically.';
+
+% Set the colorscale range of the plot
+tt_color_scale = uipushtool(tb); % Push button - color range scale
+tt_color_scale_icon = imread('Images\colorwheel.png');
+tt_color_scale_icon = imresize(tt_color_scale_icon,[20,20]);
+tt_color_scale_icon(tt_color_scale_icon ==  max(tt_color_scale_icon(:))) = ...
+    round(max(tt_color_scale_icon(:))*0.94);
+tt_color_scale.CData = tt_color_scale_icon;
+tt_color_scale.ClickedCallback = @toolbar_SetColorScale;
+tt_color_scale.TooltipString = ...
+    'Adjust color-scale range of plotted data.';
+
+% Restore transparency button for toolbar
+tt_alpha = uipushtool(tb); % Push button - save data
+tt_alpha_icon = imread('Images\wrench.png');
+tt_alpha_icon = imresize(tt_alpha_icon,[20,20]);
+tt_alpha_icon(tt_alpha_icon ==  max(tt_alpha_icon(:))) = ...
+    round(max(tt_alpha_icon(:))*0.94);
+tt_alpha.CData = tt_alpha_icon;
+tt_alpha.ClickedCallback = @toolbar_fixTransparency;
+tt_alpha.TooltipString = ...
+    'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
+
+
+% --- Executes on press of toolbar's save Figure button
+function toolbar_saveFigure(src, ~)
+% Save figure when clicking save button in toolbar.
+%
+% ISSUE: Figure's of matlab are not saved with their transparency value.
+% This means any transparent background or field will disappear when
+% opened afterward.
+
+% Get figure object
+fig = src.Parent.Parent;
+
+% Get save-location
+[fn,fp,index] = uiputfile(...
+    {'*.fig','Matlab'; '*.png','PNG'; '*.jpeg','JPEG'},'Save figure.');
+if  index == 0, return; end
+
+% Save figure
+[~,~,ext] = fileparts(fn); ext = ext(2:end);
+export_fig([fp '\' fn], '-transparent',['-' ext],'-nocrop','-m1', fig);
+
+% --- Executes on press of toolbar's data Pointer toggle.
+function toolbar_dataPointer(src, ~)
+% Toggles the data cursor in a figure using the src-button.
+datacursormode(src.Parent.Parent, 'toggle');
+
+% --- Executes on press of toolbar's fix transparency button.
+function toolbar_fixTransparency(src,~)
+% Loop all axes in the figure and set transparency element.
+
+% Tabgroup
+tabgroup = src.Parent.Parent.Children(2);
+% Number of tabs
+nTabs = size(tabgroup.Children);
+for tabi = 1:nTabs
+    % Tab-obj
+    tab = tabgroup.Children(tabi);
+    % Children in tab: contains axes
+    tab_childs = tab.Children;
+    % Number of children
+    nChildren = size(tab_childs,1);
+    for kk = 1:nChildren
+        if strcmp(tab_childs(kk).Type,'axes')
+            tab_childs(kk).Color = [tab_childs(kk).Color 0.33];
+        end
+    end
+end
+
+% --- Executes on press of toolbar's save all tabs button.
+function toolbar_saveFigure_allTabs(src,~)
+
+% Get tab-group object
+figobj = src.Parent.Parent;
+for kk = 1:size(figobj.Children,1)
+    % Find tab group child of figure object.
+    if strcmp(figobj.Children(kk).Type,'uitabgroup')
+        tabg = figobj.Children(kk);
+    end
+end
+if ~exist('tabg','var'), return; end
+
+% Get save-location
+[fn, fp, index] = uiputfile(...
+    {'*.png','PNG'; '*.jpeg','JPEG'},'Save figure.');
+if  index == 0, return; end
+[~,fn,ext] = fileparts(fn); ext = ext(2:end);
+    
+% Set active-tab and print to file.
+tabs = tabg.Children;
+for kk = 1:size(tabs,1)
+    % Set tab-kk to active
+    tabg.SelectedTab = tabs(kk);
+    
+    % Save figure
+    fntmp = [fp fn '_' tabs(kk).Title];
+    export_fig(fntmp, '-transparent',['-' ext],'-nocrop','-m1', figobj)
+end
+
+function toolbar_SetColorScale(src,~)
+% Adjust color scale range of current tab-plot.
+% Works for maps i.e. CSI_dataAsTabs
+
+% \\ GET: object handles for figure and tab-group
+figobj = src.Parent.Parent;
+tgui = guidata(figobj);
+
+if ~isfield(tgui,'plot_par')
+    fprintf('Error: no plot-data stored in figure'); return; 
+end
+plot_par = tgui.plot_par;
+if ~isfield(plot_par,'clr_val')
+    fprintf('Error: no color-values stored in figure'); return; 
+end
+
+% \\ USER INPUT: new color range
+cur_clr_rng = plot_par.clr_rng;
+uans = getUserInput({'New color scale range:'}, {int2str(cur_clr_rng)});
+if isempty(uans), return; end
+new_clr_rng = str2double(strsplit(uans{1}));
+
+% Calculate new color-range table
+clr_map = plot_par.clr_map;
+clr_val = linspace(new_clr_rng(1),new_clr_rng(2),size(clr_map,1));      
+
+% Store into gui-data-obj
+tgui.plot_par.clr_val = clr_val; tgui.plot_par.clr_rng = new_clr_rng;            
+tgui.plot_par.clr_map = clr_map;
+
+% \\ ADJUST: axis colors
+ax = plot_par.ax(:);
+for axi = 1:size(ax,1)
+    if ~isempty(ax{axi})
+        % Axis data value
+        vox_val = ax{axi}.Children.YData;
+        % New color index: this index relates to clr_map
+        [~, clr_ind]= min(abs(clr_val-vox_val)); 
+        % Adjust color of axis background
+        ax{axi}.Color = [clr_map(clr_ind,:) 0.33];
+        % Adjust color of data-point in axis // Line-point
+        ax{axi}.Children.Color = [clr_map(clr_ind,:) 0.33];
+    end    
+end
+guidata(figobj, tgui)
+
+% Plot colorbar with new values.
+colorbarQ(clr_map, clr_val);
+
+% --- Plot data as tabs and create maps/tab    
+function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
+% Data is shown as a color map and also a numeric representation in the
+% figure window. 
+%
+% gui           = CSIgui its gui-object requiring only gui.colors.
+% data          = data in of size N-D with Val x X x Y x Z for the 
+%                 first 4 indexes.
+% tag           = tag/name for the figure window.
+% labels        = labels of the data for naming >4-indexes in the window.
+% color_range   = range for color-map colors; 'auto' or [low-lim up-lim];
+%
+% Uses the following function: (in order of use)
+%
+% CSI_dataAsTabs_create_figure: creates the figure with a background color
+% and set specific options to the figure.
+%   
+% CSI_dataAsTabs_create_griddedTabs: Create a tab per slice including a 
+% voxel-grid overlay and create plot_par variable. 
+%
+% CSI_dataAsTabs_addVoxelAxis: Add a transparent axis to each voxel/slice
+%
+% Then plots the data as colormaps by changing the background color of the
+% voxel-axis. Uses a transparency.
+
+if nargin < 5, color_range = 'auto'; end
+
+% Data-Dimensions safety
+dim = size(data); 
+if numel(dim) <= 2
+    CSI_log({'Aborted. Function dataAsTab requires 2D or 3D data',...
+             'Reshape the data as such to enable maps.'},{''}); return; 
+end
+
+
+
+% Number of tab-windows
+nwindows = 1; index_range = {1};
+if numel(dim) > 4
+    nwindows = dim(5); 
+    if numel(dim) > 5
+        % Data ranges
+        index_range = cellfun(@(x) 1:x, ...
+            num2cell(dim(6:end)), 'uniform', 0); 
+    end
+end
+
+
+% Restore data
+data_main = data; tag_main = tag;
+loi = labels{5};
+
+fh_all = cell(1,nwindows);
+for kk = 1:nwindows
+        %data = data_main(:,:,:,:,kk);
+        % Get data for nwindow-kk (one dimension above slices) and all
+        % subsequent dimension.
+        data = data_main(:,:,:,:,kk, index_range{:});
+        tag = sprintf('%s - %s - %i', tag_main, loi, kk);
+
+            % -------- % Figure: Create window % ----------------------- %
+
+% Create a figure with specific settings for tabs
+fh = CSI_dataAsTabs_create_figure(tag, gui.colors.main);
+
+
+            % -------- % Figure: Create tabs % ------------------------- %
+           
+% Create a tab per slice including a voxel-grid overlay and
+% create plot_par            
+CSI_dataAsTabs_create_griddedTabs(fh, data, gui.colors) ;       
+
+
+            % -------- % Figure: Create axis/voxel % ------------------- %                
+
+% Add a transparent axis to each voxel per slice
+tgui = CSI_dataAsTabs_addVoxelAxis(fh);
+
+
+            % --------- % Plot Data As Map % --------------------------- %
+
+% Color map data
+clr_map = jet(128);
+if ischar(color_range)   % Automatic color-range
+    clr_val = linspace(min(data(:)),max(data(:)),size(clr_map,1));            
+else
+    clr_val = linspace(color_range(1),color_range(2),size(clr_map,1));      
+end
+tgui.plot_par.clr_val = clr_val; tgui.plot_par.clr_rng = color_range;            
+tgui.plot_par.clr_map = clr_map;
+
+plot_par = tgui.plot_par;
+for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
+    
+    % Current tab - its index in tab format
+    % This index lacks the slice+1 index (or the dim 1 above the slice
+    % dimension). Therefor it requires correction regards pointing to data.
+    tab_index = plot_par.tabs_index_table(tabi,:);
+    tab_index_cell = num2cell(tab_index);
+    
+    % For data indexing - convert tab_index_cell to correct index-dims.
+    sli = tab_index_cell{1};
+    if size(tab_index_cell,2) > 2
+        tab_index_for_data = tab_index_cell(2:end);
+    else
+        tab_index_for_data = {1};
+    end
+    
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % VOXEL VALUE
+            vox_val = data(:,ci,ri,sli,:,tab_index_for_data{:});
+            
+            % Get color from value2color-table
+            [~, clr_ind]= min(abs(clr_val-vox_val));
+            
+            % Add value in center of voxel
+            % // Set limit of yaxis
+            ylimit = [0 2*vox_val]; ylimit(isnan(ylimit)) =  1;
+            if ylimit(2) <= ylimit(1), ylimit(2) = ylimit(1)+1; end
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLim = ylimit;
+            
+            % // Set limit of xaxis
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLim = [0 2];
+            
+            % // plot value
+            plot(tgui.plot_par.ax{ri,ci,tab_index_cell{:}},...
+                1,vox_val, '.', 'MarkerSize', 0.5, ...
+                                'Color', [clr_map(clr_ind,:) 0.33])
+            
+            % // Turn off all axis cosmetic;
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YTick = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XTick = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLabel = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLabel = [];
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Box = 'off';
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XColor = ...
+                plot_par.colors.main;
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YColor = ...
+                plot_par.colors.main;
+            
+            
+            % Set background color of axis according to colormap            
+            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Color = ...
+                [clr_map(clr_ind,:) 0.33];            
+            
+
+        end 
+    end 
+    
+    
+end
+
+
+% Save tgui-data to gui itself 
+% NB. Should use setappdata if data is involved!
+guidata(fh, tgui);
+
+% Save current object to tab-gui
+fh_all{kk} = tgui;
+
+% Create toolbar in figure
+toolbar_create(tgui.fig);
+
+
+end % end of nsub loop. %
+
+
+% Plot colorbar
+colorbarQ(clr_map, clr_val);
+
+% --- Create figure for CSI_dataAsTabs
+function fh = CSI_dataAsTabs_create_figure(tag, clr)
+% Create a window for the dataAsTab functions
+% tag: name of the figure
+% clr: background color
+
+% Input handling
+if nargin < 2, clr = [0,0,0]; end
+
+% -------- % Figure: Create window % -------- %
+
+% Create figure
+fh = figure('Tag', tag ,'Name', tag ,...
+            'Color', clr, 'Toolbar', 'None',...
+            'MenuBar', 'None', 'NumberTitle', 'Off');                   
+
+% 1. Default figure size and screen pixel size
+def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
+% 2. Ratio to define figure height to def_size
+fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
+% 4. Position of figure.
+fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
+% 5. Apply
+set(fh, 'Position', [fig_ps fig_sz]); 
+
+% --- Create grid overlay in every tab (CSI_dataAsTabs)
+function tgui = CSI_dataAsTabs_create_griddedTabs(fh, data, clrs)
+% Add tabs and a grid to the figure
+% 
+% gui is gui-object from CSIgui
+% fg is the figure from CSI_dataAsTabs_create_figure()
+% 
+
+% Create tab group
+tgui = struct;
+tgui.tabg = uitabgroup(fh); 
+
+
+% Plotting parameters
+plot_par = struct;
+plot_par.colors   = clrs;              
+plot_par.dim      = size(data);           % Data dimensions
+plot_par.dim(1)   = [];                   % Remove data index e.g. 1
+plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
+
+
+% Tab total parameters.
+tabs_to_plot = prod(plot_par.dim(5:end)) * size(data,4);
+index_table = cell(1,tabs_to_plot);
+index_range = cellfun(@(x) 1:x, ...
+    num2cell([size(data,4) plot_par.dim(5:end)]), 'uniform', 0); 
+
+% This array contains all indexes for each slice (first column) and all
+% subsequent indexes except the slice+1 index - which is depicted as a
+% seperate window.
+indArray = slice2rowIndex(index_range);
+
+plot_par.tabs_index_table = indArray;
+plot_par.tabs_total = tabs_to_plot;
+
+
+            % -------- % Figure: Calculate Axis Grid % ----------------- %
+% Calculate the mesh-grid for the slice representing the voxels
+
+% Resolution without any correction of linewidth
+plot_par.res = 1./plot_par.dim(1:2); 
+
+% Loop X, Y and Z
+% X, Y and Z == data/csi-space. Position in figure starts at
+% point zero (0). Resolution equals the nr of CSI-voxels to plot in the row 
+% (y in image)and column (x in image) dimension of the figure. 
+for kk = 1:numel(plot_par.res)
+    plot_par.range{kk} = ...
+    0 : plot_par.res(kk) : ...
+       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
+end
+
+% Caluclate a grid for each axis in the figure representing the voxels in
+% CSI data.
+[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
+plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
+
+% 1D Correction 
+% Transpose x/col and y/row. Creats Nx1 vs 1xN lists of the
+% axis grid coordinates.
+if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
+
+
+
+            % --------- % Figure: Loop slices/tabs % ------------------- %
+% Adds a tab to the figure for all slices and other dimension (excluding 
+% the index slice+1; which is seperated into different windows.
+for tabi = 1:plot_par.tabs_total % Loop each tab 
+    
+    % Plotting index
+    tmp_plotindex_tabs = plot_par.tabs_index_table(tabi,:);
+    tmp_plotindex_tabs_cell = num2cell(tmp_plotindex_tabs);
+    
+    % Create a tab in the tabgroup for this slices
+    tgui.tabh{tmp_plotindex_tabs_cell{:}} = ...
+        uitab(tgui.tabg, 'Title', int2str(tmp_plotindex_tabs),...
+        'BackgroundColor', plot_par.colors.main,...
+        'ForegroundColor', plot_par.colors.text_title);
+
+    % Plot voxel grid
+    % Input: target figure, target figure size, data dimensions, range and color.
+    CSI_2D_grid(tgui.tabh{tmp_plotindex_tabs_cell{:}},...
+        fh.Position(3:4), plot_par.dim, ...
+        plot_par.range, plot_par.colors.text_title);
+
+end % End of slice/tabs loop
+
+tgui.plot_par = plot_par; tgui.fig = fh;
+
+% Add 
+guidata(fh, tgui);
+
+% --- Add axis to voxels in CSI_dataAsTabs
+function tgui = CSI_dataAsTabs_addVoxelAxis(fh)
+% Add to a transparent axis to each voxel per slice
+
+% Get GUI data of figure
+tgui = guidata(fh);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
+
+% Storage for each axis.
+ax = cell(plot_par.dim);
+
+% Loop each tab of figure
+for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
+    
+    tab_index = plot_par.tabs_index_table(sli,:);
+    tab_index_cell = num2cell(tab_index);
+    
+    % Plot csi voxel per axis in plot_par.grid
+    for ci = 1:plot_par.dim(1)                  % Col loop.
+        for ri = 1:plot_par.dim(2)              % Row loop.
+
+            % AXIS DETAILS 
+            % X and Y position in the figure of the axis to plot.
+            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
+            % Position of axis to plot
+            pos = [x y plot_par.res(1) plot_par.res(2)];
+            % Create axis with pos(3,4) size at pos(1,2) position
+            if ~ishandle(tgui.tabh{tab_index_cell{:}}), return; end
+            ax{ri,ci,tab_index_cell{:}} = axes('parent',tgui.tabh{tab_index_cell{:}},'position',pos);           
+
+            % AXIS COSMETICS
+            set(ax{ri,ci,tab_index_cell{:}},...
+                   'Color','None',...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off');             
+
+        end 
+    end 
+end
+tgui.plot_par.ax = ax; guidata(fh, tgui);
+
+
+
+
+
 % COORDINATES % -------------------------------------------------------- %
 % MRI and CSI
 
@@ -7074,11 +7699,14 @@ plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 % ------- % Plot images
 plot_par = CSI_2D_plotImages(plot_par, csgui_main_obj);
 
-% ------- % Plot datat using options from plot_par
+% ------- % Plot data using options from plot_par
 CSI_2D_plotVoxels(plot_par,gui);
 
 % ------ % Set the figure ratio to voxel size
 % CSI_2D_setFigure_ratio(gui);
+
+% ------ % Let Scroll-panel follow 2D CSIgui plot figure
+% panel_2D_followPlot2D_initiate(plot_par.fh)
 
 % --- % Executed to create a plot2D figure.
 function plot_par = CSI_2D_setFigure(plot_par, init_pos, fig_tag)
@@ -7251,8 +7879,8 @@ switch scaleby
         data_ylimits_color = [min(max_per_voxel(:)), max(max_per_voxel(:))]; 
         plot_par.scale_color = 0;
     case 'sli' % Scale by slice
-        % Calc limits in slice
-        max_per_voxel = max(vol_data(:,:,:,plot_par.select_all_dim{:}),[],1);
+        % Calc limits in slice        
+        max_per_voxel = max(vol_data(:,:,:,plot_par.plotindex{:}),[],1);
         data_ylimits_color = [min(max_per_voxel(:)) max(max_per_voxel(:))];           
         plot_par.scale_color = 1;
     case 'sta' % Static color
@@ -7272,9 +7900,9 @@ if ~isnan(data_ylimits_color)
         CSI_2D_Scaling_calc_ColorOfPlots(data_ylimits_color);
 else
     % Set static line color.
-    tmp = vol_data(:,:,:,plot_par.plotindex{:}); 
+    % tmp = vol_data(:,:,:,plot_par.plotindex{:}); 
     plot_par.clrs = gui.colors.lines1; 
-    plot_par.clrs_data_range = max(tmp(:)); 
+    plot_par.clrs_data_range = max(vol_data(:)); 
 end
 
 % --- % Executed by CSI_plot2D_initiate: get plot2D settings
@@ -8228,7 +8856,7 @@ if strcmp(csi.ext ,'spar') || strcmp(csi.ext ,'sdat')
 end
 
 % READ DAT-Header (Siemens) ----------------------------------- %
-if strcmp(csi.ext, 'dat')
+if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
     % Nucleus
     xaxis.nucleus = csi.twix.Config.Nucleus;
     % Magnet strength
@@ -8280,7 +8908,7 @@ if auto == 0
 
     % Set user input.
     xaxis.nucleus = inp{1};
-    xaxis.tesla   = str2double(inp{2}(1));
+    xaxis.tesla   = str2double(inp{2});
     xaxis.BW      = str2double(inp{3});
     xaxis.shift   = str2double(inp{4});
 
@@ -11007,9 +11635,13 @@ switch ext
     otherwise,   render = '-opengl';
 end
 
-uans = getUserInput_Popup({'Specify figure(s) to save:','Resolution (DPI):','Transparency:'},...
-                         {{'Current figure', 'All'},...
-                           cat(2,num2cell(0:200:1200),'Custom'),{'No','Yes'}});
+uans = getUserInput_Popup({'Specify figure(s) to save:',...
+                           'Resolution (DPI):',...
+                           'Transparency:',...
+                           'Show index in figure:'},...
+                         {{'Current figure', 'All', 'All of current slice'},...
+                           cat(2,num2cell(0:200:1200),'Custom'),...
+                           {'No','Yes'},{'Yes','No'}});
 if isempty(uans), CSI_Log({'Skipped exporting figures.'},{''}); return; 
 end  
 
@@ -11017,6 +11649,7 @@ end
 switch uans{1}
     case 'Current figure', save_all = 0;
     case 'All',            save_all = 1;
+    case 'All of current slice', save_all =  2;
 end
 
 % Process resolution
@@ -11028,6 +11661,8 @@ dpi = str2double(uans{2});
 % Process transparency
 if strcmp(uans{3},'Yes'), transparency = 1; else, transparency = 0; end
 
+% Process plotting index in figure
+if strcmp(uans{4},'Yes'), showIndex = 1; else, showIndex = 0; end
 
 % FIGURE OBJECT % ------------------------------------------------------ %
 % Get 2D-plot figure its object, apply chosen options and save as image.
@@ -11065,19 +11700,36 @@ end
 
 % FIGURE DATA % ------------------------------------------- %
 
-if save_all
+if save_all == 1
     % Data slice dimensions
     dim = csi.data.dim(4:end); 
     % All figure indexes to cover
     indArray = slice2rowIndex(num2cell(dim));
-else
+elseif save_all == 0
     % Data slice dimensions
     dim = csi.data.dim(4:end);
-    % Get index of current figure - Loop each slider
+    % Get index of current figure - Loop over each available slider
     indArray = NaN(1,numel(dim));
     for sli = 1:size(pan_gui.sliders,2)
         indArray(sli) = pan_gui.sliders{sli}.Value;
     end
+    
+elseif save_all == 2
+    % Data slice dimensions
+    dim = csi.data.dim(4:end);
+    dimtmp = dim;
+    
+    % Get current slice    
+    sloi = pan_gui.sliders{1}.Value;
+    
+    % Create indexes to loop over keeping "slice" static
+    dimtmp(1) = [];
+    if ~isempty(dimtmp)
+        indArray = slice2rowIndex(num2cell(dimtmp));
+        indArray_Slice = repmat(sloi,size(indArray,1)',1);
+        indArray = cat(2,indArray_Slice, indArray);
+    end
+    
 end
 
 
@@ -11087,8 +11739,8 @@ for indi = 1:size(indArray,1)
     % 1. Set index at the slider
     for sli = 1:size(pan_gui.sliders,2)
         pan_gui.sliders{sli}.Value = indArray(indi,sli);
-        pan_gui.texts{sli}.String = sprintf('%i/%i', indArray(indi,sli),...
-            dim(sli));
+        pan_gui.texts{sli}.String = ...
+            sprintf('%i/%i', indArray(indi,sli),dim(sli));
     end
     
     % 2. Replot 2D CSI plot.
@@ -11097,9 +11749,16 @@ for indi = 1:size(indArray,1)
     % 3. Get new 2D CSI plot figure object
     fig_obj = findobj('type','figure','tag','CSIgui_plot2D');
     
+    % 4. Add a index-numbers to the figure.
+    if showIndex        
+        nr = sprintf('%02i|', indArray(indi,:)); nr(end) = [];
+        ax = axes(fig_obj, 'position', [0 0 0.10 0.05], 'Color','None');
+        ax.Visible = 'off'; ax.YLim = [0 1]; ax.XColor = 'none'; 
+        ax.YColor ='none'; ax.XTick =[]; ax.YTick = []; 
+        text(ax,0,0.5,nr, 'Color', gui.colors.text_main,'FontSize',12);
+    end
     
-    % 4. Save the figure to image file
-    
+    % 4. Save the figure to image file    
     if strcmp(ext,'.fig')
         savefig(fig_obj,[fp fn sprintf('_%i',indArray(indi,:)) ext]);
     else
@@ -11111,43 +11770,44 @@ for indi = 1:size(indArray,1)
         % Find the difference
         % Create alphamap using difference map
            
-%             % Set all backgrounds to none-color
-%             % fig_obj.Color = 'none';
-%             ax = findall(fig_obj.Children, 'Type','axes');
-%             for kk = 1:size(ax,1)   
-%                 ax(kk).Color = 'none';
-%             end
-%             fig_obj.Color = 'None';
-%             Qrgb = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%             [Q,Qmap] = rgb2ind(Qrgb,255);
-%             
-%             % Preprint
-%             fig_obj.Color = [0 1 0]; fig_obj.InvertHardcopy = 'off';
-%             A = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%             fig_obj.Color = [1 0 0]; fig_obj.InvertHardcopy = 'off';
-%             B = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%             % Difference map
-%             C = B-A;
-%             % Boolean of bg
-%             alphaBool = (C(:,:,1) == 255).*255;
-%             imwrite(Q, alphaBool,[fp fn sprintf('_%i', indArray(indi,:)) ext]);
-%             print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-%               ['-dpng'], 'Alpha', double(alphaBool.*255),['-r' num2str(dpi)]);
+%         % Set all backgrounds to none-color
+%         % fig_obj.Color = 'none';
+%         ax = findall(fig_obj.Children, 'Type','axes');
+%         for kk = 1:size(ax,1)   
+%             ax(kk).Color = 'none';
+%         end
+%         fig_obj.Color = 'None';
+%         Qrgb = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%         [Q,Qmap] = rgb2ind(Qrgb,255);
+% 
+%         % Preprint
+%         fig_obj.Color = [0 1 0]; fig_obj.InvertHardcopy = 'off';
+%         A = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%         fig_obj.Color = [1 0 0]; fig_obj.InvertHardcopy = 'off';
+%         B = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
+%         % Difference map
+%         C = B-A;
+%         % Boolean of bg
+%         alphaBool = (C(:,:,1) == 255).*255;
+%         imwrite(Q, alphaBool,[fp fn sprintf('_%i', indArray(indi,:)) ext]);
+%         print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
+%           ['-dpng'], 'Alpha', double(alphaBool.*255),['-r' num2str(dpi)]);
 
-             print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-              ['-d' ftype], ['-r' num2str(dpi)], render);
+%            print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
+%               ['-d' ftype], ['-r' num2str(dpi)], render);
+
+           export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
+            '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
        else
-           print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-              ['-d' ftype], ['-r' num2str(dpi)], render);
+%            print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
+%               ['-d' ftype], ['-r' num2str(dpi)], render);
+           export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
+                           ['-' ftype],'-nocrop', '-m2', fig_obj);
        end
     end
-
+    % Remove axes used to show index-numbers
+    if showIndex, delete(ax); end
     
-    
-    % This is an 3rd party script and therefor not implemented. Working on
-    % proper use wrt licensing.
-    %     export_fig([fp fn sprintf('_%i_%i',indArray(indi,:)) '_B'], ...
-    %         '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
 end
 
 % --- Save CSIinfo listbox log as text-file
@@ -11316,6 +11976,83 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % Show user.
 CSI_Log(...
     {['Reverted to backup ' strrep(boi(8:end),'_',':') ]},{tagoi});
+
+
+% --- Executes on button press in button_backupDel.
+function button_backupDel_Callback(hObj, evt, gui)
+% Delete specific backups made to clear up memory.
+% Check for CSI data
+CSI_backupDel(gui, 1)
+
+% --- Delete chosen backup or oldest one.
+function CSI_backupDel(gui, askUser)
+
+% Without askUser input, automatically delete oldest backup.
+
+if nargin == 1, askUser = 0; end
+
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Check for backup data
+if ~isfield(csi,'backup')
+    CSI_Log({'No MRSI backup available.'},{''}); return;
+end
+
+% AVAILABLE BACKUP CHOICE % -------------------- %
+
+% Get list of available backup fields
+bup_list = fieldnames(csi.backup);
+
+% Get list of available backup fields
+bup_list = fieldnames(csi.backup);
+
+% Remove lastBackup if included
+loc = contains(bup_list,'lastBackup'); bup_list(loc) = [];
+
+if askUser == 1 % Ask user which backup to get...
+    % Get tags of backups
+    tag = cell(size(bup_list,1),1);
+    for fi = 1:size(bup_list, 1)
+        tag{fi} = csi.backup.(bup_list{fi}).tag;
+    end
+
+    % flip the tag and backup list
+    bup_list = flipud(bup_list); tag = flipud(tag);
+
+    % Create backup list for display
+    bup_disp = cellfun(@cat, repmat({2},size(tag)), ...
+                    bup_list, repmat({' '}, size(tag)),tag, 'UniformOutput',0);
+    % Replace underscores            
+    bup_disp = strrep(bup_disp, '_', ':'); 
+    col_ind = strfind(bup_disp,':');  col_ind = col_ind{1}(1);
+    for kk = 1:size(bup_disp,1), bup_disp{kk}(col_ind) = ' '; end
+
+    % Display to user to select backup of interest
+    uans = getUserInput_Popup({'Available backups: '},{bup_disp});
+    if isempty(uans), return; end
+
+    % Process user choice: backup of interest
+    boi_ind = strcmp(uans, bup_disp); boi = bup_list{boi_ind};
+    tagoi = tag{boi_ind};
+    
+else % NO user input required.
+    % Delete oldest backup
+    boi = bup_list{1}; tagoi = csi.backup.(boi).tag;    
+end
+
+% DELETE BACKUP % --------------------------- %
+csi.backup = rmfield(csi.backup, boi);
+
+% SAVE AND CLEAN UP % --------------------------- %
+% Store appdata.
+setappdata(gui.CSIgui_main, 'csi', csi);
+% Show user.
+CSI_Log(...
+    {['Deleted backup ' strrep(boi(8:end),'_',':') ]},{tagoi});
+
+
+
 
 % --- Revert to previous backup: ctrl+z or menubar
 function CSIgui_menubar_backupUndo(hObj,~,~)
@@ -12507,55 +13244,9 @@ warndlg('Watch out! Developer testing button. Panic!');
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+csi.data.raw = double(csi.data.raw);
 
-data = csi.data.raw;
-
-% Load text file
-rt =mfilename('fullpath');
-fp = fileparts([rt '.m']);
-
-[fn,fp] = uigetfile('*.txt', fp);
-
-fid =  fopen([fp fn]);
-inp = fscanf(fid,'%s\n');
-fclose(fid);
-inp = strsplit(inp,';'); inp(end)=[];
-
-butfunc = fieldnames(gui);
-butfunc(~contains(butfunc,'button')) = [];
-
-% Process text file
-for kk = 1:size(inp,2)
-    tmp = inp{kk}; tmp = strsplit(tmp,'='); %1=func 2=inp
-    
-    inpfnc = tmp{1}; 
-    if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
-    
-    
-    qry = strcmp(butfunc, ['button_CSI_' inpfnc]);
-    if sum(qry)==0
-        switch inpfnc % Put all exceptions here
-            case 'setDomain'
-                CSI_setDomain(hObj, evt, inpvar); 
-        end
-    else
-       btn = butfunc(qry);
-       if ~isempty(btn) 
-           fnc2run = [btn{:} '_Callback'];
-           eval([ fnc2run '(hObj,evt,gui)']);
-           gui = guidata(hObj);
-       else
-           CSI_Log({'Could not parse scripted input:'},{[inpfnc ' | ' btn{:}]});
-       end
-        
-    end
-
-end
-
-
-
-
-disp lwlaedlw
+setappdata(gui.CSIgui_main, 'csi', csi);
 
 
 
@@ -13523,8 +14214,9 @@ if isempty(range), return; end
 uans = getUserInput_Popup({'Data type (calculations): ',...
                            'Display type: ','Data type (results): '},...
                          {{'Real', 'Magnitude','Complex'},...
-                          {'Map','Table','Graph'},...
-                          {'Real', 'Magnitude', 'Imaginary', 'Real raw','Imaginary raw'}});
+                          {'Map','Table','Graph', 'Histogram'},...
+                          {'Real', 'Magnitude', 'Imaginary',...
+                           'Real raw','Imaginary raw'}});
 if isempty(uans), CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; end
 
 % \\ B1 index
@@ -13605,10 +14297,14 @@ if str2double(filter_snr) ~= 0
 
     % Using high-FA data for SNR
     snr_dims = doi_ranges; snr_dims(1) = [];
-    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; snr_dims{B_ind} = 2;
+    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
+    
+    % Use highest flip angle data to calculate SNR
+    snr_dims{B_ind} = 2;
 
     % Calculate using noise mask
     SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, range);
+    
     % Convert NaNs to zero
     SNR_all(isnan(SNR_all)) = 0; 
     
@@ -13652,9 +14348,7 @@ end
 % Some statistics
 B_mean = nanmean(FA_out(:)); B_std = nanstd(FA_out(:));
 tmp = FA_out(:); [B_mod,B_freq,C]= mode(round(tmp(~isnan(tmp)))); 
-if size(C{1},1) > 1
-    B_mod = C{1}'; 
-end
+if size(C{1},1) > 1, B_mod = C{1}'; end
 
 % -------------------------------------------- Display
 CSI_Log({'Plotting B1 map data, please be patient.'},{''});
@@ -13665,6 +14359,11 @@ switch uans{2}
         CSI_dataAsTable(FA_out, 'Flipangle')
     case 'Graph' 
         CSI_dataAsGraph(FA_out, gui, 'Flipangle')
+    case 'Histogram'
+        % Plot data as histogram - simple display.    
+        fig = figure(); ax = axes(fig);
+        histogram(ax, SNR_all(:), 50);
+        title('B1 Histogram'); xlabel('B1 Bins');
 end
 
 
@@ -13673,426 +14372,5 @@ CSI_Log({'Mean B1:', 'St. dev B1:', 'Median B1:','Median B1 frequency:', ...
          'Calculated B1-maps from data.'},...
          {B_mean, B_std, B_mod, B_freq, ''});
     
-
-% --- Executed by data visualization with seperate figures functions
-function toolbar_create(figure_object)
-% Add a toolbar to a figure with datacursor mode and save-figure as button.
-% Uses functions: toolbar_dataPointer, toolbar_saveFigure.
-
-
-% Create toolbar in figure
-tb = uitoolbar(figure_object);
-
-% Data pointer toggle button for toolbar
-tt_data = uitoggletool(tb); % Toggle button - pointer
-tt_data_icon = imread('Images\mouse_pointer.png');
-tt_data_icon = imresize(tt_data_icon,[20,20]);
-tt_data_icon(tt_data_icon == max(tt_data_icon(:))) = ...
-    round(max(tt_data_icon(:))*0.94);
-tt_data.CData = tt_data_icon;
-tt_data.ClickedCallback = @toolbar_dataPointer;
-tt_data.TooltipString = 'Toggle data cursor.';
-
-% Save figure button for toolbar
-tt_save = uipushtool(tb); % Push button - save data
-tt_save_icon = imread('Images\floppy_disk.png');
-tt_save_icon = imresize(tt_save_icon,[20,20]);
-tt_save_icon(tt_save_icon ==  max(tt_save_icon(:))) = ...
-    round(max(tt_save_icon(:))*0.94);
-tt_save.CData = tt_save_icon;
-tt_save.ClickedCallback = @toolbar_saveFigure;
-tt_save.TooltipString = ...
-    'Save figure. NB. Transparency is lost when saving as matlab-figures.';
-
-% Restore transparency button for toolbar
-tt_alpha = uipushtool(tb); % Push button - save data
-tt_alpha_icon = imread('Images\wrench.png');
-tt_alpha_icon = imresize(tt_alpha_icon,[20,20]);
-tt_alpha_icon(tt_alpha_icon ==  max(tt_alpha_icon(:))) = ...
-    round(max(tt_alpha_icon(:))*0.94);
-tt_alpha.CData = tt_alpha_icon;
-tt_alpha.ClickedCallback = @toolbar_fixTransparency;
-tt_alpha.TooltipString = ...
-    'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
-
-% --- Executes on press of toolbar's save Figure button
-function toolbar_saveFigure(src, ~)
-% Save figure when clicking save button in toolbar.
-%
-% ISSUE: Figure's of matlab are not saved with their transparency value.
-% This means any transparent background or field will disappear when
-% opened afterward.
-
-% Get figure object
-fig = src.Parent.Parent;
-
-% Get save-location
-[fn,fp,index] = uiputfile(...
-    {'*.fig','Matlab'; '*.png','PNG'; '*.jpeg','JPEG'},'Save figure.');
-if  index == 0, return; end
-
-% Save figure
-[~,~,ext] = fileparts(fn); ext = ext(2:end);
-export_fig([fp '\' fn], '-transparent',['-' ext],'-nocrop','-m1', fig);
-
-% --- Executes on press of toolbar's data Pointer toggle.
-function toolbar_dataPointer(src, ~)
-% Toggles the data cursor in a figure using the src-button.
-datacursormode(src.Parent.Parent, 'toggle');
-
-% --- Executes on press of toolbar's fix transparency button.
-function toolbar_fixTransparency(src,~)
-% Loop all axes in the figure and set transparency element.
-
-% Tabgroup
-tabgroup = src.Parent.Parent.Children(2);
-% Number of tabs
-nTabs = size(tabgroup.Children);
-for tabi = 1:nTabs
-    % Tab-obj
-    tab = tabgroup.Children(tabi);
-    % Children in tab: contains axes
-    tab_childs = tab.Children;
-    % Number of children
-    nChildren = size(tab_childs,1);
-    for kk = 1:nChildren
-        if strcmp(tab_childs(kk).Type,'axes')
-            tab_childs(kk).Color = [tab_childs(kk).Color 0.33];
-        end
-    end
-end
-
-
-
-    
-function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
-% Data is shown as a color map and also a numeric representation in the
-% figure window. 
-%
-% gui           = CSIgui its gui-object requiring only gui.colors.
-% data          = data in of size N-D with Val x X x Y x Z for the 
-%                 first 4 indexes.
-% tag           = tag/name for the figure window.
-% labels        = labels of the data for naming >4-indexes in the window.
-% color_range   = range for color-map colors; 'auto' or [low-lim up-lim];
-%
-% Uses the following function: (in order of use)
-%
-% CSI_dataAsTabs_create_figure: creates the figure with a background color
-% and set specific options to the figure.
-%   
-% CSI_dataAsTabs_create_griddedTabs: Create a tab per slice including a 
-% voxel-grid overlay and create plot_par variable. 
-%
-% CSI_dataAsTabs_addVoxelAxis: Add a transparent axis to each voxel/slice
-%
-% Then plots the data as colormaps by changing the background color of the
-% voxel-axis. Uses a transparency.
-
-if nargin < 5, color_range = 'auto'; end
-
-% Data-Dimensions safety
-dim = size(data); 
-if numel(dim) <= 2
-    CSI_log({'Aborted. Function dataAsTab requires 2D or 3D data',...
-             'Reshape the data as such to enable maps.'},{''}); return; 
-end
-
-
-
-% Number of tab-windows
-nwindows = 1; index_range = {1};
-if numel(dim) > 4
-    nwindows = dim(5); 
-    if numel(dim) > 5
-        % Data ranges
-        index_range = cellfun(@(x) 1:x, ...
-            num2cell(dim(6:end)), 'uniform', 0); 
-    end
-end
-
-
-% Restore data
-data_main = data; tag_main = tag;
-loi = labels{5};
-
-fh_all = cell(1,nwindows);
-for kk = 1:nwindows
-        %data = data_main(:,:,:,:,kk);
-        % Get data for nwindow-kk (one dimension above slices) and all
-        % subsequent dimension.
-        data = data_main(:,:,:,:,kk, index_range{:});
-        tag = sprintf('%s - %s - %i', tag_main, loi, kk);
-
-            % -------- % Figure: Create window % ----------------------- %
-
-% Create a figure with specific settings for tabs
-fh = CSI_dataAsTabs_create_figure(tag, gui.colors.main);
-
-
-            % -------- % Figure: Create tabs % ------------------------- %
-           
-% Create a tab per slice including a voxel-grid overlay and
-% create plot_par            
-CSI_dataAsTabs_create_griddedTabs(fh, data, gui.colors) ;       
-
-
-            % -------- % Figure: Create axis/voxel % ------------------- %                
-
-% Add a transparent axis to each voxel per slice
-tgui = CSI_dataAsTabs_addVoxelAxis(fh);
-
-
-            % --------- % Plot Data As Map % --------------------------- %
-
-% Color map data
-clr_map = jet(128);
-if ischar(color_range)   % Automatic color-range
-    clr_val = linspace(0,max(data(:)),size(clr_map,1));            
-else
-    clr_val = linspace(color_range(1),color_range(2),size(clr_map,1));      
-end
-            
-
-plot_par = tgui.plot_par;
-for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
-    
-    % Current tab - its index in tab format
-    % This index lacks the slice+1 index (or the dim 1 above the slice
-    % dimension). Therefor it requires correction regards pointing to data.
-    tab_index = plot_par.tabs_index_table(tabi,:);
-    tab_index_cell = num2cell(tab_index);
-    
-    % For data indexing - convert tab_index_cell to correct index-dims.
-    sli = tab_index_cell{1};
-    if size(tab_index_cell,2) > 2
-        tab_index_for_data = tab_index_cell(2:end);
-    else
-        tab_index_for_data = {1};
-    end
-    
-    for ci = 1:plot_par.dim(1)                  % Col loop.
-        for ri = 1:plot_par.dim(2)              % Row loop.
-
-            % VOXEL VALUE
-            vox_val = data(:,ci,ri,sli,:,tab_index_for_data{:});
-            
-            % Get color from value2color-table
-            [~, clr_ind]= min(abs(clr_val-vox_val));
-            
-            % Add value in center of voxel
-            % // Set limit of yaxis
-            ylimit = [0 2*vox_val]; ylimit(isnan(ylimit)) =  1;
-            if ylimit(2) <= ylimit(1), ylimit(2) = ylimit(1)+1; end
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLim = ylimit;
-            
-            % // Set limit of xaxis
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLim = [0 2];
-            
-            % // plot value
-            plot(tgui.plot_par.ax{ri,ci,tab_index_cell{:}},...
-                1,vox_val, '.', 'MarkerSize', 0.5, ...
-                                'Color', [clr_map(clr_ind,:) 0.33])
-            
-            % // Turn off all axis cosmetic;
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YTick = [];
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XTick = [];
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YLabel = [];
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XLabel = [];
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Box = 'off';
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.XColor = ...
-                plot_par.colors.main;
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YColor = ...
-                plot_par.colors.main;
-            
-            
-            % Set background color of axis according to colormap            
-            tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Color = ...
-                [clr_map(clr_ind,:) 0.33];            
-            
-
-        end 
-    end 
-end
-
-
-% Save tgui-data to gui itself 
-% NB. Should use setappdata if data is involved!
-guidata(fh, tgui);
-
-% Save current object to tab-gui
-fh_all{kk} = tgui;
-
-% Create toolbar in figure
-toolbar_create(tgui.fig);
-
-
-end % end of nsub loop. %
-
-
-% Plot colorbar
-colorbarQ(clr_map, clr_val);
-
-function fh = CSI_dataAsTabs_create_figure(tag, clr)
-% Create a window for the dataAsTab functions
-% tag: name of the figure
-% clr: background color
-
-% Input handling
-if nargin < 2, clr = [0,0,0]; end
-
-% -------- % Figure: Create window % -------- %
-
-% Create figure
-fh = figure('Tag', tag ,'Name', tag ,...
-            'Color', clr, 'Toolbar', 'None',...
-            'MenuBar', 'None', 'NumberTitle', 'Off');                   
-
-% 1. Default figure size and screen pixel size
-def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
-% 2. Ratio to define figure height to def_size
-fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
-% 4. Position of figure.
-fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
-% 5. Apply
-set(fh, 'Position', [fig_ps fig_sz]); 
-
-function tgui = CSI_dataAsTabs_create_griddedTabs(fh, data, clrs)
-% Add tabs and a grid to the figure
-% 
-% gui is gui-object from CSIgui
-% fg is the figure from CSI_dataAsTabs_create_figure()
-% 
-
-% Create tab group
-tgui = struct;
-tgui.tabg = uitabgroup(fh); 
-
-
-% Plotting parameters
-plot_par = struct;
-plot_par.colors   = clrs;              
-plot_par.dim      = size(data);           % Data dimensions
-plot_par.dim(1)   = [];                   % Remove data index e.g. 1
-plot_par.data_dim = numel(plot_par.dim);  % 3D/2D/1D volume. 
-
-
-% Tab total parameters.
-tabs_to_plot = prod(plot_par.dim(5:end)) * plot_par.dim(3);
-index_table = cell(1,tabs_to_plot);
-index_range = cellfun(@(x) 1:x, ...
-    num2cell([plot_par.dim(3) plot_par.dim(5:end)]), 'uniform', 0); 
-
-% This array contains all indexes for each slice (first column) and all
-% subsequent indexes except the slice+1 index - which is depicted as a
-% seperate window.
-indArray = slice2rowIndex(index_range);
-
-
-% for kk = 1:plot_par.dim(3) % Number of slices  
-%     index_table{kk} = indArray;
-% end
-plot_par.tabs_index_table = indArray;
-plot_par.tabs_total = tabs_to_plot;
-
-
-            % -------- % Figure: Calculate Axis Grid % ----------------- %
-% Calculate the mesh-grid for the slice representing the voxels
-
-% Resolution without any correction of linewidth
-plot_par.res = 1./plot_par.dim(1:2); 
-
-% Loop X, Y and Z
-% X, Y and Z == data/csi-space. Position in figure starts at
-% point zero (0). Resolution equals the nr of CSI-voxels to plot in the row 
-% (y in image)and column (x in image) dimension of the figure. 
-for kk = 1:numel(plot_par.res)
-    plot_par.range{kk} = ...
-    0 : plot_par.res(kk) : ...
-       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
-end
-
-% Caluclate a grid for each axis in the figure representing the voxels in
-% CSI data.
-[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
-plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
-
-% 1D Correction 
-% Transpose x/col and y/row. Creats Nx1 vs 1xN lists of the
-% axis grid coordinates.
-if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
-
-
-
-            % --------- % Figure: Loop slices/tabs % ------------------- %
-% Adds a tab to the figure for all slices and other dimension (excluding 
-% the index slice+1; which is seperated into different windows.
-for tabi = 1:plot_par.tabs_total % Loop each tab 
-    
-    % Plotting index
-    tmp_plotindex_tabs = plot_par.tabs_index_table(tabi,:);
-    tmp_plotindex_tabs_cell = num2cell(tmp_plotindex_tabs);
-    
-    % Create a tab in the tabgroup for this slices
-    tgui.tabh{tmp_plotindex_tabs_cell{:}} = ...
-        uitab(tgui.tabg, 'Title', int2str(tmp_plotindex_tabs),...
-        'BackgroundColor', plot_par.colors.main,...
-        'ForegroundColor', plot_par.colors.text_title);
-
-    % Plot voxel grid
-    % Input: target figure, target figure size, data dimensions, range and color.
-    CSI_2D_grid(tgui.tabh{tmp_plotindex_tabs_cell{:}},...
-        fh.Position(3:4), plot_par.dim, ...
-        plot_par.range, plot_par.colors.text_title);
-
-end % End of slice/tabs loop
-
-tgui.plot_par = plot_par; tgui.fig = fh;
-
-% Add 
-guidata(fh, tgui);
-
-function tgui = CSI_dataAsTabs_addVoxelAxis(fh)
-% Add to a transparent axis to each voxel per slice
-
-% Get GUI data of figure
-tgui = guidata(fh);
-% Plot data for each tab: voxel grid and more plot settings.
-plot_par = tgui.plot_par;
-
-% Storage for each axis.
-ax = cell(plot_par.dim);
-
-% Loop each tab of figure
-for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
-    
-    tab_index = plot_par.tabs_index_table(sli,:);
-    tab_index_cell = num2cell(tab_index);
-    
-    % Plot csi voxel per axis in plot_par.grid
-    for ci = 1:plot_par.dim(1)                  % Col loop.
-        for ri = 1:plot_par.dim(2)              % Row loop.
-
-            % AXIS DETAILS 
-            % X and Y position in the figure of the axis to plot.
-            x   = plot_par.grid.x(ri,ci); y = plot_par.grid.y(ri,ci);
-            % Position of axis to plot
-            pos = [x y plot_par.res(1) plot_par.res(2)];
-            % Create axis with pos(3,4) size at pos(1,2) position
-            if ~ishandle(tgui.tabh{tab_index_cell{:}}), return; end
-            ax{ri,ci,tab_index_cell{:}} = axes('parent',tgui.tabh{tab_index_cell{:}},'position',pos);           
-
-            % AXIS COSMETICS
-            set(ax{ri,ci,tab_index_cell{:}},...
-                   'Color','None',...
-                   'XColor', plot_par.colors.main,...
-                   'YColor', plot_par.colors.main,...
-                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
-                   'TickLength',[0 0.00001], 'Box', 'off');             
-
-        end 
-    end 
-end
-tgui.plot_par.ax = ax; guidata(fh, tgui);
 
 
