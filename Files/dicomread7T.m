@@ -177,7 +177,7 @@ for qq = 1:nrimg
         if isfield(dcminf.Stack, 'Item_1')
               sl.MRStackViewAxis = dcminf.Stack.Item_1.MRStackViewAxis;
               ViewAxis = dcminf.Stack.Item_1.MRStackViewAxis;               % View axis e.g. slice-direction
-        else  ViewAxis = NaN; sl.MRStackViewAxis = 'NaN';
+        else,  ViewAxis = NaN; sl.MRStackViewAxis = 'NaN';
         end
         
         % Set orientation according to slice-dimension

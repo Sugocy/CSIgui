@@ -1086,22 +1086,78 @@ function success = parse_dicom(fp, fn, gui)
 %
 % Created: mri-struct
 
-% Read and order dicom data
-[m,i,g] = dicomread7T({[fp '\' fn]}); mri = struct;
-if isnan(m)
-    CSI_Log({'Loading DICOM file failed.'},{''}); 
-    success = 0; return; 
-else
-    success = 1;
+
+% \\ Is it Philips or Siemens?
+[~, fn, ext] = fileparts(fn); ext = lower(ext);
+switch ext
+    case '.dcm'
+
+        % Read and order dicom data
+        [m,i,g] = dicomread7T({[fp '\' fn]}); mri = struct;
+        if isnan(m)
+            CSI_Log({'Loading DICOM file failed.'},{''}); 
+            success = 0; return; 
+        else
+            success = 1;
+        end
+
+        % Order dicom data
+        [mri.data, mri.par] = dicomorder3(m, i); 
+        
+        mri.examinfo = g; mri.ext = 'dcm'; 
+        mri.filename = fn; mri.filepath = fp;
+    
+    case '.ima'
+        
+        % Question user to load in the single file or load group of dicom
+        % files into memory.
+        qry = 'Load single file or all files from imaging protocol: ';
+        def = {'Single', 'All'};
+        uans = getUserInput_Popup({qry},{def});
+        if isempty(uans{1}), return; end
+        if strcmpi(uans{1},'all')
+            % get all files.
+            files = dicomreadSiemens_getSeries(fp,fn);
+        else
+            files = {[fn ext]};
+        end
+        
+        try
+            % Load dicom files
+            [img, nfo] = dicomreadSiemens(fp, files);  
+            mri = struct;
+            mri.data.M = img; mri.par = nfo;
+            success = 1;
+        catch err
+            fprintf('%s',err.message);
+            CSI_Log({'Loading DICOM file failed.'},{''}); 
+            success = 0;
+            return;
+        end
+        
+        try
+            % Process nfo
+            examinfo = dicomreadSiemens_sortParameters(nfo);
+            % Store data            
+            mri.examinfo = examinfo; mri.ext = 'ima';
+            mri.filename = fn; mri.filepath = fp;
+        catch err
+            fprintf('%s\n',err.message);
+            % Exam info loading failed.
+            mri.examinfo = NaN; mri.ext = 'ima';
+            mri.filename = fn; mri.filepath = fp;
+            CSI_Log({'Analysing DICOM header failed.'},{'Images loaded.'}); 
+        end
+               
+        % Siemens dicom fields of interest.
+        % nfo{1}.SliceThickness
+        % nfo{1}.PatientPosition
+        % nfo{1}.ImagePositionPatient
+        % nfo{1}.ImageOrientationPatient
+        % nfo{1}.SliceLocation
+        % nfo{1}.SlicePosition_PCS      
 end
-
-% Order dicom data
-[mri.data, mri.par] = dicomorder3(m, i); 
-
-% If scout is detected
-% cell_ind = find(cellfun(@isempty, b.M) == 0);
-mri.examinfo = g; mri.ext = 'dcm'; 
-mri.filename = fn; mri.filepath = fp;
+        
 
 
 % Save MRI data in app-data
@@ -6815,6 +6871,8 @@ if     strcmp(mri.ext, 'dcm')
     MRI_coordinates_DCM(gui, mri); 
 elseif strcmp(mri.ext, 'rec') || strcmp(mri.ext, '.par')
     MRI_coordinates_PAR(gui, mri);
+elseif strcmp(mri.ext, 'ima')
+    MRI_coordinates_IMA(gui, mri);
 end
 
 % Get updated appdata.
@@ -6863,6 +6921,41 @@ MRI_to_CSIspace(gui);
 
 
 % MRI Functions % ------------------------------------------------------ %
+
+function MRI_coordinates_IMA(gui, mri)
+
+imgori = struct;
+
+% Process remaining ranges % -------------------------------------------- %
+
+% RESOLUTION
+imgori.offcenter = opts.ipp;
+imgori.res       = opts.vox;
+imgori.gap       = opts.gap;
+
+% DIMENSIONS
+imgori.dim       = opts.imSz;
+
+if size(imgori.dim,2) == 2
+    CSI_Log({'Cannot merge MR images to MRS using only 1 image.'},...
+       {''}); return;
+end
+imgori.fov = imgori.dim.*imgori.res;
+
+% RANGE
+imgori.vec{1} = opts.range.col;
+imgori.vec{2} = opts.range.row;
+imgori.vec{3} = opts.range.slice;
+imgori.lim    = cat(1,opts.lim.row,opts.lim.col, opts.lim.slice);
+
+% MESH
+imgori.mesh.x = opts.mesh.x; imgori.mesh.y = opts.mesh.y;
+imgori.mesh.z = opts.mesh.z;
+
+% Save data
+mri.ori = imgori;
+setappdata(gui.CSIgui_main, 'mri', mri);
+
 
 % --- Executes on button press in button_CSI_setCoordinates.
 function MRI_coordinates_DCM(gui, mri)
