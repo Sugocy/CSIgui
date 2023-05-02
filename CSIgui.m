@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 29-Mar-2023 08:36:46
+% Last Modified by GUIDE v2.5 02-May-2023 15:05:03
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -68,7 +68,6 @@ gui.ID = sprintf('%.0f', now.*10^10);
 gui.version = '2.0';
 
 
-
 %% Add menu-bar
 
 loadBar(0.1, 'Creating menubar...');
@@ -77,6 +76,14 @@ gui = CSIgui_menubar_Set(gui);
 loadBar(0.3, 'Executing JavaScript...');
 gui = CSIgui_manubar_javaScript(gui);
 
+% Update gui structure
+guidata(hObject, gui);
+
+%% Add Color-scheme to GUI
+% Run GUI coloring theme function
+loadBar(0.4, 'Creating GUI...');
+setGUIcolor(hObject); % This stores the right color palet in gui-handle
+gui = guidata(hObject);
 
 
 %% Process user-input
@@ -122,8 +129,6 @@ else
     guidata(hObject, gui);
 end
 
-% Run GUI coloring theme function
-setGUIcolor(hObject); % This stores the right color palet in gui-handle
 
 % Close menubar
 loadBar(1, 'Launching GUI...'); pause(0.0005); loadBar(NaN);
@@ -454,7 +459,9 @@ function openFile(hObj, ~, ~)
 % Userinput is deleted at the end of this script.
 
 % Get fresh gui-data.
-gui = guidata(hObj); clear_log = 1;
+ gui = guidata(hObj); clear_log = 1; 
+
+
 
 % FILE INPUT + USER INPUT % -------------------------------------------- %
 if ~isfield(gui, 'inp')
@@ -664,6 +671,7 @@ if isappdata(gui.CSIgui_main,'csi')
         name = csi.filename;                             % Get filename
         if size(name,2) > maxL, name = name(1:maxL); end % Max length name
         set(gui.txt_fnCSI, 'String', name);              % Set in GUI
+        gui.txt_fnCSI.TooltipString = csi.filename;
     end
 end
 if isappdata(gui.CSIgui_main,'mri')
@@ -672,7 +680,7 @@ if isappdata(gui.CSIgui_main,'mri')
         name = mri.filename;                             % Get filename
         if size(name,2) > maxL, name = name(1:maxL); end % Max length name
         set(gui.txt_fnIMG, 'String', name);              % Set in GUI
-        gui.txt_fnIMG.TooltipString = name;              % Full name ttstr
+        gui.txt_fnIMG.TooltipString = mri.filename;      % Full name ttstr
         
     end
 end
@@ -689,24 +697,11 @@ twix = mapVBVD([fp '\' fn '.dat']);
 % Header
 csi.twix = twix.hdr;
 
-% % Parameters of interest.
-% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
-% csi.twix.Dicom.flReadoutOSFactor % Oversampling
-% csi.twix.Dicom.tPatientPosition % Patient position (FFS/HFS)
-% % Spectra parameters; incl final matrix size; FOV dimensions
-% csi.twix.MeasYaps.sSpecPara 
-% csi.twix.MeasYaps.sRXSPEC.alDwellTime % Dwelltime
-% csi.twix.MeasYaps.alTR % Repetitiontime
-% csi.twix.MeasYaps.alTD % Dwelltime
-% csi.twix.MeasYaps.alTE % Echotime
-% twix.hdr.Config.TR
-% twix.hdr.Config.TE
-
 % Read data dimension and labels
 dims = num2cell(twix.image.dataSize);
 dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
 
-% dimension labels from header
+% Dimension labels from header
 dims_txt = twix.image.dataDims;
 dims_txt = dims_txt(twix.image.dataSize>1);
 
@@ -751,6 +746,7 @@ if csi.data.dim(1) > 0, success = 1; end
 
 % Meta-data
 csi.ext = 'dat'; csi.filename = fn; % Save filename
+
 
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi);  
@@ -906,6 +902,15 @@ end
 if isfield(csigui,'conv')
     converted = csigui.conv; csigui = rmfield(csigui,'conv');
     setappdata(gui.CSIgui_main,'conv',converted); 
+end
+
+              % ------- % Process CSI HDRNFO % ------- %
+              
+if isfield(csigui,'twix')
+    csi.twix = csigui.twix; csigui = rmfield(csigui,'twix');
+end
+if isfield(csigui,'list')
+    csi.list = csigui.list; csigui = rmfield(csigui,'list');
 end
 
               % ------- % Process CSI struct % ------- %
@@ -1109,7 +1114,7 @@ switch ext
         mri.filename = fn; mri.filepath = fp;
     
     case '.ima'
-        
+               
         % Question user to load in the single file or load group of dicom
         % files into memory.
         qry = 'Load single file or all files from imaging protocol: ';
@@ -4419,7 +4424,7 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % USERINPUT % --------------------------------- %
 uans = getUserInput_Popup({'Display type: ',...
                            'Select peak: '},...
-                          {{'Graph', 'Table'},{'Yes','No'}});
+                          {{'Graph', 'Table', 'Map'},{'Yes','No'}});
 if isempty(uans)
     CSI_Log({'Skipped max/slice.'},{''}) ; return; 
 end
@@ -4508,6 +4513,16 @@ switch dataDisp
     case 'table'
         % Display data % ------- % Table.
         CSI_dataAsTable(data_max,'Maxima');
+    case 'map'
+        % Display data % ------ % Map.
+        
+        % \\ Calculate color-range of maps.
+        [N, edges, bin] = histcounts(data_max(:));
+        bool = cumsum(N) <= 0.98*size(bin,1);
+        maxval = max(edges(bool));
+        clrscale = [min(data_max(:)) maxval];                         
+                
+        CSI_dataAsTabs(gui, data_max, 'Maxima', csi.data.labels, clrscale);
 end
 
 % --- Executed by MaxValue button callback
@@ -4616,7 +4631,7 @@ range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
 if isempty(range_none), return; end
 
 % SNR Noise mask
-uans = getUserInput({'Size of SNR noise mask: '},{50});
+uans = getUserInput({'Size of SNR noise mask: '},{round(csi.data.dim(1)/12)});
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 
 % Convert user input
@@ -4670,7 +4685,7 @@ switch dataDisp
         % slices (or only the current slice plotted.
 
 
-        % ÚSERINPUT: what data to show.
+        % ?SERINPUT: what data to show.
         uans = getUserInput_Popup(...
             {'Data range to show: ','Color scale range: '},...
            {{'All', 'Current slice'},...
@@ -4725,7 +4740,8 @@ switch dataDisp
     case 'histogram'
         % Plot data as histogram - simple display.    
         fig = figure(); ax = axes(fig);
-        histogram(ax, SNR_all(:), 100);
+        mx = max(SNR_all(:)); md = median(SNR_all(:));        
+        histogram(ax, SNR_all(:), round(100+(mx./md)) );
         title('SNR  Histogram'); xlabel('SNR Bins');
 
 end
@@ -6265,7 +6281,7 @@ end
 
 % \\ USER INPUT: new color range
 cur_clr_rng = plot_par.clr_rng;
-uans = getUserInput({'New color scale range:'}, {int2str(cur_clr_rng)});
+uans = getUserInput({'New color scale range:'}, {num2str(cur_clr_rng)});
 if isempty(uans), return; end
 new_clr_rng = str2double(strsplit(uans{1}));
 
@@ -6319,7 +6335,8 @@ function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
 % CSI_dataAsTabs_addVoxelAxis: Add a transparent axis to each voxel/slice
 %
 % Then plots the data as colormaps by changing the background color of the
-% voxel-axis. Uses a transparency.
+% voxel-axis. Uses a transparency. If a value is equal to NaN, will set
+% color to black [0 0 0];
 
 if nargin < 5, color_range = 'auto'; end
 
@@ -6346,15 +6363,19 @@ end
 
 % Restore data
 data_main = data; tag_main = tag;
-loi = labels{5};
+if numel(size(labels)) > 4
+    loi = labels{5};
+else
+    loi = '';
+end
 
 fh_all = cell(1,nwindows);
 for kk = 1:nwindows
-        %data = data_main(:,:,:,:,kk);
-        % Get data for nwindow-kk (one dimension above slices) and all
-        % subsequent dimension.
-        data = data_main(:,:,:,:,kk, index_range{:});
-        tag = sprintf('%s - %s - %i', tag_main, loi, kk);
+        
+% Get data for nwindow-kk (one dimension above slices) and all
+% subsequent dimension.
+data = data_main(:,:,:,:,kk, index_range{:});
+tag = sprintf('%s - %s - %i', tag_main, loi, kk);
 
             % -------- % Figure: Create window % ----------------------- %
 
@@ -6398,7 +6419,7 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
     
     % For data indexing - convert tab_index_cell to correct index-dims.
     sli = tab_index_cell{1};
-    if size(tab_index_cell,2) > 2
+    if size(tab_index_cell,2) >= 2
         tab_index_for_data = tab_index_cell(2:end);
     else
         tab_index_for_data = {1};
@@ -6408,10 +6429,18 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
         for ri = 1:plot_par.dim(2)              % Row loop.
 
             % VOXEL VALUE
-            vox_val = data(:,ci,ri,sli,:,tab_index_for_data{:});
+            vox_val = data(:,ci,ri,sli,1,tab_index_for_data{:});
             
-            % Get color from value2color-table
-            [~, clr_ind]= min(abs(clr_val-vox_val));
+            % MAP COLOR
+            if isnan(vox_val)
+                clr = [0 0 0];
+            else
+                % Get color from value2color-table
+                [~, clr_ind]= min(abs(clr_val-vox_val));
+                clr = clr_map(clr_ind,:);
+            end
+            
+            
             
             % Add value in center of voxel
             % // Set limit of yaxis
@@ -6425,7 +6454,7 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             % // plot value
             plot(tgui.plot_par.ax{ri,ci,tab_index_cell{:}},...
                 1,vox_val, '.', 'MarkerSize', 0.5, ...
-                                'Color', [clr_map(clr_ind,:) 0.33])
+                                'Color', [clr 0.33])
             
             % // Turn off all axis cosmetic;
             tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YTick = [];
@@ -6441,13 +6470,10 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             
             % Set background color of axis according to colormap            
             tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.Color = ...
-                [clr_map(clr_ind,:) 0.33];            
+                [clr 0.33];            
             
-
         end 
     end 
-    
-    
 end
 
 
@@ -6697,6 +6723,40 @@ if ~isfield(ori,'res') % Only if not already read the header file.
     end
 end
 
+
+% TWIX-INFO  (dat-file)
+if isfield(csi,'twix')
+    % Offcentre
+    ori.offcenter(1) = csi.twix.Meas.VoiPositionSag;
+    ori.offcenter(2) = csi.twix.Meas.VoiPositionCor;
+    ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
+    
+    % FOV
+    ori.fov(1) = csi.twix.Config.Vol_RoFOV; % Read out fov
+    ori.fov(2) = csi.twix.Config.Vol_PeFOV; % Phased enc fov
+    ori.fov(3) = csi.twix.Config.SliceThickness; % Duh
+     
+    % hdr.MeasYaps.sSpecPara.sVoI.dThickness
+    % hdr.MeasYaps.sSpecPara.sVoI.dPhaseFOV
+    % hdr.MeasYaps.sSpecPara.sVoI.dReadoutFOV
+    
+    % RES
+    ori.res(1)= ori.fov(1)./csi.data.dim(space_dim(1));
+    ori.res(2)= ori.fov(2)./csi.data.dim(space_dim(2));
+    ori.res(3)= ori.fov(3)./csi.data.dim(space_dim(3));
+    
+    % hdr.Meas.VoI_Position_Cor/VoI_Position_Sag/VoI_Position_Tra
+    % hdr.Meas.VoiPositionCor/hdr.Meas.VoiPositionSag/hdr.Meas.VoiPositionTra
+    % hdr.Meas.Matrix HFSthing
+    % hdr.Dicom.tPatientPosition % hdr.Meas.PatientPosition
+end
+% % Parameters of interest.
+% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
+% csi.twix.Dicom.flReadoutOSFactor % Oversampling
+% hdr.Meas.flNominalB0
+% hdr.Meas.flMagneticFieldStrength
+% hdr.Meas.flReadoutOSFactor
+
 % USERINPUT  - SPATIAL % ----------------- %
 
                     % RESOLUTION  +   OFFCENTER %
@@ -6925,33 +6985,87 @@ MRI_to_CSIspace(gui);
 
 function MRI_coordinates_IMA(gui, mri)
 
+
+% Image orientation structure
 imgori = struct;
 
-% Process remaining ranges % -------------------------------------------- %
-
-% RESOLUTION
-imgori.offcenter = opts.ipp;
-imgori.res       = opts.vox;
-imgori.gap       = opts.gap;
-
-% DIMENSIONS
-imgori.dim       = opts.imSz;
-
-if size(imgori.dim,2) == 2
-    CSI_Log({'Cannot merge MR images to MRS using only 1 image.'},...
-       {''}); return;
+if ~isfield(mri, 'par')
+    CSI_Log({'No parameter field present in MRI-data.'},{'Aborted.'});
+    return;
 end
+
+% Image Positient Patient: the coordinates of the top-left voxel of the
+% images.
+imgori.ipp = extractField(mri.par,'ImagePositionPatient');
+tmp = cell2mat(imgori.ipp);
+imgori.offcenter = unique(tmp(1:2,:)); % Assume equal for all slices.
+imgori.offcenter(3) = tmp(3,1); imgori.offcenter = imgori.offcenter';
+
+% Image resolution: the resolution of a voxel in  the images.
+tmp = extractField(mri.par,'PixelSpacing');
+tmp = cell2mat(tmp);
+imgori.res = unique(tmp', 'rows');
+imgori.res(3) = mri.par{1}.SliceThickness;
+
+% Image dimensions: number of pixels in row and col.
+imgtype = fields(mri.data);
+imgori.dim = size(mri.data.(imgtype{1}));
+
+% Image Field of View
 imgori.fov = imgori.dim.*imgori.res;
 
-% RANGE
-imgori.vec{1} = opts.range.col;
-imgori.vec{2} = opts.range.row;
-imgori.vec{3} = opts.range.slice;
-imgori.lim    = cat(1,opts.lim.row,opts.lim.col, opts.lim.slice);
+% Slice gap-size
+imgori.gap = mri.par{1}.SpacingBetweenSlices;
+
+
+% Process remaining ranges % -------------------------------------------- %
+% Create range vectors of the image-volume (mm);
+        
+% For the Row and Column
+vox_correction = 1;
+for kk = 1:2
+    % Select resolution and offcenter of current axis (row/col).
+    N = imgori.dim(kk); res = imgori.res(kk);
+    offc  = imgori.offcenter(1,kk);
+                
+    % Top Left Voxel (TLV) Coordinate Definition:
+    % It can describe either the top-left corner of the top left voxel
+    % or the centre of the top left voxel.
+    %
+    % ASSUME: 
+    % TLV is relative to top left corner wrt the axis origin and
+    % increases towards the positibe side of the image. This requires
+    % the addition of half a voxel to describe the centre of a voxel.
+    if vox_correction == 0
+        % NO center-of-voxel correction
+        tmp = offc;                
+    else
+        % YES center-of-voxel correction
+        tmp  = offc + (0.5*res);    
+    end
+    
+    % Volume limits of current direction
+    Vbegin = tmp; 
+    Vend   = tmp + (res*N) - res;
+
+    % Create grid vector and limits field.
+    imgori.vec{kk}     = Vbegin:res:Vend;
+    imgori.lim(kk,1:2) = imgori.vec{kk}([1 end]);
+end
+
+% Slice limits.
+% DOES THIS ALSO REQUIRE HALF A VOXEL-CORRECTION?
+imgori.vec{3} = cell2mat(cellfun(@(x) x(3),imgori.ipp, 'uniform', 0));
+imgori.lim(3,1:2) = imgori.vec{3}([1 end]);
+
+% % RANGE: Get span vectors, no angulation taken into account.
+% opts.range.row   = opts.lim.row(1)  :opts.vox(1): opts.lim.row(2);
+% opts.range.col   = opts.lim.col(1)  :opts.vox(2): opts.lim.col(2);
 
 % MESH
-imgori.mesh.x = opts.mesh.x; imgori.mesh.y = opts.mesh.y;
-imgori.mesh.z = opts.mesh.z;
+imgori.mesh.nb = 'Meshgrid: row and column are NOT swapped.';
+[imgori.mesh.x, imgori.mesh.y,  imgori.mesh.z] = ...
+    meshgrid(imgori.vec{1}, imgori.vec{2}, imgori.vec{3});
 
 % Save data
 mri.ori = imgori;
@@ -8953,13 +9067,23 @@ end
 if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
     % Nucleus
     xaxis.nucleus = csi.twix.Config.Nucleus;
+    
     % Magnet strength
-    xaxis.tesla = csi.twix.Dicom.flMagneticFieldStrength;
+    if isfield(csi.twix, 'Meas')
+        if isfield(csi.twix.Meas,'flNominalB0')
+            xaxis.tesla = csi.twix.Meas.flNominalB0;
+        end
+    elseif isfield(csi.twix, 'Dicom')
+        if isfield(csi.twix.Dicom,'flMagneticFieldStrength')
+            xaxis.tesla = csi.twix.Dicom.flMagneticFieldStrength;
+        end
+    end
+    
     
     % Bandwidth (Receiver)
     dwelltime = csi.twix.Config.DwellTime;
     samples = csi.data.dim(1);
-    xaxis.BW = dwelltime./samples;
+    xaxis.BW = 2000; %dwelltime./samples;
     
     switch xaxis.nucleus 
         case '1H',  xaxis.gyro = 42.57747892*10^6;
@@ -8971,6 +9095,13 @@ if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
     end 
     xaxis.trans = xaxis.tesla * xaxis.gyro;    
 end
+
+% % Parameters of interest.
+% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
+% csi.twix.Dicom.flReadoutOSFactor % Oversampling
+% hdr.Meas.flNominalB0
+% hdr.Meas.flMagneticFieldStrength
+% hdr.Meas.flReadoutOSFactor
 
 % USER INPUT % ------------------------------------------ %
 % If auto == 1, this is skipped
@@ -10401,7 +10532,7 @@ switch method{1}, case 'Real', method = 1; case 'Magnitude', method = 0; end
 
 
 % Mask size
-masksz = getUserInput({'Mask size: '},{ '50'});
+masksz = getUserInput({'Mask size: '},{round(size(data,1)/12)});
 if isempty(masksz), return; end
 masksz = str2double(masksz);
 
@@ -10451,7 +10582,7 @@ else % Individual peak
     if isempty(range), return; end
     
     % Calculate SNR
-    snr = csi_SNR(data, 50, method, range); % Output SNR
+    snr = csi_SNR(data, masksz, method, range); % Output SNR
     
     % ----- % Display SNR 
     
@@ -11642,8 +11773,16 @@ if isappdata(gui.CSIgui_main,'csi')
     else
         fp = varargin{1}; fn = varargin{2}; ext = varargin{3};
     end
+    
     % Get MRSI data
     csigui = csi.data;
+    
+    if isfield(csi,'twix')
+        csigui.twix = csi.twix;
+    end
+    if isfield(csi,'list')
+        csigui.list = csi.list;
+    end
 
     % Add log
     log = get(gui.listbox_CSIinfo,'String');
@@ -14324,7 +14463,9 @@ if isempty(B_ind)
 end
 
 % \\ SNR Filtering
-filter_snr = getUserInput({'Minimum value for SNR Filtering: [0 = off]'},{'0'});
+filter_snr = getUserInput(...
+    {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
+    {'0',round(csi.data.dim(1)./10)});
 if isempty(filter_snr)
     CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
 end
@@ -14356,7 +14497,7 @@ end
 % -- CALCULATIONS  -- % B1
 
 % \\ Get maximum value of peak of interest
-CSI_Log({'Calculating B1 per voxel, please be patient.'},{''});
+CSI_Log({'Calculating B1 per voxel. Using data-type: '},{uans{1}});
 
 % Max value
 mx_val = max(doi,[],1);
@@ -14374,20 +14515,20 @@ Mtwo = mx_val(Mtwo_range{:});
 inner = Mtwo ./ (Mone.*2);
 FA = acosd(inner);
 
-
-
 % -- CALCULATIONS  -- % SNR
 
-if str2double(filter_snr) ~= 0
+if str2double(filter_snr{1}) ~= 0
     
-    snr_limit = str2double(filter_snr);
+    snr_limit = str2double(filter_snr{1});
+    snr_mask = str2double(filter_snr{2});
     
     % Display Info %
-    CSI_Log({'Calculating SNR per voxel, and filtering using SNR limit:'},...
+    CSI_Log({['Calculating SNR per voxel, '... 
+              'and filter data using minimum SNR limit: ']},...
             {snr_limit});
 
     % Noise mask
-    mask_size = round(csi.data.dim(1)./10);
+    mask_size = snr_mask;
 
     % Using high-FA data for SNR
     snr_dims = doi_ranges; snr_dims(1) = [];
@@ -14444,15 +14585,21 @@ B_mean = nanmean(FA_out(:)); B_std = nanstd(FA_out(:));
 tmp = FA_out(:); [B_mod,B_freq,C]= mode(round(tmp(~isnan(tmp)))); 
 if size(C{1},1) > 1, B_mod = C{1}'; end
 
+% Show nfo
+CSI_Log({'Mean B1:', 'Mode B1:', ...
+         'Calculated B1-maps from data.'},...
+         {sprintf('%.2f +/- %.2f',B_mean, B_std), ...
+          sprintf('%.2f | freq. %i',B_mod, B_freq), ''});
+
 % -------------------------------------------- Display
-CSI_Log({'Plotting B1 map data, please be patient.'},{''});
+CSI_Log({'Plotting B1 data, please be patient.'},{''});
 switch uans{2}
     case 'Map'
         CSI_dataAsTabs(gui, FA_out, 'B1-maps',csi.data.labels, color_range);        
     case 'Table'
-        CSI_dataAsTable(FA_out, 'Flipangle')
+        CSI_dataAsTable(FA_out, 'Flip angle')
     case 'Graph' 
-        CSI_dataAsGraph(FA_out, gui, 'Flipangle')
+        CSI_dataAsGraph(FA_out, gui, 'Flip angle')
     case 'Histogram'
         % Plot data as histogram - simple display.    
         fig = figure(); ax = axes(fig);
@@ -14461,10 +14608,94 @@ switch uans{2}
 end
 
 
-% Show nfo
-CSI_Log({'Mean B1:', 'St. dev B1:', 'Median B1:','Median B1 frequency:', ...
-         'Calculated B1-maps from data.'},...
-         {B_mean, B_std, B_mod, B_freq, ''});
-    
+% --- Executes on button press in button_CSI_FlipSpace.
+function button_CSI_FlipSpace_Callback(~, ~, gui)
+% Flip data 180 degrees in all spatial directions.
 
+% Create a backup
+csi_backup(gui,'Before flip of k-space');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Flip over k-space
+ind = csi_findDimLabel(csi.data.labels,{'kx','ky','kz'});
+for kk = 1:size(ind,2)
+    csi.data.raw = flip(csi.data.raw,ind(kk));
+end
+
+% Store data
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Log
+CSI_Log({'Corrected orientation by flipping dimensions: '},...
+        {strjoin(csi.data.labels(kspace),' | ')});
+
+
+
+% --- Executes on button press in button_CSI_Interpolate.
+function button_CSI_Interpolate_Callback(~, ~, gui)
+% Interpolate data over the spatial dimensions
+
+% BACKUP + APPDATA % ------------------------------- %
+% Create backup
+CSI_backupSet(gui, 'Before interpolation.'); 
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% k-space indexes
+kspace = csi_findDimLabel(csi.data.labels,{'kx','ky','kz'});
+
+% Userinput % --------------------------------------------- %
+
+% Default 
+if isfield(csi,'twix')
+    % Get interpolation matrix from dat-file header.
+    
+    % How to figure out what the phase/read direction in data is?
+    % csigui.twix.Meas....
+    % FinalMatrixSizePhase FinalMatrixSizeRead FinalMatrixSizeSlice
+    
+    % From twix-header par = kz; lin = ky; seg = kx;
+    if isfield(csi.twix.Meas,'RawSeg')
+        def_ans(1) = csi.twix.Meas.RawSeg;
+    end
+    if isfield(csi.twix.Meas,'RawLin')
+        def_ans(2) = csi.twix.Meas.RawLin;
+    end
+    if isfield(csi.twix.Meas,'RawPar')
+        def_ans(3) = csi.twix.Meas.RawPar;
+    end
+else
+    % Set as double of current matrix size
+    def_ans = csi.data.dim(kspace) .* 2;
+end
+
+% Ask user
+uans = getUserInput({'New interpolation dimensions:'},{def_ans});
+if isempty(uans{1}),CSI_Log({'Aborted interpolation.'},{''}); return; end
+new_dim = str2double(strsplit(uans{1}, ' '));
+
+uans = getUserInput_Popup({'Interpolation method: '},...
+    {{'Spline', 'Cubic', 'Linear', 'Nearest', 'Makima'}});
+if isempty(uans{1}),CSI_Log({'Aborted interpolation.'},{''}); return; end
+meth = uans{1};
+
+% Interpolate --------------------------------------------- %
+% Data will be automatically rearranged if kspace indexes are not after the
+% sample-index (1).
+CSI_Log({'Interpolation started, please be patient.'},{''});
+
+csi.data.raw = csi_interpolate(csi.data.raw, new_dim, kspace, meth);
+csi.data.dim = size(csi.data.raw);
+
+% Store data       
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Log
+CSI_Log({'Applied interpolation over all spatial dimensions: '},...
+        {strjoin(csi.data.labels(kspace),' | ')});
 
