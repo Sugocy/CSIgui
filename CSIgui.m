@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 02-May-2023 15:05:03
+% Last Modified by GUIDE v2.5 02-May-2023 16:29:52
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -98,7 +98,8 @@ loadBar(0.6, 'Processing input...');
 
 % Struct for input.
 inp = struct; label_list = {'data','list','csi','spec','image','labels',...
-                            'mrs', 'filepath', 'filepathi', 'fp','fpi'};
+                            'mrs', 'filepath', 'filepathi', 'fp','fpi',...
+                            'twix'};
 for inpi = 2:2:size(varargin,2)
     % Find corresponding label for accepted input labels
     lab_ind = strcmpi(label_list, varargin{inpi}); 
@@ -747,9 +748,11 @@ if csi.data.dim(1) > 0, success = 1; end
 % Meta-data
 csi.ext = 'dat'; csi.filename = fn; % Save filename
 
-
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi);  
+
+% Close file ID
+fclose('all');
 
 % --- Parse LIST/DATA file
 function success = parse_listdata(fp, fn, gui)
@@ -1083,6 +1086,22 @@ if isfield(gui.inp,'labels')
     succes = 1;
 end
 
+% Label TWIX % ---------------------------------------------------- %
+if isfield(gui.inp, 'twix')
+     userInfo = 'Saved twix-header.';
+     
+     % Save twix data to CSIgui appdata
+     csi.twix = gui.inp.twix;
+     
+     % Save CSI data in app-data
+     setappdata(gui.CSIgui_main,'csi',csi);  
+     
+     % Update processed info to user.
+     CSI_Log({'User input processed: '},{userInfo});
+     
+     % Pase succes
+     succes = 1;
+end
 
 
 
@@ -2690,26 +2709,27 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 uans = getUserInput_Popup({'Display type: ',...
                            'Save line width data (.txt): ',...
                            'Use FWHM method: (BETA)'},...
-                         {{'Table', 'Graph'},{'No','Yes'},...
-                            {'Local minima', 'Intersect (Beta)'}});
+                         {{'Map', 'Table', 'Graph'},{'No','Yes'},...
+                            {'Local minima', 'Intersect'}});
 if isempty(uans)
-    CSI_Log({'Skipped line width calculations.'},{''}); return; 
+    CSI_Log({'Skipped linewidth calculations.'},{''}); return; 
 end
 
 % Display type
 dataDisp = uans{1};
+
 % Save data boolean
 switch uans{2}, case 'Yes', dataSave = 1; case 'No', dataSave = 0; end
+
 % Method
 lwmeth = uans{3};
 
 % Get data at peak of interest
 [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 
-% Prepare Data % --------------------------------- %
-tmp = csi.data.raw;
 
 
+% Calculate fwhm via prefered method
 if strcmp('Local minima', lwmeth) % Local minima method
     % doi:      data of peak of interest only
     % tmp:      full data array
@@ -2733,10 +2753,10 @@ if strcmp('Local minima', lwmeth) % Local minima method
     poi_range_perVox = cellfun(@(x,y) x:y, peak_pLow, peak_pHig,'uniform',0); 
 
     % Input cell data
-    sz = size(tmp); 
+    sz = size(csi.data.raw); 
     cell_layout = arrayfun(...
         @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-    tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
+    tmp = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
 
     % Input axis
     ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
@@ -2751,39 +2771,37 @@ if strcmp('Local minima', lwmeth) % Local minima method
 
 elseif strcmp('Intersect', lwmeth)  % Intersect method
     
-        % Maximum in this range
-    [~,mi] = max(real(doi),[],1);
-
-    % Set the maximum value as peak centre.
-    peak_pos = mi+range(1);  % And correct doi-size vs full axis
-
-    % Set 1/2(peak width)
-    peak_width = ceil(csi.xaxis.N/100); % One percent of #samples
-    if peak_width < 3, peak_width = 3; end 
-    % If 1% of #samples is less than 3, 1/2*(peak width) set to 3.
+    % Log
+    CSI_Log({'Calculating linewidth, please be patient.'},{''});
     
-    % Peak range used to find FWHM
-    peak_pLow = num2cell(peak_pos - peak_width);
-    peak_pHig = num2cell(peak_pos + peak_width);
-    % Peak of interest range in x-axis
-    poi_range_perVox = cellfun(@(x,y) [x y], peak_pLow, peak_pHig,'uniform',0); 
-
-    % Input cell data
-    sz = size(tmp); 
-    cell_layout = arrayfun(...
-        @ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
-    tmp = mat2cell(tmp, sz(1), cell_layout{:}); 
-
-    % Input axis
-    ax_inp = repmat({csi.xaxis.ppm}, size(tmp));
-    % Set plotting off - Overload matlab otherwise!
-    plot_off = repmat({0},size(tmp)); % plot_off{1,2,4,1} = 1;
+    % Rearrange data to cell 
+    sz = size(csi.data.raw); 
+    cell_layout = arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),...
+        'UniformOutput',0);
+    data = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
     
+    % Axis input
+    if isfield(csi.xaxis,'ppm')
+        inp_xaxis = repmat({csi.xaxis.ppm}, size(data));
+    else
+        inp_xaxis = repmat({csi.xaxis.none}, size(data));
+    end
+    inp_range = repmat({range}, size(data));
+    
+    % Run script for intersect fwhm
     linewidth = cellfun(@csi_linewidth_intersect,...
-        tmp, ax_inp, poi_range_perVox,'Uniform',0);
-
+        data, inp_xaxis, inp_range, 'Uniform',0);
     
 end
+
+% Show statistics nfo
+stats = csi_statistics_of_volume(cell2mat(linewidth));
+CSI_Log({'Linewidth statistics ------------------------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
 
 % Data display % --------------------------------- %
 switch dataDisp
@@ -2791,6 +2809,59 @@ switch dataDisp
         CSI_dataAsTable(cell2mat(linewidth), 'LineWidth')
     case 'Graph'
         CSI_dataAsGraph(cell2mat(linewidth), gui, 'LineWidth')
+    case 'Map'
+        data = cell2mat(linewidth);
+        
+        % USERINPUT: what data to show.
+        uans = getUserInput_Popup(...
+            {'Data range to show: ','Color scale range: '},...
+           {{'All', 'Current slice'},...
+            {'Min to Max', 'Histogram optimized'}});                                                 
+        if isempty(uans), return; end
+        labels = csi.data.labels;
+        
+        % \\ Check data to visualize 
+        if strcmpi(uans{1},'Current slice')
+            % \\ Get current plotted slice index from CSIgui 2D-plot
+            % \\ Get curent slice data from SNR_all array.
+
+            % Get the panel-slider object and 2d-plot object
+            [~, gui2D] = CSI_2D_getDataSliders(gui);
+
+            % Plotted slice index of interest
+            sloi = gui2D.plotindex{1};
+
+            % Get data of interest.
+            dat_dim = size(data);    
+            dat_dim_range = arrayfun(@(x) 1:x,dat_dim, 'uniform',0);
+            dat_dim(4) = 1; dat_dim_range{4} = sloi;
+
+            % 2. Get data of interest from SNR_all.
+            data_cut = data(dat_dim_range{:});
+            permvec = 1:numel(dat_dim);
+            permvec(4) = []; permvec(end+1) = 4;
+            data_cut = permute(data_cut, permvec);
+
+            % Replace data-all with data-cut
+            data = data_cut;
+
+            % Update labels
+            labels{5} = int2str(sloi);
+        end         
+        
+         % \\ Calculate color-range of maps.
+        switch uans{2}
+            case 'Min to Max'
+                color_scale = [min(data(:)) max(data(:))];
+            case 'Histogram optimized'
+                [N, edges, bin] = histcounts(data(:));
+                bool = cumsum(N) <= 0.98*size(bin,1);
+                maxval = max(edges(bool));
+                color_scale = [min(data(:)) maxval];                         
+        end
+        
+        % Plot as tab
+        CSI_dataAsTabs(gui, data, 'Linewidth', labels, color_scale);
 end
 
 % Save data % --------------------------------- %
@@ -2819,50 +2890,10 @@ CSI_backupSet(gui, 'Before ISIS recon.')
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-
-
 % % % % % THIS IS OLD - NEEDS CLEAN UP --- QH 2020/10/12
-
-% --- ADD AND SUB SCHEMES
-% New schemes can be added to the cell below and will automagically
-% appear in the selection process; 
-% 1 equals +/add; 0 equals -/subtract;
-% schemes = flipud({[1,0];... % 1D-ISIS e.g. a slab
-%                   [0,1];... % Test above
-%                   [1,1];... 
-%                   [1,0,1,0];... % Bar
-%                   [1,1,0,0];... 
-%                   [1,1,1,1];... 
-%                   [1, 1, 1, 1, 1, 1, 1, 1];...     
-%                   [1, 0, 1, 0, 1, 0, 1, 0];... % 1 = +; 0 = -;
-%                   [0, 1, 1, 0, 1, 0, 0, 1];...             
-%                   [1, 0, 0, 1, 0, 1, 1, 0]});  % 1 = +; 0 = -;
-
-
 schemes = flipud({[1,1];... 
                   [1,1,1,1];... 
                   [1,1,1,1,1,1,1,1]});
- 
-% schemes = allCombinations(repmat({[0 1]},8,1));
-% schemes = unique(schemes,'rows');
-% schemes = num2cell(schemes,2);
-% Scheme str
-% schemes_str = cellfun(@int2str, schemes, 'uniform',0);
-% schemes_str = strrep(schemes_str, '0', '-'); 
-% schemes_str = strrep(schemes_str, '1', '+');       
-        
-% % Userinput % --------------------------------- %
-% uans = getUserInput_Popup({'Cycle dimension: ', 'Add subtract scheme: '},...
-%                           {csi.data.labels(2:end), schemes_str});
-% if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
-% % Convert to integers
-% udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
-% usch = find(strcmp(schemes_str,uans{2}) == 1); 
-% udim = dimension/index of cycles given by user.
-% usch = index of scheme-list given by user.
-% soi = schemes{usch};
-
-
 
 uans = getUserInput_Popup({'Cycle dimension: '},{csi.data.labels(2:end)});
 if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
@@ -2912,6 +2943,7 @@ setappdata(gui.CSIgui_main, 'csi',csi);
 schemes_str = repmat('+', 1, sz(udim));
 CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str} );
 
+
 % --- Executes on button press in button_CSI_setParameters.
 function button_CSI_setFrequency_Callback(hObject, eventdata, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -2958,7 +2990,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % PERMUTE % ---------------------------- %
 % Get order from user
 uans = getUserInput(...
-    {'New order of MRS data dimensions?:'},{1:size(csi.data.labels,2)});
+    {'New order of MRS data dimensions?: '},{1:size(csi.data.labels,2)});
 % If user pressed skip.
 if isempty(uans),CSI_Log({'Skipped data re-ordering.'},{''}); return; end
 
@@ -4424,7 +4456,7 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % USERINPUT % --------------------------------- %
 uans = getUserInput_Popup({'Display type: ',...
                            'Select peak: '},...
-                          {{'Graph', 'Table', 'Map'},{'Yes','No'}});
+                          {{'Map','Graph', 'Table'},{'Yes','No'}});
 if isempty(uans)
     CSI_Log({'Skipped max/slice.'},{''}) ; return; 
 end
@@ -4462,10 +4494,9 @@ data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
 % SELECT PEAK% -------------------------------- %
 
 if selectPeak
-    [doi, ~, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+    doi = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 else
     doi   = csi.data.raw;
-    range = [csi.xaxis.none(1) csi.xaxis.none(end)]; 
 end
 
 % MAX/VOXEL % -------------------------------- %
@@ -4496,10 +4527,7 @@ else
     data = CSI_getUnit(doi, data_unit);
     % Calculate the maximum values/voxel.
     data_max = max(data,[],1);
-
 end
-
-
 
 % DISPLAY INFO % ----------------------------- %
 CSI_Log({['Maxima calculated. Displaying data as ' dataDisp '.']},...
@@ -4516,14 +4544,68 @@ switch dataDisp
     case 'map'
         % Display data % ------ % Map.
         
+        % USERINPUT: What data to show.
+        uans = getUserInput_Popup(...
+            {'Data range to show: ','Color scale range: '},...
+           {{'All', 'Current slice'},...
+            {'Min to Max', 'Histogram optimized'}});                                                 
+        if isempty(uans), return; end
+        labels = csi.data.labels;
+        
+        % \\ Check data to visualize 
+        if strcmpi(uans{1},'Current slice')
+            % \\ Get current plotted slice index from CSIgui 2D-plot
+            % \\ Get curent slice data from SNR_all array.
+
+            % Get the panel-slider object and 2d-plot object
+            [~, gui2D] = CSI_2D_getDataSliders(gui);
+
+            % Plotted slice index of interest
+            sloi = gui2D.plotindex{1};
+
+            % Get data of interest.
+            snr_dim = size(data_max);    
+            snr_dim_range = arrayfun(@(x) 1:x,snr_dim, 'uniform',0);
+            snr_dim(4) = 1; snr_dim_range{4} = sloi;
+
+            % 2. Get data of interest from SNR_all.
+            data_cut = data_max(snr_dim_range{:});
+            permvec = 1:numel(snr_dim);
+            permvec(4) = []; permvec(end+1) = 4;
+            data_cut = permute(data_cut, permvec);
+
+            % Replace SNR-all with SNR-cut
+            data_max = dat_cut;
+
+            % Update labels
+            labels{5} = int2str(sloi);
+        end         
+    
         % \\ Calculate color-range of maps.
-        [N, edges, bin] = histcounts(data_max(:));
-        bool = cumsum(N) <= 0.98*size(bin,1);
-        maxval = max(edges(bool));
-        clrscale = [min(data_max(:)) maxval];                         
+        switch uans{2}
+            case 'Min to Max'
+                color_scale = [min(data_max(:)) max(data_max(:))];
+            case 'Histogram optimized'
+                [N, edges, bin] = histcounts(data_max(:));
+                bool = cumsum(N) <= 0.98*size(bin,1);
+                maxval = max(edges(bool));
+                color_scale = [min(data_max(:)) maxval];                         
+        end                       
                 
-        CSI_dataAsTabs(gui, data_max, 'Maxima', csi.data.labels, clrscale);
+        CSI_dataAsTabs(gui, data_max, 'Maxima', ...
+            csi.data.labels, color_scale);
 end
+
+
+% Show statistics nfo
+stats = csi_statistics_of_volume((data_max));
+CSI_Log({'Maxima statistics ------------------------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
+          
 
 % --- Executed by MaxValue button callback
 function CSI_Max_In_3D(~, ~, gui)
@@ -4640,7 +4722,7 @@ mask_size = str2double(uans{1});
 % SNR-method (real/magnitude) and display method (table or graph)
 uans = getUserInput_Popup({'SNR Signal unit: ','Display type: '},...
                          {{'Real', 'Magnitude'},...
-                          {'Graph','Table', 'Map', 'Histogram'}});
+                          {'Map','Graph','Table','Histogram'}});
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 
 dataDisp = lower(uans{2}); % Display method
@@ -4657,10 +4739,17 @@ SNR_all = csi_SNR(csi.data.raw, mask_size, SNRmethod, range_none);
 % Convert NaNs to zero
 SNR_all(isnan(SNR_all)) = 0; 
 
+% Show statistics nfo
+stats = csi_statistics_of_volume(SNR_all);
+CSI_Log({'SNR statistics: Full Volume ---------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
+
 % Display Info %
-CSI_Log({'Starting data display:',...
-         'SNR calculated for each voxel. Overall average: '},...
-        {dataDisp,nanmean(SNR_all(:))});
+CSI_Log({'Starting data display:'},{dataDisp});
 
            % --------------- % DISPLAY DATA % --------------- %
 
@@ -4745,6 +4834,16 @@ switch dataDisp
         title('SNR  Histogram'); xlabel('SNR Bins');
 
 end
+
+% Show statistics nfo
+stats = csi_statistics_of_volume(SNR_all);
+CSI_Log({'SNR statistics ------------------------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
+
 
 
 % --- Get 2D-CSI plot slider data
@@ -5105,7 +5204,6 @@ CSI_Log({log_msg}, {csi.data.split.type});
 % --- Executes on button press in button_Log_DeleteLine.
 function button_Log_DeleteLine_Callback(hObj, eventdata, gui)
 CSI_Log_deleteLine(hObj);
-
 
 % --- Executes on button press in button_CSI_AutoProcessing
 function button_CSI_AutoProcessing_Callback(hObj, ~, gui)
@@ -6253,14 +6351,26 @@ if  index == 0, return; end
 [~,fn,ext] = fileparts(fn); ext = ext(2:end);
     
 % Set active-tab and print to file.
-tabs = tabg.Children;
+tabs = tabg.Children; scrsz = get(0,'screensize'); scrsz = scrsz(3:4);
 for kk = 1:size(tabs,1)
     % Set tab-kk to active
     tabg.SelectedTab = tabs(kk);
     
+    pause(0.3); % Make sure display is updated.
+    
     % Save figure
-    fntmp = [fp fn '_' tabs(kk).Title];
-    export_fig(fntmp, '-transparent',['-' ext],'-nocrop','-m1', figobj)
+    fntmp = [fp fn '_' tabs(kk).Title '.' ext];
+    
+    % This takes too long as is converst all gfx elements.. everytime..
+    % export_fig(fntmp, '-transparent',['-' ext],'-nocrop','-m1', figobj)
+    
+    % Solution is screenshot!
+    figpos = figobj.Position; % [l b w h]
+    figpos(2) = abs(figpos(2) + figpos(4) - scrsz(2));
+    img = screenshot(figpos); % [l t w h]
+    
+    % Save to file
+    imwrite(img, fntmp);    
 end
 
 function toolbar_SetColorScale(src,~)
@@ -6664,7 +6774,7 @@ tgui.plot_par.ax = ax; guidata(fh, tgui);
 
 % --- Executes on button press in button_CSI_setCoordinates.
 function button_CSI_setCoordinates_Callback(~, ~, gui)
-% Calculate coordinates of the CSI-volume
+% Calculate coordinates of the CSI-volume:
 %
 % First all input is requested by user if not present. 
 % Second all input is used to calculate coordinates for each voxel.
@@ -6730,32 +6840,28 @@ if isfield(csi,'twix')
     ori.offcenter(1) = csi.twix.Meas.VoiPositionSag;
     ori.offcenter(2) = csi.twix.Meas.VoiPositionCor;
     ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
+    % Also: hdr.Meas.VoI_Position_Cor/VoI_Position_Sag/VoI_Position_Tra
     
     % FOV
-    ori.fov(1) = csi.twix.Config.Vol_RoFOV; % Read out fov
-    ori.fov(2) = csi.twix.Config.Vol_PeFOV; % Phased enc fov
-    ori.fov(3) = csi.twix.Config.SliceThickness; % Duh
-     
-    % hdr.MeasYaps.sSpecPara.sVoI.dThickness
-    % hdr.MeasYaps.sSpecPara.sVoI.dPhaseFOV
-    % hdr.MeasYaps.sSpecPara.sVoI.dReadoutFOV
-    
+    if isfield(csi.twix.Config,'VoI_RoFOV')
+        ori.fov(1) = csi.twix.Config.VoI_RoFOV; % Read out fov
+        ori.fov(2) = csi.twix.Config.VoI_PeFOV; % Phased enc fov
+        ori.fov(3) = csi.twix.Config.VoI_SliceThickness; % Slice-dir FOV
+    elseif isfield(csi.twix.MeasYaps.sSpecPara,'sVoI')        
+        ori.fov(1) = csi.twixMeasYaps.sSpecPara.sVoI.dReadoutFOV;
+        ori.fov(2) = csi.twixMeasYaps.sSpecPara.sVoI.dPhaseFOV;
+        ori.fov(3) = csi.twix.MeasYaps.sSpecPara.sVoI.dThickness;
+    end
+
     % RES
     ori.res(1)= ori.fov(1)./csi.data.dim(space_dim(1));
     ori.res(2)= ori.fov(2)./csi.data.dim(space_dim(2));
     ori.res(3)= ori.fov(3)./csi.data.dim(space_dim(3));
     
-    % hdr.Meas.VoI_Position_Cor/VoI_Position_Sag/VoI_Position_Tra
-    % hdr.Meas.VoiPositionCor/hdr.Meas.VoiPositionSag/hdr.Meas.VoiPositionTra
-    % hdr.Meas.Matrix HFSthing
+    % Orientation
+    % hdr.Meas.Matrix HFS-thing
     % hdr.Dicom.tPatientPosition % hdr.Meas.PatientPosition
 end
-% % Parameters of interest.
-% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
-% csi.twix.Dicom.flReadoutOSFactor % Oversampling
-% hdr.Meas.flNominalB0
-% hdr.Meas.flMagneticFieldStrength
-% hdr.Meas.flReadoutOSFactor
 
 % USERINPUT  - SPATIAL % ----------------- %
 
@@ -9789,14 +9895,14 @@ function range = CSI_getPeakOfInterest(xaxis, poi_tag)
 % Process input
 if nargin == 1, poi_tag = ''; end
 
-% Stored POI?
-% 1. GET CSIgui-settings 2. GET poi_default
+% Check for stored POI
 CSIguiObj = findobj('Name','CSIgui'); poi_def = NaN;
 if ~isempty(CSIguiObj) && ishandle(CSIguiObj)
     if isappdata(CSIguiObj,'CSIpar')
         CSIpar = getappdata(CSIguiObj,'CSIpar');
         if isfield(CSIpar,'poi')
             poi_def = CSIpar.poi;
+            if poi_def(2) > numel(xaxis.ppm), poi_def = NaN; end
         end
     end       
 end
@@ -11041,7 +11147,7 @@ function panel_1D_DataDisplay(hObj, ~)
 % Get CSIgui 1D figure object
 obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % Do checks and get CSI_1D object, data_1D appdata and data array
-[CSI_1D_obj, appdata1D] = CSI_1D_getData(obj1D);
+[CSI_1D_obj, appdata1D, data] = CSI_1D_getData(obj1D);
 
 
 % USER INPUT % -------------------------------- %
@@ -11068,7 +11174,9 @@ appdata1D.axis.xlimit= str2double(strsplit(xans{1}));
 
 
 % Y-axis ------------ %
-uans = getUserInput({'Y-axis limits:'},{appdata1D.axes.YLim});
+data_new_unit = CSI_getUnit(data, plot_unit);
+uans = getUserInput({'Y-axis limits:'},...
+    {[min(data_new_unit) max(data_new_unit)]});
 
 % APPLY SETTINGS % ---------------------------- %
 appdata1D.voxel.unit = plot_unit;
@@ -11753,8 +11861,8 @@ function CSI_saveMAT(hObject, ~, ~,varargin)
 % Get guidata
 gui = guidata(hObject);
 
-                 % ------- % Save CSI data % ------- %
-
+                 % ------- % Save CSI data % ------- %                 
+                 
 % Check for CSI data       
 if isappdata(gui.CSIgui_main,'csi')
     csi = getappdata(gui.CSIgui_main,'csi'); 
@@ -11770,12 +11878,22 @@ if isappdata(gui.CSIgui_main,'csi')
             'Save MRSI data...',fp);
         if fi == 0, return; end
         [~,fn, ext] = fileparts(fn);
+        
+      
     else
         fp = varargin{1}; fn = varargin{2}; ext = varargin{3};
     end
     
+    % Reduce file size?
+    reduce_size = getUserInput_Popup(...
+        {'Reduce file size by converting to single?'},...
+        {{'No','Yes'}});
+    
     % Get MRSI data
     csigui = csi.data;
+    if strcmpi(reduce_size{1},'yes')
+        csigui.raw = single(csigui.raw);
+    end
     
     if isfield(csi,'twix')
         csigui.twix = csi.twix;
@@ -13816,7 +13934,7 @@ function button_openAutoScript_Callback(hObj, evt, gui)
 % Load and execute autoscripting... 
 
 % Load text file
-rt =mfilename('fullpath');
+rt = mfilename('fullpath');
 fp = fileparts([rt '.m']);
 
 [fn,fp,ind] = uigetfile('*.txt', 'defname', fp);
@@ -13836,8 +13954,12 @@ for kk = 1:size(inp,2)
     inpfnc = tmp{1}; 
     if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
     
-    if strcmp('plotCSI',inpfnc)% Make this an exception list!
+    
+    if strcmp('plotCSI', inpfnc)% Make this an exception list!
         qrystr = ['button_' inpfnc];
+%     elseif strcmp('CSI', inpfnc(1:3)) 
+%         % If its a function CSI_....; example CSI_saveData
+%         qrystr = inpfnc;
     else
         qrystr = ['button_CSI_' inpfnc];
     end
@@ -13847,13 +13969,14 @@ for kk = 1:size(inp,2)
         switch inpfnc % Put all exceptions here
             case 'setDomain'
                 CSI_setDomain(hObj, evt, inpvar); 
+            case 'saveData'
+                CSI_saveData(hObj,[],[]);
         end
     else
        btn = butfunc(qry);
        if ~isempty(btn) 
            fnc2run = [btn{:} '_Callback'];
            eval([ fnc2run '(hObj,evt,gui)']);
-           gui = guidata(hObj); % Reload gui-struct...
        else
            CSI_Log({'Could not parse scripted input:'},...
                    {[inpfnc ' | ' btn{:}]});
@@ -14110,7 +14233,7 @@ function outp = CSI_FAdynamic(FA, data, phase_data, fit_method, add_zero, ...
 %                    |(1) -REQUIRES varargin(1)=TR and varargin(2)=T1;
 %                    |Sine (0) or MR signal equation (1) or Poly (2)
 %       5. add_zero     = Adds S(FA=0) = 0 to data before fitting.
-%       5. plot_data
+%       6. plot_data
 %
 % T1.] If TR is many orders larger than the T1 of the peak metabolite in
 % question the T1 weighting in the signal over the FA will be neglible to
@@ -14381,12 +14504,21 @@ function button_CSI_RemoveOS_Callback(hObj, ~, gui, backup)
 % Example: column of size 11 requires OS removal of first data point and
 % last two data points to end up with column size 8.
 
-% Create backup
-CSI_backupSet(gui, 'Before removing oversampling.');
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Check data domain
+domain = CSI_getDomain(gui);
+if strcmpi(domain, 'frequency')
+    CSI_Log({'MRS data is in the frequency domain; '},...
+            {'change to time domain to remove oversampling.'});
+    return;
+end 
+
+% Create backup
+CSI_backupSet(gui, 'Before removing oversampling.');
 
 % ------------------------------------------------- %
 
@@ -14413,6 +14545,11 @@ csi.data.raw = csi.data.raw(rng{:});
 csi.data.dim = size(csi.data.raw);
 
 % ------------------------------------------------- %
+
+% If a peak was selected - this needs to be removed as its point changed.
+if isappdata(gui.CSIgui_main,'CSIpar')
+    rmappdata(gui.CSIgui_main,'CSIpar');
+end
 
 % Store data %
 setappdata(gui.CSIgui_main,'csi', csi);
@@ -14580,16 +14717,14 @@ switch uans{3}
         FA_out = imag_FA;
 end
 
-% Some statistics
-B_mean = nanmean(FA_out(:)); B_std = nanstd(FA_out(:));
-tmp = FA_out(:); [B_mod,B_freq,C]= mode(round(tmp(~isnan(tmp)))); 
-if size(C{1},1) > 1, B_mod = C{1}'; end
-
-% Show nfo
-CSI_Log({'Mean B1:', 'Mode B1:', ...
-         'Calculated B1-maps from data.'},...
-         {sprintf('%.2f +/- %.2f',B_mean, B_std), ...
-          sprintf('%.2f | freq. %i',B_mod, B_freq), ''});
+% Show statistics nfo
+stats = csi_statistics_of_volume(FA_out);
+CSI_Log({'B1-map statistics ------------------------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
 
 % -------------------------------------------- Display
 CSI_Log({'Plotting B1 data, please be patient.'},{''});
@@ -14612,8 +14747,8 @@ end
 function button_CSI_FlipSpace_Callback(~, ~, gui)
 % Flip data 180 degrees in all spatial directions.
 
-% Create a backup
-csi_backup(gui,'Before flip of k-space');
+% Create backup
+CSI_backupSet(gui, 'Before flipping data.');
 
 % Get appdata
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -14630,7 +14765,7 @@ setappdata(gui.CSIgui_main,'csi', csi);
 
 % Log
 CSI_Log({'Corrected orientation by flipping dimensions: '},...
-        {strjoin(csi.data.labels(kspace),' | ')});
+        {strjoin(csi.data.labels(ind),' | ')});
 
 
 
@@ -14698,4 +14833,35 @@ setappdata(gui.CSIgui_main,'csi', csi);
 % Log
 CSI_Log({'Applied interpolation over all spatial dimensions: '},...
         {strjoin(csi.data.labels(kspace),' | ')});
+
+
+
+% --- Executes on button press in button_CSI_Maps.
+function button_CSI_Maps_Callback(hobj, ~, gui)
+% Calculate specific maps to visualize data
+%
+% Includes: SNR, FWHM, peak, linewidth, and maximum maps.
+
+% Check appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+
+% Ask user what to map
+qry = 'Choose a map to calculate: ';
+opts = {'SNR','Linewidth','Maximum','Peak'};
+
+maptype = getUserInput_Popup({qry},{opts});
+if isempty(maptype), return; end
+
+switch maptype{1}
+    case 'SNR'
+        button_CSI_SNR_Callback([], [], gui);
+    case 'Linewidth'
+        button_CSI_Linewidth_Callback([], [], gui);
+    case 'Maximum'
+        button_CSI_MaxValue_Callback([], [], gui);
+    case 'Peak'
+        button_CSI_Peak_Map_Callback([], [], gui);
+end
+
+
 
