@@ -1,4 +1,4 @@
-function linewidth = csi_linewidth_intersect(data, ax, peak_range)
+function [linewidth, xest, yest] = csi_linewidth_intersect(data, ax, peak_range)
 %%% Calculate linewidth of a peak at a given frequency peak_range using an
 %%% intersect FWHM method.
 
@@ -30,7 +30,7 @@ fwhmline = cat(2,ax',repmat(fwhm,N,1));
 % The answer in PPM or unit-less: ALWAYS use the first two - if more
 % intersects are found, data is wrong anyways... 
 if size(xest,1) == 1 % The peak is not within the peak_range probabaly
-    linewidth = NaN; 
+    linewidth = NaN; xest = NaN; yest = NaN;
 else
     xest = [xest(1) xest(end)]; % yest = [yest(1) yest(end)];
     linewidth = diff(xest); 
