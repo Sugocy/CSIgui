@@ -1,4 +1,4 @@
-function spec = csi_autoZeroPhase(spec, poi, method, disp_on)
+function [spec, phase_change] = csi_autoZeroPhase(spec, poi, method, disp_on)
 % Quick and dirty method to apply zeroth order phase correcton.
 % The peak of interest can be described by a range or a single point. 
 %
@@ -41,6 +41,11 @@ pha_corrected = repmat(pha,[1 size(poi,2)]) + (pha_step.*maxPhaStep_inRange)';
 spec_all = complex(magn.*cos(pha_corrected), magn.*sin(pha_corrected));
 
 
+% Set output as spectrum with phase corrected resulting in the highest 
+% real value at that point in the given range.
+spec = spec_all(:,maxReal_poi_pos);
+phase_change = (pha_step.*maxPhaStep_inRange);
+phase_change = phase_change(maxReal_poi_pos);
 
 % Show if requested.
 if disp_on == 1
@@ -62,9 +67,6 @@ if disp_on == 1
     drawnow;
 end
 
-% Set output as spectrum with phase corrected resulting in the highest 
-% real value at that point in the given range.
-spec = spec_all(:,maxReal_poi_pos);
 
 elseif method == 2
     
@@ -106,11 +108,11 @@ elseif method == 2
     end
     
     % Zeroth order phase correction of interest
-    poi = dphi_range(:,ind);
+    phase_change = dphi_range(:,ind);
     
     % New complex spectrum
     mag = abs(spec); pha = angle(spec);
-    spec = complex( mag.*cos(pha+poi),...
-                    mag.*sin(pha+poi) );
+    spec = complex( mag.*cos(pha+phase_change),...
+                    mag.*sin(pha+phase_change) );
 
 end

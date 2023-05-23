@@ -63,7 +63,8 @@ end
 % Choose default command line output for CSIgui
 gui.output = hObject;
 % This field create ID for this CSIgui-instance.
-gui.ID = sprintf('%.0f', now.*10^10);
+id = strrep(strjoin(string(datevec(datetime("now"))),''),'.','');
+gui.ID = sprintf('%s', id);
 % Define CSIgui version here.
 gui.version = '2.0';
 
@@ -423,7 +424,7 @@ try
     
 catch err
     fprintf('Jave Menubar setToolTipText error: %s', err.message);
-    save([datestr(now,'HHMMSS') '_JavaError.mat'],  'err');
+    save(join([string(datetime('now','format', 'HHmmSS')) '_JavaError.mat'],''),  'err');
 end
 
 % --- Outputs from this function are returned to the command line.
@@ -449,6 +450,149 @@ if isfield(gui,'inp')
     gui = rmfield(gui, 'inp'); guidata(hObj,gui); 
 end
 
+% --- Open multiple files
+function success = parse_multifile(fp, fn, ext, gui)
+% Open up multiple files to be loaded into memory. 
+%
+% Expects the same file extensions and resulting data requires the same
+% dimensions. The header of the first file will be used.
+
+% First we need to correct the order as Matlab does not save the order of
+% the files as clicked... 
+order = 0;
+while size(unique(order),2) ~= size(fn,2)
+
+    numbers = cell(1,size(fn,2));
+    for nf = 1:size(fn,2)
+        if nf == 1
+            tmp = nf:size(fn,2);
+        else
+            tmp = [nf:size(fn,2) 1:nf-1];
+        end
+        numbers{nf} = strsplit(num2str(tmp));
+    end
+    uans = getUserInput_Popup(fn, numbers,...
+           [gui.colors.main; gui.colors.text_main], 'Set load order.');
+    if isempty(uans{1}), order = 1:size(fn,2); break; end
+    order = str2double(uans);
+    
+end
+fn = fn(order);
+
+switch ext
+    case '.dat' % Spectroscopy - Siemens
+
+        % Loop all files
+        for kk = 1:size(fn,2)
+            
+            % Twix-loading
+            twix = mapVBVD([fp '\' fn{kk} '.dat']);
+            
+            % Header
+            if kk == 1
+                csi.twix = twix.hdr;
+            end
+
+            % Read data dimension and labels
+            dims = num2cell(twix.image.dataSize);
+            dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
+            
+            % Dimension labels from header
+            dims_txt = twix.image.dataDims;
+            dims_txt = dims_txt(twix.image.dataSize>1);
+            
+            % Correct data labels from twix-file.
+            % Labels in dat-file
+            labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
+            % Library for other name
+            labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
+            dims_txt_corrected = cell(1,size(dims_txt,2));
+            for ti = 1:size(dims_txt,2)        
+                ind = strcmpi(labels_dat_file, dims_txt{ti});
+                if sum(ind) > 0
+                    dims_txt_corrected{ti} = labels_match_library{ind};
+                end
+            end
+            
+            % Store labels, only first iteration
+            if kk == 1, csi.data.labels = [dims_txt_corrected 'file']; end
+            
+            % MRS-data
+            tmp = squeeze(twix.image(dims_rng{:}));
+            
+            % Free up memory
+            clear('twix')
+
+            % Data sizes.
+            nfo = whos('tmp'); 
+            matlab_nfo = memory;
+            
+            if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
+                % Array is too large for matlab-array-memory
+                CSI_Log({'CSIgui: data requires much memory.'},...
+                        {'Loading as single.'});
+                tmp = single(tmp);
+            else
+                % Array will fit matlab-max-array-memory
+                tmp = double(tmp);    
+            end
+        
+            if kk == 1
+                data = tmp; data_sz = size(data);
+                file_dim = numel(size(tmp))+1;                
+            else
+                if (data_sz == size(tmp))
+                    data = cat(file_dim,data,tmp);
+                else
+                    CSI_Log({'Aborting, data dimensions between'},...
+                            {'files did no agree. Aborted loading.'});
+                    success = 0;
+                    return;
+                end
+            end
+            clear('tmp');
+
+            % Close file ID
+            fclose('all');
+        end
+
+        % Store to CSI memory
+        csi.data.raw = data;
+        clear('data');
+
+        % Data dimensions
+        csi.data.dim = size(csi.data.raw);
+                
+        success = 0;
+        if csi.data.dim(1) > 0, success = 1; end
+        
+        % Meta-data
+        csi.ext = 'dat'; csi.filename = strjoin(fn, ' | '); % Save filename
+        
+        % Save CSI data in app-data
+        setappdata(gui.CSIgui_main,'csi',csi);  
+
+
+    case '.ima' % Image - DICOM - Siemens
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case '.dcm' % Image - DICOM - Other
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case '.data' % Spectroscopy - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});        
+    case 'spar' % Spectroscopy - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case 'par' % Image - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+end
+
+
+
+
 % --- Open file or process input.
 function openFile(hObj, ~, ~)
 % 1. Open up selection UI or analyze input arguments
@@ -460,7 +604,7 @@ function openFile(hObj, ~, ~)
 % Userinput is deleted at the end of this script.
 
 % Get fresh gui-data.
- gui = guidata(hObj); clear_log = 1; 
+gui = guidata(hObj); clear_log = 1; 
 
 
 
@@ -486,12 +630,31 @@ if ~isfield(gui, 'inp')
                 'Raw MRS file Siemens (*.dat)';...
      '*.txt;*.TXT;',...
                 'Text files (*.txt)'},...
-     'Select a file', fp); 
+     'Select a file', fp', 'MultiSelect', 'on'); 
     % Canceled file selection
     if fi == 0, return; end 
     
-    % Get file-extension for further processing, see below.
-    [fp, fn, ext] = fileparts([fp, fn]); ext = lower(ext);
+
+    % MULTIPLE FILES
+    if iscell(fn)
+
+        fn_tmp = fn;
+        [~,fn,ext] = cellfun(@(x,y) fileparts([x y]),...
+            repmat({fp},1,size(fn,2)),fn,'UniformOutput', 0);
+        ext = cellfun(@lower,ext, 'UniformOutput', 0);
+        if size(unique(ext),2) > 1
+            % Different extensions selected, unsupported for now.
+            CSI_Log({'Multiple extensions detected, aborting.'},{''});
+        else
+            ext_tmp = ext{1}; ext = 'multi';            
+        end
+
+    % SINGLE FILE
+    else
+        % Get file-extension for further processing, see below.
+        [fp, fn, ext] = fileparts([fp, fn]); ext = lower(ext);
+    end
+
 elseif isfield(gui,'openThisFile')
     % Get FP/FN/EXT from openThisFile field.
     fp = gui.openThisFile.fp;
@@ -561,8 +724,10 @@ if clear_log
 end
 
 % Update LOG
-CSI_Log({['Loading ' ext(2:end) ' file.']}, {'Please wait.'});
+CSI_Log({['Loading ' strrep(ext,'.','') ' file.']}, {'Please wait.'});
 
+
+% Parse data per extension.
 if strcmp(ext,'.dcm') || strcmp(ext,'.ima')                    % DICOM
 
     % Parse dicom file
@@ -630,18 +795,29 @@ elseif strcmpi(ext,'.dat')                                     % DAT-file
     % Frequency domain - kspace
     domain = 2; 
     
+elseif strcmpi(ext,'multi')
+    
+    % Parse multiple files
+    success = parse_multifile(fp, fn, ext_tmp, gui);
+
+    % Calculate xaxis if applicable
+    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+
+    % Set domain
+    domain = 1; % Is it though?
+
 else                                                           % ERROR 
     % Update LOG and return
-    CSI_Log({'Warning. File format not supported.'},{ext});
+    CSI_Log({'Warning. File format not supported. '},{ext});
     warning('The selected file format is not supported.'); return;
 end
 
 
 % Update LOG
 if success
-    CSI_Log({['Loading ' ext(2:end) ' file succeeded.']},{''});
+    CSI_Log({['Loading ' strrep(ext,'.','') ' file succeeded.']},{''});
 else
-    CSI_Log({['Loading ' ext(2:end) ' file failed.']},{''});
+    CSI_Log({['Loading ' strrep(ext,'.','') ' file failed.']},{''});
 end
 
 % Delete any user input from app-memory
@@ -1616,10 +1792,9 @@ uiresume(subobj);
 % ---------------------------------------------------------------------- %
 
 % -. Opens UI with popup menu's to get user input
-function userInput = getUserInput_Popup(popup_title, popup_input, clrs)
+function userInput = getUserInput_Popup(popup_title, popup_input, clrs, fig_title)
 % Create a simple gui with dropdown e.g. popup menu to choose certain 
 % options.
-
 
 % If no color input is present, use default dark theme or get from main 
 % app.
@@ -1633,19 +1808,23 @@ if nargin == 2
     end
 end
 
+if nargin < 4, fig_title = 'CSIgui - UserInput'; 
+else,          fig_title = ['CSIgui - ' fig_title];
+end
+
 % --------------------- % Set GUI details
 
 % Create sub-figure
 fig_userinp = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
                      'NumberTitle', 'Off', 'Color', clrs(1,:),...
-                     'Name','CSIgui - UserInput','Tag', 'CSIgui_UI_popup'); 
+                     'Name',fig_title,'Tag', 'CSIgui_UI_popup'); 
 subdat = guidata(fig_userinp); axis off;
 
 % Nr of dropdown menu's
 Ninput = size(popup_title,2);
 
 % Total size of figure.
-dw = 10;  dy = 10; w = 280+2*dw; 
+dw = 10;  dy = 10; w = 320+2*dw; 
 % Define values for EDIT and TEXT sizes.
 sz_popup  = [w-2*dw 25]; sz_text = [w-2*dw 20]; 
 sz_button = [(w-2*dw)/2 20];
@@ -1669,7 +1848,8 @@ for kk = 1:Ninput
                     sz_text(1) sz_text(2)],...
         'Tag', 'h_popup','String',popup_title{kk},'Fontsize', 8,...
         'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
-        'HorizontalAlignment', 'Left');
+        'HorizontalAlignment', 'Left',...
+        'TooltipString', popup_title{kk});
     
     % Dropdown menu title    
     subdat.h_popup{kk} = ...
@@ -3783,7 +3963,7 @@ else
     data = cell_mrsi;
     [~,ind] = cellfun(@max,data,'uniform', 0);
 %     sz = size(data); sz(1) = size(data{1},1);    
-    cell_mrsi_phased = cellfun(CSI_shift_phasing,data,ind,'uniform',0); 
+    cell_mrsi_phased = cellfun(@CSI_shift_phasing,data,ind,'uniform',0); 
 
 end
 
@@ -9188,8 +9368,8 @@ if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
     
     % Bandwidth (Receiver)
     dwelltime = csi.twix.Config.DwellTime;
-    samples = csi.data.dim(1);
-    xaxis.BW = 2000; %dwelltime./samples;
+    % nanosecond and OS correction
+    xaxis.BW = ((1/dwelltime) / csi.twix.Config.ReadOSFactor) * 10^9; 
     
     switch xaxis.nucleus 
         case '1H',  xaxis.gyro = 42.57747892*10^6;
@@ -9900,9 +10080,9 @@ CSIguiObj = findobj('Name','CSIgui'); poi_def = NaN;
 if ~isempty(CSIguiObj) && ishandle(CSIguiObj)
     if isappdata(CSIguiObj,'CSIpar')
         CSIpar = getappdata(CSIguiObj,'CSIpar');
-        if isfield(CSIpar,'poi')
-            poi_def = CSIpar.poi;
-            if poi_def(2) > numel(xaxis.ppm), poi_def = NaN; end
+        poi_def = NaN;
+        if isfield(CSIpar,'poi') && isfield(xaxis,'ppm')           
+            if CSIpar.poi <= numel(xaxis.ppm), poi_def = CSIpar.poi; end
         end
     end       
 end
@@ -12158,6 +12338,7 @@ for indi = 1:size(indArray,1)
     end
     % Remove axes used to show index-numbers
     if showIndex, delete(ax); end
+    pause(0.005)
     
 end
 
