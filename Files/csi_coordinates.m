@@ -26,7 +26,7 @@ elseif nargin == 3, fft_cor = 0;
 end
 
 % Field of View
-data.fov = data.res .* data.dim;
+% data.fov = data.res .* data.dim;
 
 switch origin
     case 'topleft'      % Offcenter defined at center of top left voxel 
@@ -53,7 +53,7 @@ switch origin
         end
 
         
-    case 'center'     % Offcenter defined at center of volume.
+    case 'center' % Offcenter defined at center of volume.
        
         negfac = [1 1 1];
         for kk = 1:size(data.dim,2) 
@@ -63,50 +63,25 @@ switch origin
             offc = data.offcenter(kk);
             
             % Grid vector
-%             vec_form = @(N)   -1.*(N-1)/2 : 1 : (N)/2;
+            % For odd; the vector is always moved "down" w.r.t axis.
             vec_form = @(N) ceil((N/2)*-1 : 1 : (N-1)/2);
-% -
-% -
             vec = vec_form(N) ; 
             
             % Calculate coordinates per point and add offcenter.
-            vec = (vec .* res) + offc;
-               
+            vec = (vec .* res) + offc;               
             
             % Correct half a voxel shift due FFT method
-            if fft_cor
-                vec = vec + negfac(kk).* (0.5 .* res); 
-            end
+            if fft_cor, vec = vec + negfac(kk).* (0.5 .* res); end
+
 
             % Store the vector
             data.vector{kk} = vec; 
-            % Limits of voxel
+            % Limits of voxel i.e. the center
             data.lim(kk,1:2) = data.vector{kk}([1 end]);
-            % Limits of volume
+            % Limits of volume i.e. the grid
             data.lim_vol(kk,1:2) = data.lim(kk,1:2) + (0.5*[-res res]);
         end
 
     otherwise
         disp('Wrong orientation given.');
 end
-
-
-% 30032019 - Appears the vox-correction isnt necessary! Correct fourier
-% shifting is however!
-%             if vox_cor      
-%                 % Grid points per voxel but correct if N equals odd
-%                 % e.g. there is no center voxel.
-%                 
-%                 odd = mod(N,2);
-%                 if odd
-%                     vec = vec_form(N);
-%                 else
-%                     % Because no middle voxel, minus half a voxel.
-% %                     vec = vec_form(N) - 0.5; 
-%                     vec = vec_form(N);
-%                 end
-%                 
-%             else
-%                 % Grid points for each voxel
-%                 vec = vec_form(N) ; 
-%             end

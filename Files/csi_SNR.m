@@ -12,7 +12,7 @@ function SNR = csi_SNR(spectrum, mask_size, method, range)
 %       method;     Either using the absolute (0) or real(1) part of the
 %                   spectrum
 %       range;      Range of spectrum to calculate SNR from. Noise is still
-%                   calculated using the noise mask.
+%                   calculated using the noise mask. range = [start end]
 % 
 % Formula: SNR = mean( max ( abs ( spec ))) / abs(std(spec))) --> (1)
 % Formula: SNR = mean( max ( real( spec ))) / abs(std(spec))) --> (0)

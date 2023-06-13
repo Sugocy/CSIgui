@@ -630,7 +630,7 @@ if ~isfield(gui, 'inp')
                 'Raw MRS file Siemens (*.dat)';...
      '*.txt;*.TXT;',...
                 'Text files (*.txt)'},...
-     'Select a file', fp', 'MultiSelect', 'on'); 
+     'Select a file', fp, 'MultiSelect', 'on'); 
     % Canceled file selection
     if fi == 0, return; end 
     
@@ -1312,7 +1312,7 @@ switch ext
                
         % Question user to load in the single file or load group of dicom
         % files into memory.
-        qry = 'Load single file or all files from imaging protocol: ';
+        qry = 'Load single file or all files from image directory: ';
         def = {'Single', 'All'};
         uans = getUserInput_Popup({qry},{def});
         if isempty(uans{1}), return; end
@@ -1330,7 +1330,7 @@ switch ext
             mri.data.M = img; mri.par = nfo;
             success = 1;
         catch err
-            fprintf('%s',err.message);
+            fprintf('%s\n',err.message);
             CSI_Log({'Loading DICOM file failed.'},{''}); 
             success = 0;
             return;
@@ -6443,7 +6443,7 @@ tt_save_all.TooltipString = ...
 
 % Set the colorscale range of the plot
 tt_color_scale = uipushtool(tb); % Push button - color range scale
-tt_color_scale_icon = imread('Images\colorwheel.png');
+tt_color_scale_icon = imread('Images\colorbar.png');
 tt_color_scale_icon = imresize(tt_color_scale_icon,[20,20]);
 tt_color_scale_icon(tt_color_scale_icon ==  max(tt_color_scale_icon(:))) = ...
     round(max(tt_color_scale_icon(:))*0.94);
@@ -6452,9 +6452,22 @@ tt_color_scale.ClickedCallback = @toolbar_SetColorScale;
 tt_color_scale.TooltipString = ...
     'Adjust color-scale range of plotted data.';
 
+
+% Change transparency button for toolbar
+tt_alphaD = uipushtool(tb); % Push button - change alpha
+tt_alphaD_icon = imread('Images\transparency4.png');
+tt_alphaD_icon = imresize(tt_alphaD_icon,[20,20]);
+tt_alphaD_icon(tt_alphaD_icon ==  max(tt_alphaD_icon(:))) = ...
+    round(max(tt_alphaD_icon(:))*0.94);
+tt_alphaD.CData = tt_alphaD_icon;
+tt_alphaD.ClickedCallback = @toolbar_SetAlphaValue;
+tt_alphaD.TooltipString = ...
+    'Change the transparency of the color-map i.e. the voxels.';
+
+
 % Restore transparency button for toolbar
 tt_alpha = uipushtool(tb); % Push button - save data
-tt_alpha_icon = imread('Images\wrench.png');
+tt_alpha_icon = imread('Images\fix_transparency6.png');
 tt_alpha_icon = imresize(tt_alpha_icon,[20,20]);
 tt_alpha_icon(tt_alpha_icon ==  max(tt_alpha_icon(:))) = ...
     round(max(tt_alpha_icon(:))*0.94);
@@ -6463,6 +6476,16 @@ tt_alpha.ClickedCallback = @toolbar_fixTransparency;
 tt_alpha.TooltipString = ...
     'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
 
+% Save data
+tt_save_data = uipushtool(tb); % Push button - change alpha
+tt_save_data_icon = imread('Images\table3.png');
+tt_save_data_icon = imresize(tt_save_data_icon,[20,20]);
+tt_save_data_icon(tt_save_data_icon ==  max(tt_save_data_icon(:))) = ...
+    round(max(tt_save_data_icon(:))*0.94);
+tt_save_data.CData = tt_save_data_icon;
+tt_save_data.ClickedCallback = @toolbar_MapToTable;
+tt_save_data.TooltipString = ...
+    'Show data in a table. Also allows saving data to file.';
 
 % --- Executes on press of toolbar's save Figure button
 function toolbar_saveFigure(src, ~)
@@ -6553,6 +6576,7 @@ for kk = 1:size(tabs,1)
     imwrite(img, fntmp);    
 end
 
+% --- Executes on press of toolbar's set color scale button
 function toolbar_SetColorScale(src,~)
 % Adjust color scale range of current tab-plot.
 % Works for maps i.e. CSI_dataAsTabs
@@ -6594,13 +6618,78 @@ for axi = 1:size(ax,1)
         % Adjust color of axis background
         ax{axi}.Color = [clr_map(clr_ind,:) 0.33];
         % Adjust color of data-point in axis // Line-point
-        ax{axi}.Children.Color = [clr_map(clr_ind,:) 0.33];
+        ax{axi}.Children.Color = [clr_map(clr_ind,:) plot_par.alpha];
     end    
 end
 guidata(figobj, tgui)
 
 % Plot colorbar with new values.
 colorbarQ(clr_map, clr_val);
+
+% --- Executes on press of toolbar's set alpha value button
+function toolbar_SetAlphaValue(src,~)
+% Change the transparency of the voxels, i.e. the alpha value.
+
+% \\ GET: object handles for figure and tab-group
+figobj = src.Parent.Parent;
+tgui = guidata(figobj);
+
+if ~isfield(tgui,'plot_par')
+    fprintf('Error: no plot-data stored in figure'); return; 
+end
+plot_par = tgui.plot_par;
+if isfield(plot_par,'alpha')
+    cur_alpha_val = plot_par.alpha;
+else
+    cur_alpha_val = 1;
+end
+
+% \\ USER INPUT: new color range
+uans = getUserInput({'New transparency value:'}, {num2str(cur_alpha_val)});
+if isempty(uans), return; end
+new_alpha = str2double((uans{1}));
+tgui.plot_par.alpha = new_alpha;
+
+% Store into gui-data-obj
+clr_val = tgui.plot_par.clr_val;
+clr_map = tgui.plot_par.clr_map;
+
+% \\ ADJUST: axis alpha value
+ax = plot_par.ax(:);
+for axi = 1:size(ax,1)
+    if ~isempty(ax{axi})
+        % Axis data value
+        vox_val = ax{axi}.Children.YData;
+        % New color index: this index relates to clr_map
+        [~, clr_ind]= min(abs(clr_val-vox_val)); 
+        % Adjust color of axis background
+        ax{axi}.Color = [clr_map(clr_ind,:) new_alpha];
+        % Adjust color of data-point in axis // Line-point
+        ax{axi}.Children.Color = [clr_map(clr_ind,:) new_alpha];
+    end    
+end
+guidata(figobj, tgui);
+
+
+function toolbar_MapToTable(src,~)
+% Get data from maps and display in table
+
+% \\ GET: object handles for figure and tab-group
+figobj = src.Parent.Parent;
+tgui = guidata(figobj);
+
+ax = tgui.plot_par.ax(:);
+data = NaN(size(ax));
+for axi = 1:size(ax,1)
+    if ~isempty(ax{axi})
+        data(axi) = ax{axi}.Children.YData;
+    end    
+end
+data = reshape(data, size(tgui.plot_par.ax));
+sz = size(data);
+data = permute(data, [numel(sz)+1 1:numel(sz)]);
+
+CSI_dataAsTable(data,tgui.fig.Name);
 
 % --- Plot data as tabs and create maps/tab    
 function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
@@ -6667,6 +6756,8 @@ for kk = 1:nwindows
 data = data_main(:,:,:,:,kk, index_range{:});
 tag = sprintf('%s - %s - %i', tag_main, loi, kk);
 
+
+
             % -------- % Figure: Create window % ----------------------- %
 
 % Create a figure with specific settings for tabs
@@ -6679,6 +6770,21 @@ fh = CSI_dataAsTabs_create_figure(tag, gui.colors.main);
 % create plot_par            
 CSI_dataAsTabs_create_griddedTabs(fh, data, gui.colors) ;       
 
+            % -------- % Figure: Create image axis % ------------------- %                
+
+
+% Get images
+plot_img = 0;
+if isappdata(gui.CSIgui_main,'conv')
+    conv = getappdata(gui.CSIgui_main,'conv');
+    img = MRI_matchSlices(gui.CSIgui_main); 
+    plot_img = 1;
+end
+
+if plot_img
+    fh = CSI_dataAs_Tabs_create_ImageAxis(fh);
+end
+
 
             % -------- % Figure: Create axis/voxel % ------------------- %                
 
@@ -6687,6 +6793,8 @@ tgui = CSI_dataAsTabs_addVoxelAxis(fh);
 
 
             % --------- % Plot Data As Map % --------------------------- %
+
+
 
 % Color map data
 clr_map = jet(128);
@@ -6697,6 +6805,8 @@ else
 end
 tgui.plot_par.clr_val = clr_val; tgui.plot_par.clr_rng = color_range;            
 tgui.plot_par.clr_map = clr_map;
+% transparency value
+tgui.plot_par.alpha = 0.33;
 
 plot_par = tgui.plot_par;
 for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
@@ -6715,6 +6825,27 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
         tab_index_for_data = {1};
     end
     
+    % Plot images if available
+    if plot_img
+        img2plot = img(:,:,sli); 
+        imagesc(img2plot, 'parent', tgui.himg{tab_index_cell{:}}); 
+
+        % Image Contrast.
+        if isfield(conv, 'contrast')
+            clim(tgui.himg{tab_index_cell{:}}, conv_data.contrast);
+        else
+            contrast_min = min(img2plot(:));
+            contrast_max = max(img2plot(:))*0.75;
+            if contrast_max <= contrast_min
+                contrast_max = contrast_min +1; 
+            end 
+            clim(tgui.himg{tab_index_cell{:}},...
+                [contrast_min contrast_max]);
+        end
+        colormap(gray(255));
+    end
+
+
     for ci = 1:plot_par.dim(1)                  % Col loop.
         for ri = 1:plot_par.dim(2)              % Row loop.
 
@@ -6744,7 +6875,7 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             % // plot value
             plot(tgui.plot_par.ax{ri,ci,tab_index_cell{:}},...
                 1,vox_val, '.', 'MarkerSize', 0.5, ...
-                                'Color', [clr 0.33])
+                                'Color', [clr plot_par.alpha])
             
             % // Turn off all axis cosmetic;
             tgui.plot_par.ax{ri,ci,tab_index_cell{:}}.YTick = [];
@@ -6763,7 +6894,10 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
                 [clr 0.33];            
             
         end 
-    end 
+    end
+    
+
+
 end
 
 
@@ -6783,6 +6917,37 @@ end % end of nsub loop. %
 
 % Plot colorbar
 colorbarQ(clr_map, clr_val);
+
+% --- Create axis for image plot in tab-figure
+function fh = CSI_dataAs_Tabs_create_ImageAxis(fh)
+% Add an axis meant for displaying overlay images. This should be done
+% before adding voxel-axis to the figure or tab.
+
+% Get GUI data of figure
+tgui = guidata(fh);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
+
+% Loop each tab of figure
+for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
+    
+    tab_index = plot_par.tabs_index_table(sli,:);
+    tab_index_cell = num2cell(tab_index);
+    
+    % Create an axis at the size of the figure.
+    tgui.himg{tab_index_cell{:}} = ...
+        axes('parent',tgui.tabh{tab_index_cell{:}},...
+                'Position',[0 0 1 1], 'Color', 'None');
+    
+    set(tgui.himg{tab_index_cell{:}},...
+                   'Color','None',...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1.7, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off'); 
+     
+end
+guidata(fh, tgui);
 
 % --- Create figure for CSI_dataAsTabs
 function fh = CSI_dataAsTabs_create_figure(tag, clr)
@@ -6956,10 +7121,11 @@ tgui.plot_par.ax = ax; guidata(fh, tgui);
 function button_CSI_setCoordinates_Callback(~, ~, gui)
 % Calculate coordinates of the CSI-volume:
 %
-% First all input is requested by user if not present. 
-% Second all input is used to calculate coordinates for each voxel.
+% 1. Gather information from header and ask for user intervention if 
+%    required
+% 2. All nfo and userinput is used to calculate coordinates for each voxel.
 %
-% Requires: resolution, #samples, offcenter, dimensions, fov.
+% Required: fov, resolution, offcenter and volume dimensions.
 
 % Return if no csi data present
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -6967,11 +7133,6 @@ csi = getappdata(gui.CSIgui_main,'csi');
 
 % Get possibly available ori-struct
 if isfield(csi,'ori'), ori = csi.ori; else, ori = struct; end
-
-
-% ----------------------------------------------------------------------- %
-% USERINPUT % ----------------------------------------------------------- %
-
 
 % SPATIAL INDEX % ----------- %
 space_str = {'kx','ky','kz','x','y','z'};
@@ -6984,13 +7145,12 @@ if isempty(space_dim)
                         {[2 3 4]});
     if isempty(uans), CSI_Log({'Skipped MRS coordinates.'},{''}); return; 
     end
-    % Convert userans to double
+    % Convert to double
     space_dim = str2double(strsplit(uans{1},' '));
 end
     
 
 % HEADER DATA % ----------------- %
-
 % SPAR-INFO
 if ~isfield(ori,'res') % Only if not already read the header file.
     if strcmp(csi.ext,'spar') || strcmp(csi.ext,'sdat')
@@ -7013,40 +7173,60 @@ if ~isfield(ori,'res') % Only if not already read the header file.
     end
 end
 
-
+% HEADER DATA % ----------------- %
 % TWIX-INFO  (dat-file)
 if isfield(csi,'twix')
+    
     % Offcentre
-    ori.offcenter(1) = csi.twix.Meas.VoiPositionSag;
-    ori.offcenter(2) = csi.twix.Meas.VoiPositionCor;
-    ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
-    % Also: hdr.Meas.VoI_Position_Cor/VoI_Position_Sag/VoI_Position_Tra
+    % Also located in Meas.VoI_Position_Cor, VoI_Position_Sag and 
+    % VoI_Position_Tra
+    if isempty(csi.twix.Meas.VoiPositionSag), ori.offcenter(1) = 0;
+    else, ori.offcenter(1) = csi.twix.Meas.VoiPositionSag;
+    end
+    if isempty(csi.twix.Meas.VoiPositionCor), ori.offcenter(2) = 0;
+    else, ori.offcenter(2) = csi.twix.Meas.VoiPositionCor;
+    end
+    if isempty(csi.twix.Meas.VoiPositionTra), ori.offcenter(3) = 0;
+    else, ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
+    end
+    
     
     % FOV
     if isfield(csi.twix.Config,'VoI_RoFOV')
         ori.fov(1) = csi.twix.Config.VoI_RoFOV; % Read out fov
         ori.fov(2) = csi.twix.Config.VoI_PeFOV; % Phased enc fov
         ori.fov(3) = csi.twix.Config.VoI_SliceThickness; % Slice-dir FOV
-    elseif isfield(csi.twix.MeasYaps.sSpecPara,'sVoI')        
-        ori.fov(1) = csi.twixMeasYaps.sSpecPara.sVoI.dReadoutFOV;
-        ori.fov(2) = csi.twixMeasYaps.sSpecPara.sVoI.dPhaseFOV;
+    elseif isfield(csi.twix.MeasYaps.sSpecPara,'sVoI')                
+        ori.fov(1) = csi.twix.MeasYaps.sSpecPara.sVoI.dReadoutFOV;
+        ori.fov(2) = csi.twix.MeasYaps.sSpecPara.sVoI.dPhaseFOV;
         ori.fov(3) = csi.twix.MeasYaps.sSpecPara.sVoI.dThickness;
     end
 
-    % RES
-    ori.res(1)= ori.fov(1)./csi.data.dim(space_dim(1));
-    ori.res(2)= ori.fov(2)./csi.data.dim(space_dim(2));
+    % Dimensions: [AP LR FH]
+    ori.dim(1) = csi.twix.Meas.ReadResolution;
+    ori.dim(2) = csi.twix.Meas.PhaseEncodingLines;
+    ori.dim(3) = csi.twix.Meas.SliceResolution;
+
+    % Res
+    % ori.res = ori.fov ./ ori.dim;
+
+    % RES  [AP LR FH]
+    ori.res(2)= ori.fov(1)./csi.data.dim(space_dim(1));
+    ori.res(1)= ori.fov(2)./csi.data.dim(space_dim(2));
     ori.res(3)= ori.fov(3)./csi.data.dim(space_dim(3));
     
-    % Orientation
-    % hdr.Meas.Matrix HFS-thing
-    % hdr.Dicom.tPatientPosition % hdr.Meas.PatientPosition
+    % Orientation (HFS/FFS etc.)
+    % hdr.Meas.Matrix Meas.PatientPosition
 end
 
-% USERINPUT  - SPATIAL % ----------------- %
+
+
+% ----------------------------------------------------------------------- %
+% USERINPUT  - SPATIAL % ------------------------------------------------ %
 
                     % RESOLUTION  +   OFFCENTER %
-% Create default answers from previous input or header data
+
+% Default answers
 if isfield(ori,'res'), dans{1} = ori.res; 
 else, dans{1} = '20 20 20';
 end
@@ -7054,7 +7234,7 @@ if isfield(ori,'offcenter'), dans{2} = ori.offcenter;
 else, dans{2} = '0 0 0';
 end
 
-% Offset and coordinates
+% Resolution and Offset userinput
 qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: '};
 uans = getUserInput(qry, dans);
 if isempty(uans)
@@ -7062,44 +7242,21 @@ if isempty(uans)
     return; 
 end
 
-% USERINPUT - CORRECTIONS % ----------------- %
-                        
-% % Default questions
-% qry2 = {'Apply odd/even size related half-voxel shift correction:'...
-%         'Apply FFT related half-voxel shift correction:'};
-% 
-% % Default answers
-% if isfield(ori,'vox_cor')
-%     if (ori.vox_cor == 1), dans2{1} = {'Yes','No'};
-%     else,                          dans2{1} = {'No', 'Yes'};       
-%     end
-% else, dans2{1} = {'Yes','No'}; 
-% end
-% 
-% if isfield(ori,'FFT_cor') 
-%     if strcmp(ori.FFT_cor == 'Yes'), dans2{2} = {'Yes','No'};
-%     else,                          dans2{2} = {'No', 'Yes'};       
-%     end
-% else, dans2{2} = {'No','Yes'}; 
-% end
-% uans2 = getUserInput_Popup(qry2, dans2); 
-% if isempty(uans2)
-%     CSI_Log({'Skipped calculating CSI coorindates.'},{''}); return; 
-% end
-% switch uans2{1}, case 'Yes', vox_cor = 1; case 'No', vox_cor = 0; end
-% switch uans2{2}, case 'Yes', fft_cor = 1; case 'No', fft_cor = 0; end
-vox_cor = 1; fft_cor = 0; % Default for now.
-
-% USERINPUT % ----------------------------------------------------------- %
-% ----------------------------------------------------------------------- %
 
 % ----------------------------------------------------------------------- %
 % Calculate Coordinates % ----------------------------------------------- %
 
+% Corrections % ----------------- %                      
+vox_cor = 1; fft_cor = 0; % Default settings.
+
 % Prep misc. parameters
 ori.res       = str2double(strsplit(uans{1},' '));
 ori.offcenter = str2double(strsplit(uans{2},' '));
-ori.dim       = csi.data.dim(space_dim);
+
+% Dimensions of data  [AP LR FH]
+ori.dim       = csi.data.dim(space_dim); % in [X Y Z] == [C R S]
+% AP to 2nd dim, LR to first. 
+ori.dim([2 1]) = ori.dim([1 2]); % in [Y X Z] == [R C Z]
 
 % Correction factors saved.
 ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;       
@@ -7107,30 +7264,19 @@ ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;
 % Coordinates of CSI data. % ------------------------- %
 % Adds fields: coordinate vector (vector) & coordinate limits (limit) &
 % volume limit (limit_vol).
+
+% Default voxel shift
+% def_shift = [0.5 0.5 0.5]; def_shift = [ 0.5 -0.5 0.5 ];
+% def_shift = [0.5 0.5 0.5]; 
+def_shift = [ 0 0 0 ];
+
+% Set options
 opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
-def_shift = [0.5 0.5 0.5]; def_shift = [ 0.5 -0.5 0.5 ];
+
+% Calculate coordinates for CSI volume.
 csi.ori = CSI_coordinates_calculate(...
     ori.res, ori.offcenter, ori.dim, def_shift, opts);
 % ---------------------------------------------------- %
-
-% % Update LOG
-% CSI_Log({'',...
-%         'CSI-parameters -------------------------------------------',...
-%         'Direction:', 'Dimensions:', 'Resolution:',...
-%         'Offcenter:', 'FOV:', ...
-%         'Voxel shift due odd/even: ','Voxel shift due FFT-method:',...
-%         'Voxel limit (Min):', 'Voxel limit (Max):', ...
-%         'Volume limit (Min):', 'Volume limit (Max)', '',''},...
-%        { '','', '[AP/LR/FH]',...
-%          csi.ori.dim,             csi.ori.res,...
-%          csi.ori.offcenter(1,:),  csi.ori.fov,...
-%          csi.ori.vox_cor,         csi.ori.fft_cor,...
-%          csi.ori.lim(:,1)',       csi.ori.lim(:,2)',...
-%          csi.ori.lim_vol(:,1)',   csi.ori.lim_vol(:,2)',...
-%          '--------------------------------------------------------',''});
-
-
-% Clean up % ------------------------ %
 
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
@@ -7138,6 +7284,8 @@ setappdata(gui.CSIgui_main,'csi',csi);
 % --- Executes to calculate CSI coordinates from offcenter and voxelsize
 function ori = CSI_coordinates_calculate(res, offcenter, dim, shft, opts)
 % Calculate MRSI/CSI coordinates and additional spatial information.
+%
+% [col row slice] == [RL AP FH] == [X Y Z]
 %
 % Input:
 % res           Voxel resolution in mm [RL AP FH];
@@ -7165,8 +7313,10 @@ if isfield(opts, 'vox_cor'), ori.vox_cor = opts.vox_cor; end
 if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
     
 
-% Apply any given shift
-for kk = 1:3, ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); end
+% Apply any given additional shift
+for kk = 1:3
+    ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); 
+end
 
 
 % Coordinates of CSI data. % ------------------------ %
@@ -7176,13 +7326,16 @@ for kk = 1:3, ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); end
 %   Volume limit      (limit_vol)
 ori = csi_coordinates(ori, 'center', ori.vox_cor, ori.fft_cor); 
 
+% Rewrite FOV; redundant
+ori.fov = ori.lim_vol(:,2)' - ori.lim_vol(:,1)' ;
+
 % Calculate volume grid % ----------- %
 % Meshgrid
 [ori.mesh.x, ori.mesh.y, ori.mesh.z] = ...
     meshgrid(ori.vector{1} , ori.vector{2}, ori.vector{3});
 
-% Clean up % ------------------------ %
 
+% Clean up % ------------------------ %
 % Update LOG
 CSI_Log({ '',...
     'CSI-parameters ----------------------------------------',...
@@ -7231,11 +7384,12 @@ mid_slice = ceil(size(mri.ori.offcenter,1)/2);
 
 % Show details to user: Res, dims, FOV, Limits.
 CSI_Log({'MRI-parameters -------------------------------', ...
+    'Direction: [AP/LR/FH]', ...
     'Dimensions', 'Resolution: ', ...
     'Full FOV: ',...
     'Voxel limit (min): ','Voxel Limit (max): ',...
     'Offcentre (Middle): ', '', ''},...
-    {'', mri.ori.dim, mri.ori.res, ...
+    {'','', mri.ori.dim, mri.ori.res, ...
     sprintf(' %3.2f',mri.ori.fov),...
     sprintf(' %3.2f',mri.ori.lim(:,1)),...
     sprintf(' %3.2f',mri.ori.lim(:,2)),...
@@ -7270,7 +7424,8 @@ MRI_to_CSIspace(gui);
 % MRI Functions % ------------------------------------------------------ %
 
 function MRI_coordinates_IMA(gui, mri)
-
+% Get all parameters from the header file and set up to calculate the
+% image coordinates.
 
 % Image orientation structure
 imgori = struct;
@@ -7281,17 +7436,27 @@ if ~isfield(mri, 'par')
 end
 
 % Image Positient Patient: the coordinates of the top-left voxel of the
-% images.
+% images. The row and column ipp are identical for every slice. The slice 
+% ipp changes. 
 imgori.ipp = extractField(mri.par,'ImagePositionPatient');
 tmp = cell2mat(imgori.ipp);
-imgori.offcenter = unique(tmp(1:2,:)); % Assume equal for all slices.
-imgori.offcenter(3) = tmp(3,1); imgori.offcenter = imgori.offcenter';
+
+imgori.tlv = unique(tmp(1:2,:))';
+imgori.tlv([2 1]) = imgori.tlv([1 2]); % Flip AP/LR (row, col)
+imgori.tlv(3) = tmp(3,1);
+
+% This is the coordinate vector for the slices.
+% imgori.tlv_slice = tmp(3,:);
 
 % Image resolution: the resolution of a voxel in  the images.
+% First value is the row, second row the column as per DICOM-description
 tmp = extractField(mri.par,'PixelSpacing');
 tmp = cell2mat(tmp);
 imgori.res = unique(tmp', 'rows');
 imgori.res(3) = mri.par{1}.SliceThickness;
+
+imgori.row = mri.par{1}.Rows;
+imgori.col = mri.par{1}.Columns;
 
 % Image dimensions: number of pixels in row and col.
 imgtype = fields(mri.data);
@@ -7301,6 +7466,9 @@ imgori.dim = size(mri.data.(imgtype{1}));
 imgori.fov = imgori.dim.*imgori.res;
 
 % Slice gap-size
+% Dont use this as is the spacing between the center of each adjacent slice
+% and not the gap between two slices after adding the slicethickness. This
+% also includes any overlap of slices during acquisition.
 imgori.gap = mri.par{1}.SpacingBetweenSlices;
 
 
@@ -7312,13 +7480,9 @@ vox_correction = 1;
 for kk = 1:2
     % Select resolution and offcenter of current axis (row/col).
     N = imgori.dim(kk); res = imgori.res(kk);
-    offc  = imgori.offcenter(1,kk);
+    offc  = imgori.tlv(1,kk);
                 
-    % Top Left Voxel (TLV) Coordinate Definition:
-    % It can describe either the top-left corner of the top left voxel
-    % or the centre of the top left voxel.
-    %
-    % ASSUME: 
+    % Top Left Voxel (TLV) Coordinate Definition:    
     % TLV is relative to top left corner wrt the axis origin and
     % increases towards the positibe side of the image. This requires
     % the addition of half a voxel to describe the centre of a voxel.
@@ -7339,19 +7503,17 @@ for kk = 1:2
     imgori.lim(kk,1:2) = imgori.vec{kk}([1 end]);
 end
 
-% Slice limits.
-% DOES THIS ALSO REQUIRE HALF A VOXEL-CORRECTION?
+% Slice coordinate-vector.
 imgori.vec{3} = cell2mat(cellfun(@(x) x(3),imgori.ipp, 'uniform', 0));
 imgori.lim(3,1:2) = imgori.vec{3}([1 end]);
 
-% % RANGE: Get span vectors, no angulation taken into account.
-% opts.range.row   = opts.lim.row(1)  :opts.vox(1): opts.lim.row(2);
-% opts.range.col   = opts.lim.col(1)  :opts.vox(2): opts.lim.col(2);
+% Get offcenter values from coordinate vector.
+imgori.offcenter = cellfun(@median, imgori.vec); 
 
 % MESH
-imgori.mesh.nb = 'Meshgrid: row and column are NOT swapped.';
+imgori.mesh.nb = 'Meshgrid: row and column ARE swapped.';
 [imgori.mesh.x, imgori.mesh.y,  imgori.mesh.z] = ...
-    meshgrid(imgori.vec{1}, imgori.vec{2}, imgori.vec{3});
+    meshgrid(imgori.vec{2}, imgori.vec{1}, imgori.vec{3});
 
 % Save data
 mri.ori = imgori;
@@ -7713,14 +7875,20 @@ end
 % Get available imagetypes
 imtmp = fieldnames(mri.data);
 
-% Get imagetype of interest; imtoi;
-uans = getUserInput_Popup({'Image type to convert to MRSI space:'},...
-                           {imtmp});
-if isempty(uans), CSI_Log({'Skipped image convert.'},{''}); return; end
+% Let user pick image type if possible.
+if size(imtmp,2) > 1
     
-% Image type of interest
-imtoi = uans{1}; 
+    % Get imagetype of interest; imtoi;
+    uans = getUserInput_Popup({'Image type to convert to MRSI space:'},...
+                           {imtmp});
+    if isempty(uans), CSI_Log({'Skipped image convert.'},{''}); return; end
+    % Image type of interest
+    imtoi = uans{1}; 
 
+else
+    imtoi = imtmp{1};
+end
+   
 
              % ---------- % Convert IMG % ---------- %
 
@@ -7756,7 +7924,7 @@ end
 % Image grid in MRSI space 
 % This grid lays in the CSI-space e.g. within limits of CSI FOV but is
 % sampled in x, y and z as close to the resolution of the image as possible
-[x,y,z] = meshgrid(conv.vec{1} ,conv.vec{2}, conv.vec{3});
+[x,y,z] = meshgrid(conv.vec{2} ,conv.vec{1}, conv.vec{3});
 conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
 
 % Interp values @ CSI space % --------------------------------- %
@@ -7769,7 +7937,7 @@ else
     stack_ind = 1; 
 end
 
-if strcmp(mri.ext ,'.par')
+if strcmp(mri.ext ,'par') || strcmp(mri.ext ,'ima')   
     image_convert_data = mri.data.(imtoi)(:,:,:);
 else
     image_convert_data = mri.data.(imtoi)(:,:,stack_ind,:);
@@ -7778,7 +7946,7 @@ end
 % Interp
 conv.data = interp3(mri.ori.mesh.x, mri.ori.mesh.y, mri.ori.mesh.z,...      % Original MRI coordinates
                     squeeze(image_convert_data),...                         % Original MRI values
-                    conv.mesh.x, conv.mesh.y, conv.mesh.z,'Spline',0);      % Requested coordinates
+                    conv.mesh.x, conv.mesh.y, conv.mesh.z,'Linear',0);      % Requested coordinates
 conv.dim  = size(conv.data);
 
 % Export any previous contrast info for image display.
@@ -10611,8 +10779,7 @@ CSI_Log({'CSIgui-1D:'},{'Applied manual phase correction.'});
 % --- Executes if user chooses in "Phasing" -> "Phase All"
 function panel_1D_PhaseCorrection_ApplyToAll(hObj,~)
 % See if there is any phase correction data. Else call this function first
-% and then apply it to all voxel in the data set. Allow ability to exclude
-% certain voxels.
+% and then apply it to all voxel in the data set or a slice.
 
 % INITIATE % ------------------------------------------- %
 
@@ -10658,6 +10825,8 @@ if vol_or_sli == 0
     % Add first order phase correction
     pha_new = pha_new + appdata1D.phasing.first;
     
+    log_msg = ...
+        'Applied the phase correction to all voxel in the MRSI dataset.';
 elseif vol_or_sli == 1    
     
     % Get current visualized slice
@@ -10674,7 +10843,10 @@ elseif vol_or_sli == 1
     % Add zero order phase correction
     pha_new = pha(dims_range{:}) + appdata1D.phasing.zero;
     % Add first order phase correction
-    pha_new = pha_new(dims_range{:}) + appdata1D.phasing.first;
+    pha_new = pha_new + appdata1D.phasing.first;
+    
+    log_msg = ...
+        'Applied the phase correction to current slice.';
 end
 
 % Create complex data
@@ -10687,8 +10859,7 @@ setappdata(CSImain_obj, 'csi', csi);
 CSI_2D_initiate2D();
 
 % Update info to user.
-CSI_Log({'CSIgui-1D:'},...
-    {'Applied the phase correction to all voxel in the MRSI dataset.'});
+CSI_Log({'CSIgui-1D:'},{log_msg});
 
 % --- Executes if user chooses in "Phasing" -> "Automatic"
 function panel_1D_PhaseCorrection_Auto(hObj, ~)
@@ -12169,10 +12340,11 @@ end
 uans = getUserInput_Popup({'Specify figure(s) to save:',...
                            'Resolution (DPI):',...
                            'Transparency:',...
-                           'Show index in figure:'},...
+                           'Show index in figure:',...
+                           'Fast mode: '},...
                          {{'Current figure', 'All', 'All of current slice'},...
                            cat(2,num2cell(0:200:1200),'Custom'),...
-                           {'No','Yes'},{'Yes','No'}});
+                           {'No','Yes'},{'Yes','No'},{'No','Yes'}});
 if isempty(uans), CSI_Log({'Skipped exporting figures.'},{''}); return; 
 end  
 
@@ -12194,6 +12366,9 @@ if strcmp(uans{3},'Yes'), transparency = 1; else, transparency = 0; end
 
 % Process plotting index in figure
 if strcmp(uans{4},'Yes'), showIndex = 1; else, showIndex = 0; end
+
+% Process fast saving
+if strcmp(uans{5}, 'Yes'), fast = 1; else, fast = 0; end
 
 % FIGURE OBJECT % ------------------------------------------------------ %
 % Get 2D-plot figure its object, apply chosen options and save as image.
@@ -12296,44 +12471,24 @@ for indi = 1:size(indArray,1)
         
        % TRANSPARENCY % --------------------------------------------------- % 
        if transparency
-        % This is annoyingly complicated to implement.
-        % Find background of figure 
-        % Find the difference
-        % Create alphamap using difference map
-           
-%         % Set all backgrounds to none-color
-%         % fig_obj.Color = 'none';
-%         ax = findall(fig_obj.Children, 'Type','axes');
-%         for kk = 1:size(ax,1)   
-%             ax(kk).Color = 'none';
-%         end
-%         fig_obj.Color = 'None';
-%         Qrgb = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%         [Q,Qmap] = rgb2ind(Qrgb,255);
-% 
-%         % Preprint
-%         fig_obj.Color = [0 1 0]; fig_obj.InvertHardcopy = 'off';
-%         A = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%         fig_obj.Color = [1 0 0]; fig_obj.InvertHardcopy = 'off';
-%         B = print(fig_obj,'-RGBImage',['-r' num2str(dpi)], render);
-%         % Difference map
-%         C = B-A;
-%         % Boolean of bg
-%         alphaBool = (C(:,:,1) == 255).*255;
-%         imwrite(Q, alphaBool,[fp fn sprintf('_%i', indArray(indi,:)) ext]);
-%         print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-%           ['-dpng'], 'Alpha', double(alphaBool.*255),['-r' num2str(dpi)]);
-
-%            print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-%               ['-d' ftype], ['-r' num2str(dpi)], render);
-
-           export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
-            '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
+               export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
+                '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
        else
-%            print(fig_obj,[fp fn sprintf('_%i', indArray(indi,:)) ext],...
-%               ['-d' ftype], ['-r' num2str(dpi)], render);
-           export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
+           scrsz = get(0,'ScreenSize'); scrsz = scrsz(3:4);
+           if fast
+               pause(0.3); % Make sure display is updated.
+
+               % Solution is screenshot!
+               figpos = fig_obj.Position; % [l b w h]
+               figpos(2) = abs(figpos(2) + figpos(4) - scrsz(2));
+               img = screenshot(figpos); % [l t w h]
+
+               % Save to file
+               imwrite(img, [fp fn sprintf('_%i', indArray(indi,:)) ext]);
+           else
+               export_fig([fp fn sprintf('_%i', indArray(indi,:)) ext], ...
                            ['-' ftype],'-nocrop', '-m2', fig_obj);
+           end
        end
     end
     % Remove axes used to show index-numbers

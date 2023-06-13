@@ -48,7 +48,7 @@ if isnan(matrix_size)
     fn{1});
     img = nan; nfo = {nan}; return; 
 end
-img = NaN(matrix_size(1),matrix_size(2),size(fn,2));
+img = NaN(matrix_size(2),matrix_size(1),size(fn,2));
 
 % Loop files; we assume all are MR-image dicoms.
 nfo = cell(1,size(fn,2));
