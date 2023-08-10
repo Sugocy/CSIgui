@@ -477,7 +477,8 @@ while size(unique(order),2) ~= size(fn,2)
     order = str2double(uans);
     
 end
-fn = fn(order);
+[~, sort_index] = sort(order);
+fn = fn(sort_index);
 
 switch ext
     case '.dat' % Spectroscopy - Siemens
@@ -2312,13 +2313,17 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % GET OPTION INPUT % ------------------- %
 
-quest = {'Automatic (2), Circular shift (0) or Fourier shift (1)'};
-defan = {{'2', '0','1'}};
+quest = {'Specify the spatial FFT method, use automatic if unknown:'};
+defan = {{'Automatic', 'Circular shift', 'FFT shift'}};
 uans = getUserInput_Popup(quest,defan);
 if isempty(uans), return; end
 
 % Set option
-shift_opt = str2double(uans{1});
+switch uans{1}
+    case 'Automatic', shift_opt = 2;
+    case 'Circular shift', shift_opt = 0;
+    case 'FFT shift', shift_opt = 1;
+end
 
 % K-space index: find the spatial dimensions/indexes: ask if not found.
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -3193,8 +3198,25 @@ for li = 1:size(csi.data.labels,2)
         new_label{li} = []; % Label not found, empty labeling.
     end
 end
+
+% Create new labels.
 empty_lab = cellfun(@isempty, new_label) == 1;
-if sum(empty_lab) ~= 0, new_label(empty_lab == 1) = {'-'}; end
+if sum(empty_lab) ~= 0
+    % String characters to double
+    labelAsNum = cellfun(@double, new_label, 'UniformOutput', false);
+    % Number of characters
+    nChar = cellfun(@size,new_label, repmat({2},1,size(new_label,2)));
+    % Index of single charactes
+    strt = max(cell2mat(labelAsNum(nChar == 1)))+1;
+    % If no single character label found
+    if isempty(strt), strt = 65; end
+
+    % Create new label names for empty indexes.
+    ind = find(empty_lab == 1);
+    for kk = 1:size(ind,2)
+        new_label(ind(kk)) = {char(strt+kk-1)}; 
+    end
+end
 csi.data.labels = new_label;
 
 % III. Reorder dimensions
@@ -4900,14 +4922,12 @@ if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 mask_size = str2double(uans{1});
 
 % SNR-method (real/magnitude) and display method (table or graph)
-uans = getUserInput_Popup({'SNR Signal unit: ','Display type: '},...
-                         {{'Real', 'Magnitude'},...
-                          {'Map','Graph','Table','Histogram'}});
+uans = getUserInput_Popup({'SNR Signal unit: '},...
+                         {{'Real', 'Magnitude'}});
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
-
-dataDisp = lower(uans{2}); % Display method
-switch uans{1}             % SNR method
-    case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; end
+switch uans{1} % SNR method
+    case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; 
+end
 
               % --------------- % SNR % --------------- %
 
@@ -4928,101 +4948,12 @@ CSI_Log({'SNR statistics: Full Volume ---------------- %',...
           sprintf('%.2f', stats.median), ...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 
-% Display Info %
-CSI_Log({'Starting data display:'},{dataDisp});
+
 
            % --------------- % DISPLAY DATA % --------------- %
 
-% Table or graph
-switch dataDisp
-    case 'table'      % Table % ----- %
-    
-    % Send to tableData function, to show each slice as a table.
-    % If higher dimensions are available, the data will be concentonated
-    % per slice. Graph may be better suited.
-    CSI_dataAsTable(SNR_all, 'SNR')
-    
-    case 'graph'      % Graph % ----- %
-        % Send to displayData function, to show each slice as a graph.
-        % If higher dimensions only represent only 1 value/voxel, a dot is 
-        % shown. Adviced is using table in those cases.
-        CSI_dataAsGraph(SNR_all, gui, 'SNR');
-        %CSI_dataAsGraph2(data, data_text, datatag, gui, img)
-
-    case 'map'
-        % Send data to dataAsTaps and create maps in a tabbed figure for all 
-        % slices (or only the current slice plotted.
-
-
-        % ?SERINPUT: what data to show.
-        uans = getUserInput_Popup(...
-            {'Data range to show: ','Color scale range: '},...
-           {{'All', 'Current slice'},...
-            {'Min to Max', 'Histogram optimized'}});                                                 
-        if isempty(uans), return; end
-        labels = csi.data.labels;
-        
-        % \\ Check data to visualize 
-        if strcmpi(uans{1},'Current slice')
-            % \\ Get current plotted slice index from CSIgui 2D-plot
-            % \\ Get curent slice data from SNR_all array.
-
-            % Get the panel-slider object and 2d-plot object
-            [~, gui2D] = CSI_2D_getDataSliders(gui);
-
-            % Plotted slice index of interest
-            sloi = gui2D.plotindex{1};
-
-            % Get data of interest.
-            snr_dim = size(SNR_all);    
-            snr_dim_range = arrayfun(@(x) 1:x,snr_dim, 'uniform',0);
-            snr_dim(4) = 1; snr_dim_range{4} = sloi;
-
-            % 2. Get data of interest from SNR_all.
-            SNR_cut = SNR_all(snr_dim_range{:});
-            permvec = 1:numel(snr_dim);
-            permvec(4) = []; permvec(end+1) = 4;
-            SNR_cut = permute(SNR_cut, permvec);
-
-            % Replace SNR-all with SNR-cut
-            SNR_all = SNR_cut;
-
-            % Update labels
-            labels{5} = int2str(sloi);
-        end         
-    
-        % \\ Calculate color-range of maps.
-        switch uans{2}
-            case 'Min to Max'
-                color_scale = [min(SNR_all(:)) max(SNR_all(:))];
-            case 'Histogram optimized'
-                [N, edges, bin] = histcounts(SNR_all(:));
-                bool = cumsum(N) <= 0.98*size(bin,1);
-                maxval = max(edges(bool));
-                color_scale = [min(SNR_all(:)) maxval];                         
-        end
-        
-        % Plot as tab
-        CSI_dataAsTabs(gui, SNR_all, 'SNR', labels, color_scale);
-
-    
-    case 'histogram'
-        % Plot data as histogram - simple display.    
-        fig = figure(); ax = axes(fig);
-        mx = max(SNR_all(:)); md = median(SNR_all(:));        
-        histogram(ax, SNR_all(:), round(100+(mx./md)) );
-        title('SNR  Histogram'); xlabel('SNR Bins');
-
-end
-
-% Show statistics nfo
-stats = csi_statistics_of_volume(SNR_all);
-CSI_Log({'SNR statistics ------------------------------- %',...
-         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
-     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
-          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
-          sprintf('%.2f', stats.median), ...
-          sprintf('%.2f | %.2f', stats.min, stats.max)});
+% \\ Display Data
+CSI_dataAs_Initiate(SNR_all, 'SNR', gui, csi.data.labels);
 
 
 
@@ -5134,6 +5065,9 @@ for sli = 1:size(tgui.tabh,2)                   % Sli loop.
         end 
     end 
 end
+
+%  Create toolbar
+ toolbar_create(obj)
 
 % Plot colorbar
 colorbarQ(clr_map, clr_val);
@@ -6691,6 +6625,7 @@ data = permute(data, [numel(sz)+1 1:numel(sz)]);
 
 CSI_dataAsTable(data,tgui.fig.Name);
 
+
 % --- Plot data as tabs and create maps/tab    
 function fh_all = CSI_dataAsTabs(gui, data, tag, labels, color_range)
 % Data is shown as a color map and also a numeric representation in the
@@ -6722,10 +6657,9 @@ if nargin < 5, color_range = 'auto'; end
 % Data-Dimensions safety
 dim = size(data); 
 if numel(dim) <= 2
-    CSI_log({'Aborted. Function dataAsTab requires 2D or 3D data',...
-             'Reshape the data as such to enable maps.'},{''}); return; 
+    CSI_Log({'Aborted. Function dataAsTab requires 2D or 3D data',...
+             'Reshape the data as such to enable maps.'},{'',''}); return; 
 end
-
 
 
 % Number of tab-windows
@@ -6782,7 +6716,7 @@ if isappdata(gui.CSIgui_main,'conv')
 end
 
 if plot_img
-    fh = CSI_dataAs_Tabs_create_ImageAxis(fh);
+    fh = CSI_dataAsTabs_create_ImageAxis(fh);
 end
 
 
@@ -6839,8 +6773,15 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             if contrast_max <= contrast_min
                 contrast_max = contrast_min +1; 
             end 
-            clim(tgui.himg{tab_index_cell{:}},...
-                [contrast_min contrast_max]);
+            
+            v = version('-release'); v(end) = []; v = str2double(v);
+            if v < 2023
+                caxis(tgui.himg{tab_index_cell{:}},...
+                    [contrast_min contrast_max]);
+            else
+                clim(tgui.himg{tab_index_cell{:}},...
+                    [contrast_min contrast_max]);
+            end
         end
         colormap(gray(255));
     end
@@ -6919,7 +6860,7 @@ end % end of nsub loop. %
 colorbarQ(clr_map, clr_val);
 
 % --- Create axis for image plot in tab-figure
-function fh = CSI_dataAs_Tabs_create_ImageAxis(fh)
+function fh = CSI_dataAsTabs_create_ImageAxis(fh)
 % Add an axis meant for displaying overlay images. This should be done
 % before adding voxel-axis to the figure or tab.
 
@@ -7233,9 +7174,13 @@ end
 if isfield(ori,'offcenter'), dans{2} = ori.offcenter;
 else, dans{2} = '0 0 0';
 end
+if isfield(ori,'shift'), dans{3} = ori.shift;
+else, dans{3} = '-1 1 0';
+end
 
 % Resolution and Offset userinput
-qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: '};
+qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: ', ...
+    'Voxel shift (AP LR FH) [-]: '};
 uans = getUserInput(qry, dans);
 if isempty(uans)
     CSI_Log({'Skipped calculating coordinates.'},{''}); 
@@ -7252,6 +7197,7 @@ vox_cor = 1; fft_cor = 0; % Default settings.
 % Prep misc. parameters
 ori.res       = str2double(strsplit(uans{1},' '));
 ori.offcenter = str2double(strsplit(uans{2},' '));
+ori.shift     = str2double(strsplit(uans{3},' '));
 
 % Dimensions of data  [AP LR FH]
 ori.dim       = csi.data.dim(space_dim); % in [X Y Z] == [C R S]
@@ -7268,7 +7214,9 @@ ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;
 % Default voxel shift
 % def_shift = [0.5 0.5 0.5]; def_shift = [ 0.5 -0.5 0.5 ];
 % def_shift = [0.5 0.5 0.5]; 
-def_shift = [ 0 0 0 ];
+% AP [negetive is image down] LR [positive is image to left] FH
+% def_shift = [ -1 1 0 ]; 
+def_shift = ori.shift;
 
 % Set options
 opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
@@ -7317,7 +7265,7 @@ if isfield(opts, 'fft_cor'), ori.fft_cor = opts.fft_cor; end
 for kk = 1:3
     ori.offcenter(kk) = ori.offcenter(kk) + (res(kk).*shft(kk)); 
 end
-
+ori.shift = shft;
 
 % Coordinates of CSI data. % ------------------------ %
 % Fields: 
@@ -14918,9 +14866,8 @@ if isempty(range), return; end
 
 % \\ Index of interest and data type
 uans = getUserInput_Popup({'Data type (calculations): ',...
-                           'Display type: ','Data type (results): '},...
+                           'Data type (results): '},...
                          {{'Real', 'Magnitude','Complex'},...
-                          {'Map','Table','Graph', 'Histogram'},...
                           {'Real', 'Magnitude', 'Imaginary',...
                            'Real raw','Imaginary raw'}});
 if isempty(uans), CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; end
@@ -14942,22 +14889,6 @@ filter_snr = getUserInput(...
 if isempty(filter_snr)
     CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
 end
-
-% \\ Color Range
-if strcmpi(uans{2}, 'map')
-    color_range = getUserInput({'Color map range [or auto]:'},{'0 90'});
-    if isempty(color_range)
-        CSI_Log({'Skipped B1-map calculations.'},{''});
-        return; 
-    end
-    if ~strcmp(color_range,'auto')
-        color_range = str2double(strsplit(color_range{1},' '));
-    else
-        color_range = color_range{:};
-    end
-end
-
-
 
 % -- PROCESS USERINPUT -- %
 
@@ -14989,7 +14920,6 @@ inner = Mtwo ./ (Mone.*2);
 FA = acosd(inner);
 
 % -- CALCULATIONS  -- % SNR
-
 if str2double(filter_snr{1}) ~= 0
     
     snr_limit = str2double(filter_snr{1});
@@ -15040,7 +14970,7 @@ imag_FA_noReal = imag_FA;
 imag_FA_noReal(imag_FA == 0) = NaN;
 
 % Process result to data-type 
-switch uans{3}
+switch uans{2}
     case 'Real'
         FA_out = real_FA_noImag;
     case 'Magnitude'
@@ -15063,20 +14993,24 @@ CSI_Log({'B1-map statistics ------------------------------- %',...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 
 % -------------------------------------------- Display
-CSI_Log({'Plotting B1 data, please be patient.'},{''});
-switch uans{2}
-    case 'Map'
-        CSI_dataAsTabs(gui, FA_out, 'B1-maps',csi.data.labels, color_range);        
-    case 'Table'
-        CSI_dataAsTable(FA_out, 'Flip angle')
-    case 'Graph' 
-        CSI_dataAsGraph(FA_out, gui, 'Flip angle')
-    case 'Histogram'
-        % Plot data as histogram - simple display.    
-        fig = figure(); ax = axes(fig);
-        histogram(ax, SNR_all(:), 50);
-        title('B1 Histogram'); xlabel('B1 Bins');
-end
+% \\ Display Data
+CSI_dataAs_Initiate(FA_out, 'B1-Map', gui, csi.data.labels);
+
+
+% CSI_Log({'Plotting B1 data, please be patient.'},{''});
+% switch uans{2}
+%     case 'Map'
+%         CSI_dataAsTabs(gui, FA_out, 'B1-maps',csi.data.labels, color_range);        
+%     case 'Table'
+%         CSI_dataAsTable(FA_out, 'Flip angle')
+%     case 'Graph' 
+%         CSI_dataAsGraph(FA_out, gui, 'Flip angle')
+%     case 'Histogram'
+%         % Plot data as histogram - simple display.    
+%         fig = figure(); ax = axes(fig);
+%         histogram(ax, SNR_all(:), 50);
+%         title('B1 Histogram'); xlabel('B1 Bins');
+% end
 
 
 % --- Executes on button press in button_CSI_FlipSpace.
@@ -15183,7 +15117,7 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 
 % Ask user what to map
 qry = 'Choose a map to calculate: ';
-opts = {'SNR','Linewidth','Maximum','Peak'};
+opts = {'SNR','Linewidth','Maximum','Peak', 'Ratio'};
 
 maptype = getUserInput_Popup({qry},{opts});
 if isempty(maptype), return; end
@@ -15197,7 +15131,195 @@ switch maptype{1}
         button_CSI_MaxValue_Callback([], [], gui);
     case 'Peak'
         button_CSI_Peak_Map_Callback([], [], gui);
+    case 'Ratio'
+        button_CSI_Peak_Ratio_Map_Callback([], [], gui);
 end
 
 
+function button_CSI_Peak_Ratio_Map_Callback(~, ~, gui)
+% Calculate a ratio-map from two given peaks and display it.
+% Check if csi appdata is present
 
+% CSI data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Get peak-data for two-peaks of interest.
+map = cell(1,2); doi_range = cell(1,2);
+for kk = 1:2
+    % Get peak of interest
+    [doi, ~, doi_range{kk}] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+    doir = real(doi);
+        
+    % Maximum positions and values: e.g. a map
+    map{kk} = max(doir, [], 1);    
+end
+
+% Calculate ratio.
+nmap = map{1}./map{2};
+% Normalize map
+% nfac =  max(map(:)); nmap = map./nfac;
+
+      % --------------- % SNR FILTER % --------------- %
+
+% \\ SNR Filtering
+filter_snr = getUserInput(...
+    {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
+    {'0', round(csi.data.dim(1)./10)});
+if isempty(filter_snr)
+    CSI_Log({'Skipped Peak-Ratio calculations.'},{''}) ; return; 
+end
+
+if str2double(filter_snr{1}) ~= 0
+    
+    snr_limit = str2double(filter_snr{1});
+    snr_mask = str2double(filter_snr{2});
+    
+    % Display Info %
+    CSI_Log({['Calculating SNR per voxel, '... 
+              'and filter data using minimum SNR limit: ']},...
+            {snr_limit});
+
+    % Noise mask
+    mask_size = snr_mask;
+
+    % Dimensions of array to calculate SNR.
+    snr_dims = cellfun(@(x) 1:x, num2cell(csi.data.dim),'uniform', 0);
+    snr_dims(1) = [];
+    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
+    
+    % Calculate using noise mask
+    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, doi_range{1});
+    
+    % Convert NaNs to zero
+    SNR_all(isnan(SNR_all)) = 0; 
+    
+    % Filter boolean 
+    SNR_bool = SNR_all < snr_limit;
+    
+    % Filter data
+    nmap(SNR_bool) = NaN;
+
+end
+
+% \\ Display Data
+CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
+
+
+
+
+function CSI_dataAs_Initiate(data, data_tag, gui, labels)
+% After calculating some maps or anything 3D, and one wants to display it.
+% Call this function. It will ask the user the proper info; display type,
+% filter by SNR and more.
+
+if nargin < 4
+    if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+    csi = getappdata(gui.CSIgui_main,'csi');
+    labels = csi.data.labels;
+end
+
+% Display type from user
+uans = getUserInput_Popup({'Display type: '},...
+                          {{'Map','Graph','Table','Histogram'}});
+if isempty(uans)
+    CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); 
+    return; 
+end
+dataDisp = lower(uans{1}); % Display method
+
+% Display Info %
+CSI_Log({'Starting data display:'},{dataDisp});
+
+% Switch to data-display type.
+switch dataDisp
+    case 'table'      % Table % ----- %    
+        % Send to tableData function, to show each slice as a table.
+        % If higher dimensions are available, the data will be 
+        % concentonated per slice. Graph may be better suited.
+        CSI_dataAsTable(data, data_tag)
+    
+    case 'graph'      % Graph % ----- %
+        % Send to displayData function, to show each slice as a graph.
+        % If higher dimensions  represent only 1 value/voxel, a dot is 
+        % shown. Adviced is using table in those cases.
+        CSI_dataAsGraph(data, gui, data_tag);
+
+        % Optional older function
+        % CSI_dataAsGraph2(data, data_text, datatag, gui, img)
+
+    case 'map'
+        % Send data to dataAsTabs and create maps in a tabbed figure for 
+        % all slices (or only the current slice plotted).
+        
+        % Prepare dataAsTabs input
+        [data, color_scale] = CSI_dataAsTabs_Prepare(data, gui);
+        % Plot as tab
+        CSI_dataAsTabs(gui, data, data_tag, labels, color_scale);
+    
+    case 'histogram'
+        % Plot data as histogram - simple display.    
+        fig = figure(); ax = axes(fig);
+        mx = max(data(:)); md = median(data(:));        
+        histogram(ax, data(:), round(100+(mx./md)) );
+        title([data_tag ' Histogram']); xlabel([data_tag ' Bins']);
+end
+
+% Show statistics nfo
+stats = csi_statistics_of_volume(data);
+CSI_Log({[ data_tag ' statistics ------------------------------- %'],...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
+
+
+
+function [data, color_scale] = CSI_dataAsTabs_Prepare(data, gui)
+% This function will get userinput, prep the data and return required
+% variables to plot data-array in a tabbed-figure.
+
+% USERINPUT: What data to show?
+uans = getUserInput_Popup(...
+    {'Data range to show: ','Color scale range: '},...
+   {{'All', 'Current Slice'},...
+    {'Min to Max', 'Histogram optimized'}});                                                 
+if isempty(uans), return; end
+
+% \\ Get part of data-array to visualize
+if strcmpi(uans{1},'Current Slice')
+    % \\ Get current plotted slice index from CSIgui 2D-plot
+    % \\ Get curent slice data from SNR_all array.
+
+    % Get the panel-slider object and 2d-plot object
+    [~, gui2D] = CSI_2D_getDataSliders(gui);
+
+    % Plotted slice index of interest
+    sloi = gui2D.plotindex{1};
+
+    % Get data of interest.
+    data_dim = size(data);    
+    data_dim_range = arrayfun(@(x) 1:x,data_dim, 'uniform',0);
+    data_dim(4) = 1; data_dim_range{4} = sloi;
+
+    % 2. Get data of interest from SNR_all.
+    data_cut = data(data_dim_range{:});
+    permvec = 1:numel(data_dim);
+    permvec(4) = []; permvec(end+1) = 4;
+    data_cut = permute(data_cut, permvec);
+
+    % Replace SNR-all with SNR-cut
+    data = data_cut;
+end         
+
+% \\ Calculate color-range of maps.
+switch uans{2}
+    case 'Min to Max'
+        color_scale = [min(data(:)) max(data(:))];
+    case 'Histogram optimized'
+        [N, edges, bin] = histcounts(data(:));
+        bool = cumsum(N) <= 0.98*size(bin,1);
+        maxval = max(edges(bool));
+        color_scale = [min(data(:)) maxval];                         
+end
