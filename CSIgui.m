@@ -875,6 +875,9 @@ twix = mapVBVD([fp '\' fn '.dat']);
 % Header
 csi.twix = twix.hdr;
 
+% Filename
+csi.filepath = fp;
+
 % Read data dimension and labels
 dims = num2cell(twix.image.dataSize);
 dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
@@ -917,6 +920,7 @@ else
 end
 clear('tmp')
 csi.data.dim = size(csi.data.raw);
+
 
 
 success = 0;
@@ -1314,7 +1318,7 @@ switch ext
         % Question user to load in the single file or load group of dicom
         % files into memory.
         qry = 'Load single file or all files from image directory: ';
-        def = {'Single', 'All'};
+        def = {'All','Single'};
         uans = getUserInput_Popup({qry},{def});
         if isempty(uans{1}), return; end
         if strcmpi(uans{1},'all')
@@ -4440,7 +4444,7 @@ if isempty(uans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
 results_to_show = ...
     {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
 disp_ans = getUserInput_Popup(results_to_show,...
-    {{'Yes','No'},{'No','Yes'},{'No','Yes'}}); 
+    {{'No','Yes'},{'No','Yes'},{'No','Yes'}}); 
 if isempty(disp_ans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
 
 % Get num mask size and channels to exclude.
@@ -7121,12 +7125,16 @@ if isfield(csi,'twix')
     % Offcentre
     % Also located in Meas.VoI_Position_Cor, VoI_Position_Sag and 
     % VoI_Position_Tra
-    if isempty(csi.twix.Meas.VoiPositionSag), ori.offcenter(1) = 0;
-    else, ori.offcenter(1) = csi.twix.Meas.VoiPositionSag;
+    
+    % Sagital means slices in LR dir
+    if isempty(csi.twix.Meas.VoiPositionSag), ori.offcenter(2) = 0;
+    else, ori.offcenter(2) = csi.twix.Meas.VoiPositionSag;
     end
-    if isempty(csi.twix.Meas.VoiPositionCor), ori.offcenter(2) = 0;
-    else, ori.offcenter(2) = csi.twix.Meas.VoiPositionCor;
+    % Coronal means slices in AP dir
+    if isempty(csi.twix.Meas.VoiPositionCor), ori.offcenter(1) = 0;
+    else, ori.offcenter(1) = csi.twix.Meas.VoiPositionCor;
     end
+    % Transverse means slices in FH dir
     if isempty(csi.twix.Meas.VoiPositionTra), ori.offcenter(3) = 0;
     else, ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
     end
@@ -7158,6 +7166,18 @@ if isfield(csi,'twix')
     
     % Orientation (HFS/FFS etc.)
     % hdr.Meas.Matrix Meas.PatientPosition
+
+    if ~isfield(ori, 'flipCorrection')
+        ori.flipCorrection = 1;
+    end
+
+    if ~isfield(ori, 'voxShiftCorrection')
+        if mod(ori.dim(2),2) ~= 0 %  ODD
+            ori.voxShiftCorrection = 1;
+        else
+            ori.voxShiftCorrection = 0;
+        end
+    end
 end
 
 
@@ -7175,12 +7195,25 @@ if isfield(ori,'offcenter'), dans{2} = ori.offcenter;
 else, dans{2} = '0 0 0';
 end
 if isfield(ori,'shift'), dans{3} = ori.shift;
-else, dans{3} = '-1 1 0';
+else, dans{3} = '0.5 0.5 0.5';
 end
+
+% Flip correction for dat-file
+if isfield(ori, 'flipCorrection'), dans{4} = ori.flipCorrection;
+else, dans{4} = 0;
+end
+
+% Voxel flip correction for dat-file
+if isfield(ori, 'voxShiftCorrection'), dans{5} = ori.voxShiftCorrection;
+else, dans{4} = 0;
+end
+
 
 % Resolution and Offset userinput
 qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: ', ...
-    'Voxel shift (AP LR FH) [-]: '};
+    'Voxel shift (AP LR FH) [-]: ', ...
+    'Flip-fix for dat-file [0 = No, 1 = Yes, -1 = Applied]: ',...
+    'Shift-fix for dat-file [0 = No, 1 = Yes, -1 = Applied]: '};
 uans = getUserInput(qry, dans);
 if isempty(uans)
     CSI_Log({'Skipped calculating coordinates.'},{''}); 
@@ -7198,6 +7231,7 @@ vox_cor = 1; fft_cor = 0; % Default settings.
 ori.res       = str2double(strsplit(uans{1},' '));
 ori.offcenter = str2double(strsplit(uans{2},' '));
 ori.shift     = str2double(strsplit(uans{3},' '));
+ori.shiftCorrection = str2double(strsplit(uans{4}));
 
 % Dimensions of data  [AP LR FH]
 ori.dim       = csi.data.dim(space_dim); % in [X Y Z] == [C R S]
@@ -7212,10 +7246,7 @@ ori.vox_cor = vox_cor; ori.fft_cor = fft_cor;
 % volume limit (limit_vol).
 
 % Default voxel shift
-% def_shift = [0.5 0.5 0.5]; def_shift = [ 0.5 -0.5 0.5 ];
-% def_shift = [0.5 0.5 0.5]; 
 % AP [negetive is image down] LR [positive is image to left] FH
-% def_shift = [ -1 1 0 ]; 
 def_shift = ori.shift;
 
 % Set options
@@ -7225,6 +7256,35 @@ opts.vox_cor = vox_cor; opts.fft_cor = fft_cor;
 csi.ori = CSI_coordinates_calculate(...
     ori.res, ori.offcenter, ori.dim, def_shift, opts);
 % ---------------------------------------------------- %
+
+% DAT-file Flip corrections % ------------------------------------------ %
+if ori.flipCorrection == 1
+
+    % Flip over k-space
+    ind_to_flip = csi_findDimLabel(csi.data.labels,{'ky','kz','y','z'});
+    ind_to_flip(isnan(ind_to_flip)) = [];
+    for kk = 1:size(ind_to_flip,2)
+        csi.data.raw = flip(csi.data.raw,ind_to_flip(kk));
+    end
+    % 
+    csi.ori.flipCorrection = -1;
+
+    CSI_Log({'Applied CSI-volume orientation-correction for dat-file: '},...
+        { sprintf('%s | ', csi.data.labels{ind_to_flip}) });
+end
+
+% DAT-file Voxel Shift corrections % ----------------------------------- %
+if ori.voxShiftCorrection == 1
+    
+    ind_to_shift = csi_findDimLabel(csi.data.labels,{'kx', 'x'});
+    ind_to_shift(isnan(ind_to_shift)) = [];
+    csi.data.raw = circshift(csi.data.raw, -1, ind_to_shift);
+    csi.ori.voxShiftCorrection = -1;
+
+    CSI_Log({'Applied voxel shift correction for dat-file: '},...
+        { sprintf('%s | ', csi.data.labels{ind_to_shift}) });
+end
+% ---------------------------------------------------------------------- %
 
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi);   
@@ -12186,7 +12246,7 @@ if isappdata(gui.CSIgui_main,'csi')
     % Reduce file size?
     reduce_size = getUserInput_Popup(...
         {'Reduce file size by converting to single?'},...
-        {{'No','Yes'}});
+        {{'Yes','No'}});
     
     % Get MRSI data
     csigui = csi.data;
@@ -14050,6 +14110,8 @@ function CSI_voxelShift_Indexing(gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+% Create backup
+CSI_backupSet(gui, 'Before voxel shift.');
 
 % Dimension to shift
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -14076,9 +14138,9 @@ for kk = 1:size(kspace,2)
     end
 end
 
+
 % Save to appdata
 setappdata(gui.CSIgui_main,'csi',csi); 
-gui = guidata(gui.CSIgui_main);
 
 
 
@@ -14221,6 +14283,8 @@ function button_openAutoScript_Callback(hObj, evt, gui)
 rt = mfilename('fullpath');
 fp = fileparts([rt '.m']);
 
+if exist([fp '\Scripts'], 'dir') == 7, fp = [fp '\Scripts']; end
+
 [fn,fp,ind] = uigetfile('*.txt', 'defname', fp);
 if ind == 0, return; end
 
@@ -14237,13 +14301,10 @@ for kk = 1:size(inp,2)
     
     inpfnc = tmp{1}; 
     if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
-    
-    
-    if strcmp('plotCSI', inpfnc)% Make this an exception list!
+
+
+    if strcmp('plotCSI', inpfnc) || strcmp(inpfnc(1:3), 'MRI') 
         qrystr = ['button_' inpfnc];
-%     elseif strcmp('CSI', inpfnc(1:3)) 
-%         % If its a function CSI_....; example CSI_saveData
-%         qrystr = inpfnc;
     else
         qrystr = ['button_CSI_' inpfnc];
     end
@@ -14997,21 +15058,6 @@ CSI_Log({'B1-map statistics ------------------------------- %',...
 CSI_dataAs_Initiate(FA_out, 'B1-Map', gui, csi.data.labels);
 
 
-% CSI_Log({'Plotting B1 data, please be patient.'},{''});
-% switch uans{2}
-%     case 'Map'
-%         CSI_dataAsTabs(gui, FA_out, 'B1-maps',csi.data.labels, color_range);        
-%     case 'Table'
-%         CSI_dataAsTable(FA_out, 'Flip angle')
-%     case 'Graph' 
-%         CSI_dataAsGraph(FA_out, gui, 'Flip angle')
-%     case 'Histogram'
-%         % Plot data as histogram - simple display.    
-%         fig = figure(); ax = axes(fig);
-%         histogram(ax, SNR_all(:), 50);
-%         title('B1 Histogram'); xlabel('B1 Bins');
-% end
-
 
 % --- Executes on button press in button_CSI_FlipSpace.
 function button_CSI_FlipSpace_Callback(~, ~, gui)
@@ -15025,7 +15071,7 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Flip over k-space
-ind = csi_findDimLabel(csi.data.labels,{'kx','ky','kz'});
+ind = csi_findDimLabel(csi.data.labels,{'ky','kz'});
 for kk = 1:size(ind,2)
     csi.data.raw = flip(csi.data.raw,ind(kk));
 end
@@ -15107,7 +15153,7 @@ CSI_Log({'Applied interpolation over all spatial dimensions: '},...
 
 
 % --- Executes on button press in button_CSI_Maps.
-function button_CSI_Maps_Callback(hobj, ~, gui)
+function button_CSI_Maps_Callback(~, ~, gui)
 % Calculate specific maps to visualize data
 %
 % Includes: SNR, FWHM, peak, linewidth, and maximum maps.
@@ -15160,14 +15206,38 @@ nmap = map{1}./map{2};
 % Normalize map
 % nfac =  max(map(:)); nmap = map./nfac;
 
-      % --------------- % SNR FILTER % --------------- %
+     
+% Filter by SNR
+nmap = CSI_dataAs_SNRfilter(nmap, 'peak-ratio', gui, doi_range{1});
 
-% \\ SNR Filtering
+% \\ Display Data
+CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
+
+
+% --- Executes by dataAs-scripts to filter calculated data
+function data = CSI_dataAs_SNRfilter(data, tag, gui, doi_range)
+% Apply an SNR filter to the data-volume that needs to be displayed.
+% SNR is calculated for a peak given by doi_range, if not given, the user
+% will be prompted with peak-selection. The main CSI data in memory will be
+% used to calculate the SNR and the filter is applied on data.
+
+        % --------------- % SNR FILTER % --------------- %
+
+% GET DATA 
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+if nargin < 4 || isempty(doi_range)
+    % Get peak of interest
+    [~, ~, doi_range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
+end
+
+% \\ USER INPUT
 filter_snr = getUserInput(...
     {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
     {'0', round(csi.data.dim(1)./10)});
 if isempty(filter_snr)
-    CSI_Log({'Skipped Peak-Ratio calculations.'},{''}) ; return; 
+    CSI_Log({['Skipped ' tag ' display.']},{''}) ; return; 
 end
 
 if str2double(filter_snr{1}) ~= 0
@@ -15189,7 +15259,7 @@ if str2double(filter_snr{1}) ~= 0
     snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
     
     % Calculate using noise mask
-    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, doi_range{1});
+    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, doi_range);
     
     % Convert NaNs to zero
     SNR_all(isnan(SNR_all)) = 0; 
@@ -15198,15 +15268,9 @@ if str2double(filter_snr{1}) ~= 0
     SNR_bool = SNR_all < snr_limit;
     
     % Filter data
-    nmap(SNR_bool) = NaN;
+    data(SNR_bool) = NaN;
 
 end
-
-% \\ Display Data
-CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
-
-
-
 
 function CSI_dataAs_Initiate(data, data_tag, gui, labels)
 % After calculating some maps or anything 3D, and one wants to display it.
