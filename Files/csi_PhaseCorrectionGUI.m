@@ -362,7 +362,7 @@ x = gdat.x;
 
 % ii. Add -dPhase to +dPhase linearly. dPhase is set by user between 0 and
 % 2pi.
-slope = ( 1 * slider_val * ((pi/180))) /(x.N) ;                             % Lin. Slope dPhase/(N)
+slope = ( 1 * slider_val * ((pi/180))) /(x.N);                             % Lin. Slope dPhase/(N)
 
 % Container for range over spectrum.
 range = zeros(1,x.N); 
@@ -378,7 +378,8 @@ if piv_pos ~= 0
 else
     range = 0:x.N-1;
 end
-   
+
+% fprintf('%f\n', slope)
 
 % Calculate the phase change over the spectrum range.
 phase_cor_range = range.*slope; % Range over spectrum.
