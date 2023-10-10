@@ -54,8 +54,6 @@ end
 % ONLY IF REQUIRED
 
 if ~was_cell
-    % Undo squeeze
-    % fid = permute(fid, [numel(size(fid))+1 1:numel(size(fid))]);
     % Convert.
     fid = cell2mat(fid);
 

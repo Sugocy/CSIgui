@@ -1,4 +1,4 @@
-function [fwhm, fwhm_val, fwhm_pos] = csi_LineWidth(data, ppm, poi, show_plot) 
+function [fwhm, fwhm_val, fwhm_pos] = csi_lineWidth(data, ppm, poi, show_plot) 
 % Returns the FWHM linewidth, value and position by interpolating the data
 % before calculating the FWHM at the given peak of interest.
 % 
