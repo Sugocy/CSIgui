@@ -1,0 +1,16 @@
+setDomain=frequency;
+Delete;
+ReorderDim_Auto;
+Average;
+Apodization_Kspace;
+FFT_Kspace;
+Apodization_FID;
+FFT;
+AutoPhase;
+Combine;
+AutoPhase;
+Interpolate;
+setCoordinates;
+MRI_setCoordinates;
+MRI_Convert;
+plotCSI;

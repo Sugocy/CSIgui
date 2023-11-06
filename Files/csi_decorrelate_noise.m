@@ -7,6 +7,9 @@ function [spec, nCov_Chol] = csi_decorrelate_noise(spec, chan_ind, nCov)
 % Input: spectra,  index for channels, noise_covariance matrix,
 %   If nCov is not an input argument, it will be calculated using
 %   noise in the data.
+%
+% Quincy van Houtum, PhD; 10/2023
+% quincyvanhoutum@gmail.com
 
 if nargin < 2, nCov = csi_noisecov_usingdata(spec, chan_ind); end
 dim = size(spec);

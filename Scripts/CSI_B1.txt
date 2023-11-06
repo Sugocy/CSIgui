@@ -1,0 +1,10 @@
+setDomain=frequency;
+setLabels;
+Delete;
+ReorderDim_Auto;
+Apodization_Kspace;
+FFT_Kspace;
+Apodization_FID;
+FFT;
+AutoPhase;
+plotCSI;

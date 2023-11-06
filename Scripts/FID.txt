@@ -1,0 +1,10 @@
+setDomain=time;
+Delete;
+ReorderDim_Auto;
+Average;
+Apodization_FID;
+FFT;
+AutoPhase;
+Combine;
+AutoPhase;
+plotCSI;

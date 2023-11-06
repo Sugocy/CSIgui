@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 06-Oct-2023 14:03:31
+% Last Modified by GUIDE v2.5 26-Oct-2023 13:43:12
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -1801,6 +1801,170 @@ subdat.ans = val; guidata(subobj,subdat);
 
 % Close figure - getUserInput script resumes
 uiresume(subobj);
+
+% GetUserInput TICKS GUI % --------------------------------------------- %
+function userInput = getUserInput_Tick(tick_title, tick_input, fig_title, tick_def, clrs)
+% Create a simple gui with dropdown e.g. tick marks to quickly choose
+% between two options
+
+% If no color input is present, use default dark theme or get from main 
+% app.
+if nargin < 5
+    csi_obj = findobj('type','figure','Tag','CSIgui_main');
+    if isempty(csi_obj)
+        clrs = [0.000 0.000 0.000; 0.941 0.941 0.941]; 
+    else
+        csi_gui = guidata(csi_obj);
+        clrs = [csi_gui.colors.main; csi_gui.colors.text_main];
+    end
+end
+
+if nargin < 3, fig_title = 'CSIgui - UserInput'; 
+else,          fig_title = ['CSIgui - ' fig_title];
+end
+
+if nargin < 4, tick_def = zeros(size(tick_title)); end
+
+% --------------------- % Set GUI details
+
+% Create sub-figure
+fig_userinp = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
+                     'NumberTitle', 'Off', 'Color', clrs(1,:),...
+                     'Name',fig_title,'Tag', 'CSIgui_UI_tick'); 
+subdat = guidata(fig_userinp); axis off;
+
+% Nr of dropdown menu's
+Ninput = size(tick_title,2);
+
+% Total size of figure.
+dw = 10;  dy = 10; w = 320+2*dw; 
+% Define values for EDIT and TEXT sizes.
+sz_tick  = [(w-(2*dw))/2.5 25]; sz_text = [w-2*dw 20]; 
+sz_button = [(w-2*dw)/2 20];
+
+% Define height
+h = Ninput * (sz_tick(2)*2) + (sz_button(2)*2) + 2*dy;
+
+% Size tune parameters and set figure size and window-position
+scrsz = get(0,'Screensize'); 
+figpos = round(scrsz(3:4)./2) - ([w h]./2);
+set(fig_userinp,'Position', [figpos w h]);
+
+% --------------------- % Set UI control elements
+
+% Set each title text and popup menu
+for kk = 1:Ninput
+    %Tick menu title
+    subdat.h_title{kk} = ...
+        uicontrol(fig_userinp, 'Style', 'Text','Unit', 'Pixels',...
+        'Position',[dw h-dy-(sz_tick(2)*kk + sz_text(2)*(kk-1)) ...
+                    sz_text(1) sz_text(2)],...
+        'Tag', 'h_popup','String',tick_title{kk},'Fontsize', 8,...
+        'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
+        'HorizontalAlignment', 'Left',...
+        'TooltipString', tick_title{kk});
+    
+    % Tick 1  
+    subdat.h_tick{kk,1} = ...
+        uicontrol(fig_userinp, 'Style', 'checkbox','Unit', 'Pixels',...
+        'Position',[dw h-dy-(sz_tick(2)*kk + sz_text(2)*(kk))...
+                    sz_tick(1) sz_tick(2)],...
+        'Tag', sprintf('%i_%i',kk,0),'String',tick_input{kk}{1},'Fontsize', 8,...
+        'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
+        'HorizontalAlignment', 'Left', 'value', tick_def(kk),...
+        'Callback', @getUserInput_Tick_setToggle);
+
+    % Tick 2   
+    subdat.h_tick{kk,2} = ...
+        uicontrol(fig_userinp, 'Style', 'checkbox', 'Unit', 'Pixels',...
+        'Position',[dw+sz_tick(1) h-dy-(sz_tick(2)*kk + sz_text(2)*(kk))...
+                    sz_tick(1) sz_tick(2)],...
+        'Tag', sprintf('%i_%i',kk,1),'String',tick_input{kk}{2},'Fontsize', 8,...
+        'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
+        'HorizontalAlignment', 'Left', 'value', abs(tick_def(kk)-1),...
+        'Callback', @getUserInput_Tick_setToggle);
+    
+end
+
+% Set button CONTINUE
+subdat.h_buttonContinue = uicontrol(fig_userinp, 'Style', 'Pushbutton','Unit', 'Pixels',...
+    'Position',[dw        dy/2  sz_button(1) sz_button(2) ],...
+    'Tag', 'button_CONTINUE','String','Continue','Fontsize', 12,...
+    'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
+    'Callback', @getUserInput_Tick_setOutput);
+
+% Set button SKIP
+subdat.h_buttonSkip = uicontrol(fig_userinp, 'Style', 'Pushbutton','Unit', 'Pixels',...
+    'Position',[dw+sz_button(1)  dy/2  sz_button(1) sz_button(2) ],...
+    'Tag', 'button_SKIP','String','Skip','Fontsize', 12,...
+    'Foregroundcolor', clrs(2,:),'BackgroundColor', clrs(1,:),...
+    'Callback', @getUserInput_Tick_setOutput);
+
+% --------------------- % Wait for user input
+
+% Update gui-data of this function' figure.
+guidata(fig_userinp, subdat); 
+% Wait for user t2bdone
+uiwait(fig_userinp); pause(0.1);
+
+% --------------------- % Process user input
+
+% Get updated gui-data
+if ishandle(fig_userinp)
+    subdat = guidata(fig_userinp);
+    if isfield(subdat, 'ans')
+        userInput = subdat.ans;
+    else  
+        userInput = [];
+    end
+    % Close figure
+    close(fig_userinp);
+else
+    userInput = [];
+end
+
+function getUserInput_Tick_setToggle(hobj,~,~)
+% Toggle the ticks of the query of interest. Only one can be ticked per
+% title. 
+
+% Which tick was tagged: first is qry-number, second is tick-number
+tick_tag = str2double(strsplit(hobj.Tag, '_'));
+
+% Gui data
+gui = guidata(hobj.Parent);
+
+% Set other tick-box of this query to opposite value
+gui.h_tick{tick_tag(1), abs(tick_tag(2)-1)+1}.Value = abs(hobj.Value-1);
+
+% -. Executed by button in getUserInput_Popup to save answer
+function getUserInput_Tick_setOutput(hObject,~,~)
+% When user closes, skips or continues the getUserInput dlg.
+
+%userInputSource = get(hObject,'Style');
+userInputString = get(hObject,'String'); % What did get us here? 
+
+% Get guidata from the getUserInput window
+subobj = findobj('type','figure','tag','CSIgui_UI_tick');
+if iscell(subobj), subobj = subobj{1}; end
+subdat = guidata(subobj);
+
+if strcmp(userInputString, 'Skip')
+    val = [];
+else
+    % Get strings input from popup menu
+    val = NaN(1,size(subdat.h_tick,2));
+    for kk = 1:size(subdat.h_tick,1)
+        val(kk) = subdat.h_tick{kk}.Value;        
+    end
+end
+
+% Set userinput value and Update storage
+subdat.ans = val; guidata(subobj,subdat);
+
+% Close figure - getUserInput script resumes
+uiresume(subobj);
+
+
 
 % getUserInput: POPUP GUI % -------------------------------------------- %
 % ---------------------------------------------------------------------- %
@@ -4175,13 +4339,13 @@ function CSI_Combine_Roemer(hobj,~)
 % Combine data using the Roemer et al method described in:
 % https://doi.org/10.1002/mrm.1910160203 - The NRM Phases Array 1990
 %
-% This method quality improves with separate noise-measurements.
+% This method' quality improves with separate noise-measurements.
 %
 % Required Variables:
 % FID of data, noise-covariance matrix, sensitivity maps.
 %
-% Optional: Noise decorrelation, PCA-denoising, Noise Covariance from
-% noise-measurements or data itself.
+% Optional: Noise decorrelation, PCA-denoising, noise covariance matrix
+% from noise-measurements or data itself.
 %
 % NB. If noise decorrelation and PCA-denoising are applied, the Roemer
 % algorithm can be calculated using the identity matrix instead of the
@@ -4204,26 +4368,43 @@ psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
 qry = {'Apply noise decorrelation: ', ...
        'Calculate noise-covariance matrix for decorrelation using:', ...
        'Apply PCA denoising:', 'PCA patch-size:', ...
-       'PCA noise covariance matrix:'};
+       'PCA/Roemer noise covariance matrix:', 'PCA SVD-method:'};
 opt = {{'Yes','No'},  {'Measurement', 'Data'}, {'Yes','No'}, {psz_def},...
-       {'Default', 'Identity-matrix'}};
+       {'Default', 'Identity-matrix', 'Decorrelated'}, {'Fast', 'Default'}};
 % Ask user
 uans = getUserInput_Popup(qry,opt);
 if isempty(uans), CSI_Log({'Roemer:'},{'Aborted.'}); return; end
 
-% Process user input 
+% Process user input % 
     
 % uans{1} - Noise decorrelation
-if strcmp(uans{1},'Yes'), do_NoiseDec = 1; else, do_NoiseDec = 0; end
+if strcmp(uans{1},'Yes'), do_NoiseDecorrelation = 1; 
+else, do_NoiseDecorrelation = 0; end
+
 % uans{2} - nCov using noise measurement or data
 if strcmp(uans{2},'Measurement'), do_NoiseData = 1; 
 else, do_NoiseData = 0; end 
+
 % uans{3} - PCA denoising
 if strcmp(uans{3},'Yes'), do_PCA = 1; else, do_PCA = 0; end
+
 % uans{4} - Patch size
 patch_size = str2double(uans{4});
+
 % uans{5} - Noise Covariance Matrix
-if strcmp(uans{5},'Default'), do_nCovDef = 1; else, do_nCovDef = 0; end 
+if strcmpi(uans{5},'Default')
+    do_nCovDef = 1; 
+elseif strcmpi(uans{5}, 'Decorrelated')
+    do_nCovDef = 2; 
+    do_NoiseDecorrelation = 1;
+    CSI_Log({'Roemer: Using decorrelated noise-cov for coil combinations'},...
+        {'enabled noise decorrelation by default.'});
+elseif strcmpi(uans{5}, 'Identity-matrix')
+    do_nCovDef = 0;
+end
+
+% uans{6} - SVD method for PCA denoising
+if strcmp(uans{6},'Default'), do_svd = 0; else, do_svd = 1; end 
 
 
 % -------------------------------------------------------------------- %
@@ -4232,6 +4413,9 @@ CSI_Log({'Roemer:'},{'Starting preparations and calculations.'});
 
 % Channel Index
 chan_ind = csi_findDimLabel(csi.data.labels,{'chan'});
+
+% Dimensions
+sz = size(csi.data.raw); 
 
 % Prepare Noise Data % ----------------------------------------------- %
 if do_NoiseData
@@ -4250,7 +4434,7 @@ if do_NoiseData
 end
 
 % Decorrelate Noise % ------------------------------------------------ %
-if do_NoiseDec 
+if do_NoiseDecorrelation 
     if isfield(csi.data, 'noise') && do_NoiseData
         
         % Get noise-cov using noise data
@@ -4258,29 +4442,31 @@ if do_NoiseDec
                                               csi.data.noise.labels);
 
         % Copy it for nVoxels
-        sz = size(csi.data.raw);
         non_spat_ind = ...
             csi_findDimLabel(csi.data.labels,...
             {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
-        non_spat_ind(isnan(non_spat_ind)) = []; sz(non_spat_ind) = [];
+        non_spat_ind(isnan(non_spat_ind)) = []; 
+        non_spat_ind(non_spat_ind > numel(sz)) = [];
+        sz(non_spat_ind) = [];
 
         % Covariance matrix
         noise_cov = repmat({noise_cov}, sz);
     
         % NFO Update
-        CSI_Log({'Roemer: Calculated noise-covariance matrix'},...
-                    {'for noise decorrelation using noise-data.'});
+        CSI_Log({'Roemer: Noise-data used to calculate'},...
+                    {'noise-covariance matrix for noise decorrelation.'});
     else
         % Noise covariance matrix required for noise-decorrelation
         % calculated using noise in data itself.
         noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
-        CSI_Log({'Roemer: Calculated noise-covariance matrices/voxel'},...
-                        {'for noise decorrelation.'});
+        CSI_Log({'Roemer: Voxel-data used to calculate'},...
+                {'noise-covariance matrices for noise decorrelation.'});
     end
 
     % Decorrelate signal (Cholensky)
-    spec = csi_decorrelate_noise(csi.data.raw, chan_ind, noise_cov);
-    CSI_Log({'Roemer:'},{'Decorrelated noise via cholensky-decomposition'});
+    [csi.data.raw, noise_cov_chol] = ...
+        csi_decorrelate_noise(csi.data.raw, chan_ind, noise_cov);
+    CSI_Log({'Roemer:'},{'Decorrelated noise via Cholenky-decomposition'});
 end
 
 
@@ -4289,49 +4475,68 @@ if do_PCA
     tic
     % Principle Component Analysis - Denoising
     CSI_Log({'Roemer: Applying PCA-denoising. Patch size:'},{patch_size});
-    spec = CSI_PCA_Denoising(spec, chan_ind, patch_size);
-    CSI_Log({'Roemer:'},{'Data denoised via decorrelation and PCA.'});
-    toc
+    CSI_Log({'Roemer: SVD-Method:'},{uans{6}});
+    CSI_Log({'Roemer:'},{'Starting a parallel pool of workers.'});
+    csi.data.raw = csi_pca_denoising(csi.data.raw, chan_ind, patch_size, do_svd);
+    dt = toc;
+    CSI_Log({'Roemer: PCA-denoising finished. Duration:'} , {dt} );
 end
-
-
-% FID of data as cell-list {nS x nChan} x nVox
-[spec, permv, szr] = csi_combine_reshape(spec, chan_ind);
-
-% iFFT to FID
-CSI_Log({'Roemer:'},{'Converting data to time domain (iFFT).'});
-fid = csi_ifft(spec);
-
-% Sensitivity Maps
-sens_maps = CSI_Sensitivity_Maps(fid, 1);
-CSI_Log({'Roemer:'},{'Generating sensitivity maps.'});
 
 
 % Noise Cov Matrix % ------------------------------------------------- %
 % For Roemer method, if noise decorrelation and PCA, the ID-matrix can 
 % be used.
-if do_nCovDef % Use default noise-covariance matrix
+if do_nCovDef == 1 % Use default noise-covariance matrix
 
     % Use noise-covariance matrix from data or noise-measurement
-    if ~do_NoiseDec % ncov is present if noise decorrelation is applied.
+    % NB. noise-cov is present if noise decorrelation is applied.
+    if ~do_NoiseDecorrelation 
         if do_NoiseData
             noise_cov = CSI_NoiseCov_usingMeasurement(...
                 csi.data.noise.raw, csi.data.noise.labels);
             noise_cov = repmat({noise_cov}, sz);
+            CSI_Log({'Roemer: Using noise-cov matrix from noise-data'},...
+            {'for coil combinations.'});
         else
             noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
-            CSI_Log({'Roemer:'},...
-                {'Calculated noise-covariance matrices/voxel.'});
+            CSI_Log({'Roemer: Using noise-cov from raw data'},...
+                {'for coil combinations'});
         end
     end
 
-else  % Use identity matrix
+elseif do_nCovDef == 0  % Use identity matrix
+    nVox = prod(csi.data.dim(2:end));
     noise_cov = ...
-        repmat(diag(ones(csi.data.dim(chan_ind),1)),size(fid,1),1); 
+        repmat({diag(ones(csi.data.dim(chan_ind),1))},nVox,1); 
+    CSI_Log({'Roemer:'},{'Using identity matrix for coil-combinations.'});
+
+elseif do_nCovDef == 2
+    % Use cholesky decomposed noise covariance matrix.
+    noise_cov = noise_cov_chol;
+    CSI_Log({'Roemer:'},...
+    {'Using noise-cov matrix from noise decorrelation data for for coil-combinations.'});
 end
+
+
+% FID of data as cell-list {nS x nChan} x nVox
+[csi.data.raw, permv, szr] = csi_combine_reshape(csi.data.raw, chan_ind);
+
+% iFFT to FID
+CSI_Log({'Roemer:'},{'Converting data to time domain (iFFT).'});
+fid = csi_ifft(csi.data.raw);
+
+% Sensitivity Maps
+sens_maps = CSI_Sensitivity_Maps(fid, chan_ind);
+CSI_Log({'Roemer:'},{'Generated sensitivity maps.'});
+
+
+% Reference channel % ------------------------------------------------ %
+refChannel = CSI_Combine_Roemer_refChannel(fid);
+CSI_Log({'Roemer: Reference channel'},{refChannel});
 
 % Roemer Method % ---------------------------------------------------- %
 CSI_Log({'Roemer:'},{'Calculating weights for each channel.'});
+
 % Loop each voxel
 for vi = 1:size(fid,1)
     % Sensitivity for each channel
@@ -4340,8 +4545,13 @@ for vi = 1:size(fid,1)
     N = noise_cov{vi};
     % Moore-Penrose Pseudo-Inverse (uses SVD)
     U = pinv(sqrt(S'*pinv(N)*S))*S'*pinv(N); % The magic is here.
-    % Weight the FID
-    fid{vi} = (U * fid{vi}')';
+    
+    % Make an arbitrary value to scale to, get back into same magnitude.
+    % rescale = norm(U) * (U / norm(U(refChannel)));
+    % fid{vi} = ((U .* rescale) * fid{vi}' )';
+
+    % Weight the FID    
+    fid{vi} = (U * fid{vi}' )';
 end
 CSI_Log({'Roemer:'},{'Combined all channels using calculated weights.'});
 
@@ -4360,184 +4570,30 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 % Output
 CSI_Log({'Roemer: Done.'},{''});
 
-% --- Executed by coil combination methods to denoise data
-function spec = CSI_PCA_Denoising(spec, chan_ind, patch_size)
-% For a detailed explanation of thise method see: Principle component 
-% analysis denoising, Froeling et. al MRM. 2021. doi.org/10.1002/mrm.28654
-% 
-% Data will be reshaped to nSamples x nVoxels x nChan for calculations.
+function refChannel = CSI_Combine_Roemer_refChannel(fid)
+% Find the channel with the most signal and return the corresponding
+% channel index.
 %
-% Generate a local-patch with patch-size and convolve over the data set.
-% For each voxel, all voxels within this patch are concatenated into matrix
-% M: rows represent the voxels in the local-patch, the columns represent
-% the real and imaginary values (concatenated). Singular Value 
-% Decomposition is applied to matrix M. All eigenvalues within the
-% Marchenko-Pastur distribution are set to zero and matrix M is
-% reconstructed. The threshold can be estimated according to Veraart et al.
-% 10.1016/j.neuroimage.2016.08.016.
- 
-% Default patch-size
-if nargin < 3, patch_size = 5; end
+% This function simply looks at the maximum value of the fid for every
+% voxel and every channel.
 
-% Data dimensions
-dim = size(spec); 
-dim_spat = dim; dim_spat(chan_ind) = []; dim_spat(1) = [];
+% Real values
+fid_real = cellfun(@real, fid, 'UniformOutput', false);
 
-% Reshape datan S x nVox x nCh % --------------------------------------- %
+% Maximum per channel per voxel
+mx_val_perchan_pervox = cellfun(@max, fid_real, 'UniformOutput', false);
 
-% CH to outer dimensions
-if chan_ind < numel(dim)                                       
-    % Create permute vector and permute data
-    permv = 1:numel(dim);               % Remainder indices vector
-    permv(permv == chan_ind) = [];      % Remove channel-index         
-    permv(end+1) = chan_ind;            % Put channel-index at end
-    spec = permute(spec, permv);        % Permute
-end
+% Maximum value per voxel with its channel-number
+[mx_val_pervox, mx_val_pervox_chanind] = ...
+    cellfun(@max, mx_val_perchan_pervox, 'UniformOutput', false);
 
-% Convert data to nS x nVox x nCh,
-spec = reshape(spec, dim(1), [], dim(chan_ind));
-                
-% Calculate linear indices for a neighbourhood at a voxel:
-lin_ind = CSI_PCA_Denoising_Neighbourhoods(dim_spat, patch_size);
+% Maximum from all voxels with its voxel-number
+[mx_val, mx_val_voi] = max(cell2mat(mx_val_pervox));
 
-psz = patch_size; %vox_patch = NaN(psz.^3, dim(1)*2);
+% Reference channel
+% Thus: max(fid_real{mx_val_voi}(:,refChannel)) == mx_val
+refChannel = mx_val_pervox_chanind{mx_val_voi};
 
-% Parallel Pool % ------------------------------------------------------ %
-CSI_Log({'PCA:'},{'Starting parallel pool of workers.'})
-p = gcp('nocreate'); 
-if isempty(p)
-    nCores = feature('numcores');
-    parpool('Processes', nCores);
-end
-
-
-% Loop over each channel (chi) % --------------------------------------- %
-nS = dim(1);
-parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
-% for chi = 1:dim(chan_ind)
-    data_single_chan = spec(:,:,chi);
-    data_single_chan_denoised = zeros(size(data_single_chan));
-    
-    vox_patch = NaN(psz.^3, nS*2);
-    % Loop over each voxel % ------------------------------------------- %
-    for vi = 1:size(data_single_chan,2)                
-        % Get all neighbourhood voxels at voxel vi of size patch_size in
-        % directions (xyz).
-        
-        % Linear indices of the neighbourhood for this voxel.
-        lin_nbh = lin_ind{vi};
-        
-        % -------------------------------- %
-
-        % Get the local-voxels neighbourhood around voxel vi
-        nbh = data_single_chan(:,lin_nbh);
-            
-        % Make a large matrix with real and imaginary on the col-index and
-        % voxels on row-index
-        vox_patch(:,1:nS) = real(nbh)';
-        vox_patch(:,nS+1:end) = imag(nbh)';
-        
-        % ---
-        % Apply Denois Matrix function (where the actual magic happens)
-        % As a seperate function, needs the voxels in the local-volume.
-        denoised_patch = denoising_marchenco_pastur(vox_patch);
-        % ---
-
-        % Back to complex
-        denoised_patch = complex(denoised_patch(:,1:nS),...
-                                 denoised_patch(:,nS+1:end))';
-
-        % Summate the denoised data
-        data_single_chan_denoised(:,lin_nbh) = ...
-            data_single_chan_denoised(:,lin_nbh) + denoised_patch;
-    end
-    
-    % Average and store denoised-data for this channel.
-    spec(:,:,chi) = data_single_chan_denoised ./ (psz.^3);
-end
-
-% Undo Reshape and Permute % ------------------------------------------- %
-
-% Reshape to nSamples x n[Spatial Dimensions] x nChan
-spec = reshape(spec, [dim(1), dim_spat, dim(chan_ind)]);
-% Permute back to original matrix size
-if chan_ind < numel(dim) 
-    % Create undo-permute-permute-vector
-    nindex = numel(permv); restore_permv = NaN(1,nindex);
-    for kk = 1:nindex, restore_permv(kk) = find(kk == permv); end
-    % Permute
-    spec = permute(spec, restore_permv);
-end
-
-% --- Used by PCA_Denoising
-function lin_ind = CSI_PCA_Denoising_Neighbourhoods(dim_spat, patch_size)
-% Calculate the linear indices of a neigbourhood of size "patch_size" for
-% every spatial location in a (CSI) volume.
-%
-% PCA_Denoising convolves over full volume using a local neighbourhood or
-% local patch for every channel/coil. This functions returns the linear 
-% indices of a neighbourhood for every voxel allowing for a lookup approach 
-% instead of calculating this every voxel/channel-iteration.
-%
-% uses sub2neighbourhood(sub, psz, dim);
-
-% Patch size variable short naming
-psz = patch_size;
-
-% Number of voxels
-N = prod(dim_spat);
-
-% Prep var-containers
-lin_ind = cell(N,1);
-
-% Loop over every voxel (linear index)
-for vi = 1:N
-    % Get local-voxels neighbourhood indexes.
-
-    % Step 1 - subindex of this linear index voxel vi
-    sub = cell2mat(ind2subQ(dim_spat,vi));
-
-    % Step 2 - subindexes of the neighbourhood (local indices/patch)
-    sub_nbh = sub2neighbourhood(sub, psz, dim_spat)';
-
-    % Step 3 - Convert to linear index for data-handling;
-    sub_nbh = num2cell(sub_nbh);  lin_nbh = NaN(psz.^3,1);
-    for ni = 1:psz^3
-        lin_nbh(ni) = sub2ind(dim_spat,sub_nbh{ni,:});
-    end
-
-    % Step 5 - Store in output var
-    lin_ind{vi} = lin_nbh;
-end
-
-% --- Used by CSI_PCA_Denoising_Neighbourhoods
-function ind_nbh = sub2neighbourhood(sub, psz, dim)
-% Given sub-indexes, returns all neighbourhood indexes with a neighbourhood 
-% size of psz such that sub-index is the center; assuming psz is of 
-% odd-size.
-%
-% Applies a circular shift to coordinates outside of the dim-limits.
-
-% Step 2- calculate "surrounding" voxel-vector using patch-size
-ind_nbh = NaN(numel(dim), psz);
-for kk = 1:numel(dim)
-    % Index
-    ind_nbh(kk,:) = ...
-        linspace(sub(kk)-(psz-1)/2,sub(kk)+(psz-1)/2, psz);
-    
-    % Correction for outside grid < (circular)
-    ind_loc_vox_cor = (ind_nbh(kk,:) <= 0);
-    ind_nbh(kk,ind_loc_vox_cor) = ...
-        ind_nbh(kk,ind_loc_vox_cor) + dim(kk);
-    
-    % Correction for outside grid > (circular)
-    ind_loc_vox_cor = (ind_nbh(kk,:) > dim(kk));
-    ind_nbh(kk,ind_loc_vox_cor) = ...
-        ind_nbh(kk,ind_loc_vox_cor) - dim(kk);
-end
-
-% Get all combinations
-ind_nbh = allCombinations({ind_nbh(1,:),ind_nbh(2,:),ind_nbh(3,:)});
 
 % --- Sensitivity maps for Roemer-combination method
 function [sens_maps, permv, szr] = CSI_Sensitivity_Maps(fid, chan_ind)
@@ -4551,15 +4607,10 @@ function [sens_maps, permv, szr] = CSI_Sensitivity_Maps(fid, chan_ind)
 % Data to cell
 if ~iscell(fid)
     [fid, permv, szr] = csi_combine_reshape(fid, chan_ind);
-
-    sz = size(fid);
-    cell_layout = arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),...
-              'UniformOutput',0);
-    fid = mat2cell(fid, sz(1), cell_layout{:}); 
 end
 
 % Calculate maps
-sens_maps = cellfun(@(x) mean(x(2:5,:),1), fid,'UniformOutput',0);
+sens_maps = cellfun(@(x) mean(x(2:5,:),1), fid, 'UniformOutput',0);
 
 
 % --- Noise Covariance matrix using noise-data
@@ -4576,8 +4627,9 @@ if ~isempty(chan_ind_avg) && ...
         size(noise,chan_ind_avg) > 1
     
     % Get userinput request to average of concatenate
-    uans_noise = getUserInput_Popup({'Concatenate averages:'},...
-        {'Yes', 'No'});
+    uans_noise = getUserInput_Popup(...
+        {'Noise covariance matrix calculations, concatenate averages:'},...
+        {{'Yes', 'No'}});
     if isempty(uans_noise)
         CSI_Log({'Roemer:'}, {'Aborted.'}); return; 
     end
@@ -4736,11 +4788,6 @@ function CSI_Combine_WSVD_StaticWeights(hobj, ~)
 % Uses WSVD to calculate weights.
 
 % GUI prepwork % ------------------------------------------- %
- 
-% If exists, close the combine options menu
-if exist('hobj', 'var')
-    gui_combCoil = guidata(hobj); close(gui_combCoil.fig);
-end
 
 % Get GUI and object: CSIgui_main
 CSIgui_obj = findobj('Tag', 'CSIgui_main'); gui = guidata(CSIgui_obj);
@@ -4937,7 +4984,7 @@ setappdata(gui.CSIgui_main,'csi', csi);
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
-CSI_Log({'WSVD: data combined by applying weights from '},...
+CSI_Log({'WSVD: data combined by applying weights from'},...
     {sprintf('%s(%i)', csi.data.labels{dim_of_int}, dim_of_int_val)});
 
 
@@ -5067,77 +5114,138 @@ gui = guidata(hobj);
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% Average and channel index
-ind_avg = csi_findDimLabel(csi.data.labels, {'aver'});
+% Data preperations % -------------------------------------------------- %
+
+% Is there channel/coil data
 ind_cha = csi_findDimLabel(csi.data.labels, {'chan', 'cha'});
 ind_cha(isnan(ind_cha)) = [];
 if isempty(ind_cha)
-    CSI_Log({'WSVD: Aborted.'},{'No "chan" dimension found.'})
+    CSI_Log({'WSVD: Aborted.'},{'No "chan" or "cha" dimension found.'})
     return; 
 end
 
-% User input % ----------------------------------------------- %
-
-% Get user input for noise component
-uans = getUserInput({'Use the noise prescans? (y/n):','Noise mask size:',...
-                     'Exclude channels:'},...
-                    {'n', round(csi.data.dim(1)./12),''}); 
-if isempty(uans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
-                
-
-% Get user input for displaying results
-results_to_show = ...
-    {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
-disp_ans = getUserInput_Popup(results_to_show,...
-    {{'No','Yes'},{'No','Yes'},{'No','Yes'}}); 
-if isempty(disp_ans), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
-
-% Get num mask size and channels to exclude.
-mask_size = str2double(uans{2}); 
-% Use prescans or create a noise mask per voxel. 
-% If mask == 1, a noise mask is used and the prescans are ignored.
-if strcmp(uans{1}, 'y')
-    if isfield(csi.data, 'noise')
-        mask = 0; 
-        CSI_Log({'WSVD; Using the full noise pre-scans'},...
-                   {'to calculate noise covariance matrix'});
-    else
-        mask = 1;
-        CSI_Log({'WSVD; Prescans unavailable.'},...
-                   {'Using mask to calculate noise covariance matrix.'});
-    end
-else
-    mask = 1;
-end
-CSI_Log({'WSVD; Size of noise mask:'},{mask_size});
-
-
 % Number of samples and channels.
 ndimf = size(csi.data.raw,1);
+nchan = size(csi.data.raw,ind_cha);
+
+% Are there averages available:
+ind_avg = csi_findDimLabel(csi.data.labels, {'aver', 'avg', 'nsa'});
+ind_avg(isnan(ind_avg)) = [];
+if isempty(ind_avg), avg_opt = {'No'}; else, avg_opt = {'Yes','No'}; end
+
+% User Input % ------------------------------------------------------- %
+
+% Define questions and options
+psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
+qry = {'Calculate noise-covariance matrix using:', ...
+       'Apply PCA denoising:', 'PCA patch-size:', ...
+       'PCA SVD-method:', 'Average data:', 'Exclude channels:'};
+opt = {{'Measurement', 'Data'}, {'Yes','No'}, {psz_def},...
+       {'Fast', 'Default'}, avg_opt, {'No', 'Yes'}};
+
+% Ask user
+uans = getUserInput_Popup(qry,opt);
+if isempty(uans), CSI_Log({'Roemer:'},{'Aborted.'}); return; end
+
+% Process user input % 
+
+% uans{1} - nCov using noise measurement or data
+if strcmp(uans{1},'Measurement'), do_NoiseData = 1; 
+else, do_NoiseData = 0; end 
+
+% uans{2} - PCA denoising
+if strcmp(uans{2},'Yes'), do_PCA = 1; else, do_PCA = 0; end
+
+% uans{3} - Patch size
+patch_size = str2double(uans{3});
+
+% uans{4} - SVD method for PCA denoising
+if strcmp(uans{4},'Default'), do_svd = 0; else, do_svd = 1; end 
+
+% uans{5} - Average data
+if strcmp(uans{5},'No'), do_avg = 0; else, do_avg = 1; end 
+
+% uans{6} - Exclude channels
+if strcmp(uans{6},'No'), do_excl = 0; else, do_excl = 1; end 
+              
+% Get user input for displaying results
+qry = {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
+opt = repmat({{'Yes', 'No'}}, size(qry));
+dans = ones(1,size(qry,2));  
+uans_disp = getUserInput_Tick(qry,opt,dans); 
+if isempty(uans_disp), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
+
+
+% Prepare Noise Data % ----------------------------------------------- %
+if do_NoiseData
+    if isfield(csi.data,'noise')
+        % Run noise-prepare fcn
+        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
+        if ~isstruct(csi), CSI_Log({'Roemer:'}, {'Aborted.'}); return; end
+
+        % Message to user
+        CSI_Log({'WSVD:'},{'Noise-data processed and stored.'});  
+    else
+        do_NoiseData = 0; 
+        CSI_Log({'WSVD: No noise-data present,'},...
+                {'using a noise-mask per voxel instead.'});
+    end
+end
+
 
 % Exclusion of channels % ------------------------------------------- %
 
 % Convert user input.
-ch_excl = str2double(strsplit(uans{3},' ')); 
-if isnan(ch_excl),ch_excl = []; end
-% Create included channels array
-ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
+if do_excl
+    % Get channels to exclude from user
+    uans = getUserInput('Exclude channels: ', '');
+    if isempty(uans), CSI_Log({'WSDV: Aborted.'},{''}); end
+
+    % Channels to exclude as double
+    ch_excl = str2double(strsplit(uans{1},' ')); 
+    if isnan(ch_excl), ch_excl = []; end
+
+    % Create included channels array
+    ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
+else
+    ch_incl = 1:nchan;
+end
 
 % Averaging % ------------------------------------------------------ %
 
 % If data not averaged - ask user if to do so.
-if ~isnan(ind_avg)
-    if size(csi.data.dim, ind_avg) ~= 1
-        uans = getUserInput(...
-            {'Average channel data before WSVD? (y/n)'},{'y'});
-        if isempty(uans), uans{1} = 'n'; end
+if do_avg        
+    csi.data.raw = mean(csi.data.raw, ind_avg);  % Average
+    CSI_Log({'WSVD: Averaged data over index:'},csi.data.labels(ind_avg));    
+end
 
-        % Average data
-        if strcmp(uans{1},'y')
-            csi.data.raw = mean(csi.data.raw,ind_avg);   % Average
-            CSI_Log({'WSVD: Averaged data over dimension: '},{ind_avg});
-        end
-    end
+
+% PCA Denoising % ---------------------------------------------------- %
+if do_PCA
+    tic
+    % Principle Component Analysis - Denoising
+    CSI_Log({'WSVD: Applying PCA-denoising. Patch size:'},{patch_size});
+    CSI_Log({'WSVD: SVD-Method:'},{uans{6}});
+    CSI_Log({'WSVD:'},{'Starting a parallel pool of workers.'});
+    csi.data.raw = csi_pca_denoising(...
+        csi.data.raw, ind_cha, patch_size, do_svd);
+    dt = toc;
+    CSI_Log({'WSVD: PCA-denoising finished. Duration:'} , {dt} );
+end
+
+% Noise Covariance matrix % ------------------------------------------ %
+if ~exist('noise_cov', 'var') && do_NoiseData
+    % Get noise-cov using noise data
+    noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
+                                              csi.data.noise.labels);
+    noise_cov = repmat({noise_cov}, size(csi.data.raw)); 
+    CSI_Log({'WSVD:'},...
+    {'Calculated a noise-covariance matrix for WSVD using noise-data.'});
+
+else
+    noise_cov = CSI_NoiseCov_usingData(csi.data.raw, ind_cha);
+    CSI_Log({'WSVD: Calculated noise-covariance matrices/voxel'},...
+                    {'for WSVD using voxel-data.'});
 end
 
 % Reshaping (1/2) % -------------------------------------------------- %
@@ -5152,39 +5260,32 @@ end
 % WSVD % ------------------------------------------------------------ %
 
 % Number of voxels to combine
-% tmp_cell = reshape(tmp_cell, [], 1); % Create a list of all voxels.
-nvox     = size(tmp_cell,1);
+nvox     = size(tmp_cell, 1);
 
-% Containers for WSVD
-comb = struct; comb.data = zeros(szr(1),nvox); 
-comb.qual = zeros(nvox,1); comb.ampl = zeros(nvox, size(ch_incl,2)); 
+% Containers for WSVD output
+comb = struct; 
+comb.data = zeros(szr(1),nvox); 
+comb.Q = zeros(nvox,1); 
 comb.W = zeros(size(ch_incl,2), nvox); 
+comb.A = zeros(nvox, size(ch_incl,2)); 
+
+% nS = size(csi.data.raw, 1); half_nm_size = round(nS./6);
+% noise_mask = [1:half_nm_size nS - half_nm_size];
 
 % WSVD loop. 
 % Apply for every indices excluding the channel index: e.g. every voxel.
 for vi = 1:nvox
     % Get spectrum and exclude channels given by user.
-    tmp_spec = tmp_cell{vi,1}; tmp_spec = tmp_spec(:,ch_incl);
+    % tmp_spec = tmp_cell{vi,1}; tmp_spec = tmp_spec(:,ch_incl);
     
-    % Create noise coVariance matrix.
-    if mask == 1 % Use mask
-        
-        noiseMask = ndimf-mask_size+1:ndimf;
-        % noiseCov = cov(tmp_spec(noiseMask,:));
-        noiseCov=diag(diag(cov(tmp_spec(noiseMask,:))));
-           
-    else         % Use noise pre-scans
-        
-        % FFT of noise prescans. (all channels)
-        noise_spec = csi_fft(csi.data.noise.raw);
-        noiseMask = 1:ndimf; noiseCov = cov(noise_spec(:,ch_incl));              
-           
-    end
+    % Noise covariance matrix
+    N = noise_cov{vi};
 
     % WSVD algorithm
-    % Data, quality, coil amplitude and weights.
-    [comb.data(:,vi), comb.qual(vi),comb.ampl(vi,:),comb.W(:,vi)] = ...
-        wsvd(tmp_spec, noiseMask', 'noiseCov', noiseCov);
+    % [comb.data(:,vi), comb.qual(vi),comb.ampl(vi,:),comb.W(:,vi)] = ...
+    %     wsvd(tmp_spec, noise_mask', 'noiseCov', noiseCov);
+    [comb.data(:,vi), comb.Q(vi),comb.W(:,vi),comb.A(vi,:)] = ...
+        WSVD2(tmp_cell{vi}, N);
 end
 
 
@@ -5198,17 +5299,17 @@ csi.data.dim = size(csi.data.raw);
 
 % Display resulting statical data % --------------------------------- %
 
-if strcmp(disp_ans{1}, 'Yes')
+if uans_disp(1)
     % One quality value per voxel
-    qual = reshape(comb.qual, [1 szr(3:end)]); 
+    qual = reshape(comb.Q, [1 szr(3:end)]); 
 
     % Plot as map
     CSI_dataAsTabs(gui, qual, 'WSVD Quality',csi.data.labels, [0 1]);
 end
 
-if strcmp(disp_ans{2}, 'Yes')
+if uans_disp(2)
     % N amplitudes (number of channels) for each voxel
-    amp = reshape(comb.ampl, [size(comb.ampl,2) szr(3:end)]);
+    amp = reshape(comb.A, [size(comb.A,2) szr(3:end)]);
     ndims = numel(size(amp));
     amp = permute(amp , [ndims+1 2:ndims 1]); 
 
@@ -5217,7 +5318,7 @@ if strcmp(disp_ans{2}, 'Yes')
     CSI_dataAsTable(imag(amp), 'WSVD Amplitudes imag-values')
 end
 
-if strcmp(disp_ans{3}, 'Yes')
+if uans_disp(3)
     % N weights (number of channels) for each voxel
     W = reshape(comb.W', [size(comb.W,1) szr(3:end)]);
     ndims = numel(size(W));
@@ -5232,12 +5333,13 @@ end
 % Set CSI app data
 setappdata(gui.CSIgui_main, 'csi', csi);
 
+% Recalculate xaxis properties
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Display info to user
 CSI_Log({'WSVD; Channels are combined.',...
                 'WSVD; Average quality:','WSVD; Included channels:'},...
-                {'',mean(comb.qual(:)),ch_incl});   
+                {'',mean(comb.Q(:)),ch_incl});   
             % Display info to user
 CSI_Log({'WSVD; Close 2D plot before replotting!'},{''});  
 
@@ -7395,7 +7497,10 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
         
        
         img2plot = img(:,:,sli_img); 
+
+        if size(img2plot,1) > 1 % Safety against NaN-values
         imagesc(img2plot, 'parent', tgui.himg{tab_index_cell{:}}); 
+
 
         % Image Contrast.
         if isfield(conv, 'contrast')
@@ -7406,7 +7511,8 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             if contrast_max <= contrast_min
                 contrast_max = contrast_min +1; 
             end 
-            
+           
+
             v = version('-release'); v(end) = []; v = str2double(v);
             if v < 2023
                 caxis(tgui.himg{tab_index_cell{:}},...
@@ -7417,6 +7523,8 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
             end
         end
         colormap(gray(255));
+        
+        end
     end
 
 
@@ -7863,6 +7971,7 @@ ori.res       = str2double(strsplit(uans{1},' '));
 ori.offcenter = str2double(strsplit(uans{2},' '));
 ori.shift     = str2double(strsplit(uans{3},' '));
 ori.shiftCorrection = str2double(strsplit(uans{4}));
+ori.voxShiftCorrection = str2double(strsplit(uans{5}));
 
 % Dimensions of data  [AP LR FH]
 ori.dim       = csi.data.dim(space_dim); % in [X Y Z] == [C R S]
@@ -11414,7 +11523,7 @@ csi = getappdata(CSImain_obj, 'csi');
 uans = getUserInput_Popup({'Apply phasing to: '},...
                          {{'Full volume', 'Current slice'}});
 if uans{1} == 0, return; end
-if strcmp(uans{1}, 'Full volume'), vol_or_sli = 0;
+if strcmpi(uans{1}, 'Full volume'), vol_or_sli = 0;
 else, vol_or_sli = 1;
 end
 % vol_or_sli = 0 for volume and vol_or_sli = 1 for slice.
@@ -11455,12 +11564,15 @@ elseif vol_or_sli == 1
     end
     
     % Add zero order phase correction
-    pha_new = pha(dims_range{:}) + appdata1D.phasing.zero;
+    pha_new_cut = pha(dims_range{:}) + appdata1D.phasing.zero;
     % Add first order phase correction
-    pha_new = pha_new + appdata1D.phasing.first;
+    pha_new_cut = pha_new_cut + appdata1D.phasing.first;
     
+    pha_new = pha;
+    pha_new(dims_range{:}) = pha_new_cut;
+
     log_msg = ...
-        'Applied the phase correction to current slice.';
+        'Applied phase correction to current slice.';
 end
 
 % Create complex data
@@ -12623,39 +12735,44 @@ function [csi, hobj, gui] = CSI_Noise_Prepare(hobj, gui)
 % process the data automatically.
 
 % Apodization | FFT | Delete Channel
-uans_noise = getUserInput_Popup(...
-    {'Delete a channel from noise-data:', 'Average noise', ...
-     'Apodize noise:', 'FFT noise:', }, ...
-    {{'Yes', 'No'}, {'No', 'Yes'}, {'Yes','No'}, {'Yes','No'}});
-if isempty(uans_noise)
+qry = {'Process noise data:', 'Delete a channel from noise-data:', ...
+       'Average noise', 'Apodize noise:', 'FFT noise:', };
+opt = repmat({{'Yes', 'No'}}, size(qry));
+dans = ones(1,size(qry,2)); dans(3) = 0; 
+uans = getUserInput_Tick(qry, opt, 'Noise Preparation', dans);
+if isempty(uans)
     CSI_Log({'Noise Preperation:'},{'Aborted.'}); csi = NaN; return; 
 end
+
+
+% UANS 1: process noise data?
+if uans(1) == 0, csi = getappdata(gui.CSIgui_main,'csi'); return; end
 
 % Process noise by setting it as active data set    
 CSIgui_Noise_ViewManager(hobj, [], []);
 
 % Noise - Delete channel
-if strcmp(uans_noise{1}, 'Yes')
+if uans(2)
     button_CSI_Delete_Callback([],[],gui, 1);
     gui = guidata(hobj);
 end
 
 % Noise - Average
-if strcmp(uans_noise{2}, 'Yes')
+if uans(3)
     % Apodize
     button_CSI_Average_Callback([],[], gui, 0);
     gui = guidata(hobj);
 end
 
 % Noise - Apodization
-if strcmp(uans_noise{3}, 'Yes')
+if uans(4)
     % Apodize
     button_CSI_Apodization_FID_Callback([],[],gui,0);
     gui = guidata(hobj);
 end
 
 % Noise - FFT
-if strcmp(uans_noise{4}, 'Yes')
+if uans(5)
     button_CSI_FFT_Callback([], [], gui, 0);
     gui = guidata(hobj);
 end
@@ -16085,3 +16202,175 @@ setappdata(gui.CSIgui_main,'csi', csi);
 
 CSI_Log({'Loaded noise-data into memory:'},{[fn ext]});
 CSI_Log({'Use noise-options in the MRSI menubar to view.'},{''});
+
+
+% --- Executes on button press in button_CSI_PCA_Denoising.
+function button_CSI_PCA_Denoising_Callback(hobj, ~, gui)
+% Apply PCA denoising according to:
+% PCA denoising, Froeling et. al. doi.org/10.1002/mrm.28654
+% Denoising, Veraart et. al. 10.1016/j.neuroimage.2016.08.016
+
+
+% Create backup
+CSI_backupSet(gui, 'Before PCA Denoising.');
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+
+% User Input % ------------------------------------------------------- %
+psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
+qry = {'Apply noise decorrelation: ', ...
+       'Calculate noise-covariance matrix for decorrelation using:', ...
+       'PCA patch-size:', 'PCA SVD-method:'};
+opt = {{'Yes','No'},  {'Measurement', 'Data'}, {psz_def},...
+       {'Fast', 'Default'}};
+uans = getUserInput_Popup(qry, opt);
+if isempty(uans), CSI_Log({'PCA Denoising cancelled'},{''}); return; end
+
+% Process user input % 
+    
+% uans{1} - Noise decorrelation
+if strcmp(uans{1},'Yes'), do_NoiseDecorrelation = 1; 
+else, do_NoiseDecorrelation = 0; end
+
+% uans{2} - nCov using noise measurement or data
+if strcmp(uans{2},'Measurement'), do_NoiseData = 1; 
+else, do_NoiseData = 0; end 
+
+% uans{3} - Patch size
+patch_size = str2double(uans{3});
+
+% uans{4} - SVD method for PCA denoising
+if strcmp(uans{4},'Default'), do_svd = 0; else, do_svd = 1; end 
+
+
+% Channel Index
+chan_ind = csi_findDimLabel(csi.data.labels,{'chan'});
+
+% Dimensions
+sz = size(csi.data.raw); 
+
+% Prepare Noise Data % ----------------------------------------------- %
+if do_NoiseData
+    if isfield(csi.data,'noise')
+        % Run noise-prepare fcn
+        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
+        if ~isstruct(csi), CSI_Log({'PCA:'}, {'Aborted.'}); return; end
+
+        % Message to user
+        CSI_Log({'PCA:'},{'Noise-data processed and stored.'});  
+    else
+        do_NoiseData = 0; 
+        CSI_Log({'PCA: No noise-data present,'},...
+                {'using a noise-mask per voxel instead.'});
+    end
+end
+
+% Decorrelate Noise % ------------------------------------------------ %
+if do_NoiseDecorrelation 
+    if isfield(csi.data, 'noise') && do_NoiseData
+        
+        % Get noise-cov using noise data
+        noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
+                                              csi.data.noise.labels);
+
+        % Copy it for nVoxels
+        non_spat_ind = ...
+            csi_findDimLabel(csi.data.labels,...
+            {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
+        non_spat_ind(isnan(non_spat_ind)) = []; 
+        non_spat_ind(non_spat_ind > numel(sz)) = [];
+        sz(non_spat_ind) = [];
+
+        % Covariance matrix
+        noise_cov = repmat({noise_cov}, sz);
+    
+        % NFO Update
+        CSI_Log({'PCA: Noise-data used to calculate'},...
+                    {'noise-covariance matrix for noise decorrelation.'});
+    else
+        % Noise covariance matrix required for noise-decorrelation
+        % calculated using noise in data itself.
+        noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
+        CSI_Log({'PCA: Voxel-data used to calculate'},...
+                {'noise-covariance matrices for noise decorrelation.'});
+    end
+
+    % Decorrelate signal (Cholensky)
+    [csi.data.raw, noise_cov_chol] = ...
+        csi_decorrelate_noise(csi.data.raw, chan_ind, noise_cov);
+    CSI_Log({'PCA:'},{'Decorrelated noise via Cholenky-decomposition'});
+end
+
+
+% PCA Denoising % ---------------------------------------------------- %
+
+tic
+% Principle Component Analysis - Denoising
+CSI_Log({'PCA: Applying PCA-denoising. Patch size:'},{patch_size});
+CSI_Log({'PCA: SVD-Method,'},{uans{4}});
+CSI_Log({'PCA:'},{'Starting a parallel pool of workers.'});
+csi.data.raw = ...
+    csi_pca_denoising(csi.data.raw, chan_ind, patch_size, do_svd);
+dt = toc;
+CSI_Log({'PCA: Denoising finished. Duration:'} , {dt} );
+
+
+% Clean Up % --------------------------------------------------------- %
+setappdata(gui.CSIgui_main, 'csi', csi);
+
+% Output
+CSI_Log({'PCA: Done.'},{''});
+
+% --- Executes on button press in button_CSI_Fieldmap.
+function button_CSI_Fieldmap_Callback(hobj, ~, gui)
+% Calculate and show fieldmaps
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Preperation of data % ---------------------------------------------- %
+
+% Channel Index
+chan_ind = csi_findDimLabel(csi.data.labels,{'chan'});
+
+% iFFT to FID
+if strcmp(CSI_getDomain(gui), 'freq')
+    CSI_Log({'Fieldmaps:'},{'Converting data to time domain (iFFT).'});
+    fid = csi_ifft(csi.data.raw);
+else
+    fid = csi.data.raw;
+end
+
+% Sensitivity Maps % -------------------------------------------------- %
+[sens_maps, permv, szr]  = CSI_Sensitivity_Maps(fid, chan_ind);
+CSI_Log({'Fieldmaps'},{'Calculated.'});
+
+% Reshape the data
+szr(1) = 1; szr(2) = 1;  sens_maps = reshape(sens_maps, szr); 
+
+% Undo cell
+sens_maps = cell2mat(sens_maps);
+
+% Create undo-permute-permute-vector
+nindex = numel(permv); restore_permv = NaN(1,nindex);
+for kk = 1:nindex, restore_permv(kk) = find(kk == permv); end
+
+% Permute the data
+sens_maps = permute(sens_maps, restore_permv);
+
+% Display % ------------------------------------------------------------ %
+
+% Output
+CSI_Log({'Displaying fieldmaps.'},{''});
+
+CSI_dataAs_Initiate(real(sens_maps), 'Fieldmaps (Real)', gui,...
+    csi.data.labels)
+
+CSI_dataAs_Initiate(abs(sens_maps), 'Fieldmaps (Abs)', gui,...
+    csi.data.labels)
+
+
