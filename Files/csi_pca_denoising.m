@@ -76,7 +76,7 @@ end
 tic
 % Loop over each channel (chi) % --------------------------------------- %
 nS = dim(1);
-for chi = 1:dim(chan_ind)                % PARALLEL LOOP %
+parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
 % for chi = 1:dim(chan_ind)
     data_single_chan = spec(:,:,chi);
     data_single_chan_denoised = zeros(size(data_single_chan));
@@ -92,9 +92,9 @@ for chi = 1:dim(chan_ind)                % PARALLEL LOOP %
         
         % -------------------------------- %
 
-        if chi == 8 && vi == (47 + 4*14*8)
-            disp('');
-        end
+        % if chi == 17 && vi == (3*16)+9 + (7*(16*9))
+        %      disp('');
+        % end
 
         % Get the local-voxels neighbourhood around voxel vi
         nbh = data_single_chan(:,lin_nbh);
@@ -109,22 +109,17 @@ for chi = 1:dim(chan_ind)                % PARALLEL LOOP %
         % As a seperate function, needs the voxels in the local-volume.
         denoised_patch = ...
             csi_pca_denoising_marchenko_pastur(vox_patch, svd_method);
-
-% SOMETHING IN MP CAUSES THE FID DIRECTION TO FLIP... :/
-
         % ---
 
         % Back to complex
-        denoised_patch = complex(denoised_patch(:,1:nS),...
-                                 denoised_patch(:,nS+1:end))';
+        denoised_patch = complex(denoised_patch(:,1:nS)',...
+                                 denoised_patch(:,nS+1:end)');
 
         % Summate the denoised data
         data_single_chan_denoised(:,lin_nbh) = ...
             data_single_chan_denoised(:,lin_nbh) + denoised_patch;
     end
     
-
-    % fid = conj(csi_ifft(data_single_chan_denoised./(psz.^3)))
     
     % Average and store denoised-data for this channel.
     spec(:,:,chi) = (data_single_chan_denoised ./ (psz.^3));
@@ -132,7 +127,7 @@ end
 dt = toc; fprintf('PCA duration without parallel pool startup: %fs\n', dt);
 
 % Correct conjugate change of spec-fid
-spec = csi_fft(conj(csi_ifft(spec)));
+% spec = csi_fft(conj(csi_ifft(spec)));
 
 % Undo Reshape and Permute % ------------------------------------------- %
 

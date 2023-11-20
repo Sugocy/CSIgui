@@ -3,10 +3,10 @@ function [spec, phase_change] = csi_autoZeroPhase(spec, poi, method, disp_on)
 % The peak of interest can be described by a range or a single point. 
 %
 % Input:    spectrum, range, method(1|2), display results
-% Output:   spectrum phase
+% Output:   spectrum phased, phase changes
 %
-% Method 1: maximize the real component of the spectrum (default)
-% Method 2: match the real component to the spectrums maximum magnitude
+% Method 1: maximize the real component of the spectrum (default = 1) 
+% Method 2: match the real component to the spectrums maximum magnitude (2)
 %
 %
 % quincyvanhoutum@gmail.com

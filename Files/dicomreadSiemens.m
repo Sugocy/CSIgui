@@ -19,6 +19,7 @@ if nargin == 0
                     'Select one or multiple dicom files.',...
                     'MultiSelect', 'on');
     if id == 0, return; end    
+    fn = {fn};
 elseif nargin == 1 % Only file-path to file
     [fp, fn, ext] = fileparts(varargin{1}); 
     fn = {[fn ext]};    

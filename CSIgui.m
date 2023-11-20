@@ -472,7 +472,8 @@ while size(unique(order),2) ~= size(fn,2)
         numbers{nf} = strsplit(num2str(tmp));
     end
     uans = getUserInput_Popup(fn, numbers,...
-           [gui.colors.main; gui.colors.text_main], 'Set load order.');
+           [gui.colors.main; gui.colors.text_main], 'Set load order.',...
+           [], 'Load Data');
     if isempty(uans{1}), order = 1:size(fn,2); break; end
     order = str2double(uans);
     
@@ -570,6 +571,9 @@ switch ext
         % Meta-data
         csi.ext = 'dat'; csi.filename = strjoin(fn, ' | '); % Save filename
         
+        % Filename
+        csi.filepath = fp;
+
         % Save CSI data in app-data
         setappdata(gui.CSIgui_main,'csi',csi);  
 
@@ -639,7 +643,6 @@ if ~isfield(gui, 'inp')
     % MULTIPLE FILES
     if iscell(fn)
 
-        fn_tmp = fn;
         [~,fn,ext] = cellfun(@(x,y) fileparts([x y]),...
             repmat({fp},1,size(fn,2)),fn,'UniformOutput', 0);
         ext = cellfun(@lower,ext, 'UniformOutput', 0);
@@ -1328,7 +1331,7 @@ switch ext
         % files into memory.
         qry = 'Load single file or all files from image directory: ';
         def = {'All','Single'};
-        uans = getUserInput_Popup({qry},{def});
+        uans = getUserInput_Popup({qry},{def}, [], 'Load DICOM');
         if isempty(uans), success = 0; return; end
         if strcmpi(uans{1},'all')
             % get all files.
@@ -1662,7 +1665,7 @@ web('https://github.com/Sugocy/CSIgui', '-browser');
 % ---------------------------------------------------------------------- %
 
 % -. Opens UI to get user input
-function userInput = getUserInput(question, defans, clrs)
+function userInput = getUserInput(question, defans, clrs, fig_title)
 % Opens up a menu for user to input data.
 % question: cell with each required user input
 % defans  : default answers.
@@ -1672,7 +1675,7 @@ function userInput = getUserInput(question, defans, clrs)
 
 % If no color input is present, use default dark theme or get from main 
 % app.
-if nargin == 2
+if nargin == 2 || isempty(clrs)
     csi_obj = findobj('type','figure','Tag','CSIgui_main');
     if isempty(csi_obj)
         clrs = [0.000 0.000 0.000; 0.941 0.941 0.941]; 
@@ -1682,12 +1685,16 @@ if nargin == 2
     end
 end
 
+if nargin < 4, fig_title = 'CSIgui - UserInput';
+else, fig_title = ['CSIgui - ' fig_title];
+end
+
 % --------------------- % Set GUI details
 
 % Create sub-figure
 fig_userinp = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
                      'NumberTitle', 'Off', 'Color', clrs(1,:),...
-                     'Name','CSIgui - UserInput','Tag', 'CSIgui_UI_edits'); 
+                     'Name',fig_title,'Tag', 'CSIgui_UI_edits'); 
 subdat      = guidata(fig_userinp); axis off;
 
 % Number of questions to ask user.
@@ -1936,7 +1943,7 @@ gui = guidata(hobj.Parent);
 % Set other tick-box of this query to opposite value
 gui.h_tick{tick_tag(1), abs(tick_tag(2)-1)+1}.Value = abs(hobj.Value-1);
 
-% -. Executed by button in getUserInput_Popup to save answer
+% -. Executed by button in getUserInput_Tick to save answer
 function getUserInput_Tick_setOutput(hObject,~,~)
 % When user closes, skips or continues the getUserInput dlg.
 
@@ -1973,10 +1980,12 @@ uiresume(subobj);
 function userInput = getUserInput_Popup(popup_title, popup_input, clrs, fig_title)
 % Create a simple gui with dropdown e.g. popup menu to choose certain 
 % options.
+%
+% Colors can be kept empty to set figure title.
 
 % If no color input is present, use default dark theme or get from main 
 % app.
-if nargin == 2
+if nargin == 2 || isempty(clrs)
     csi_obj = findobj('type','figure','Tag','CSIgui_main');
     if isempty(csi_obj)
         clrs = [0.000 0.000 0.000; 0.941 0.941 0.941]; 
@@ -2111,14 +2120,14 @@ uiresume(subobj);
 % ---------------------------------------------------------------------- %
 
 % -. Opens UI with popup menu's to get user input
-function userInput = getUserInput_Buttons(qst, button_text, clrs)
+function userInput = getUserInput_Buttons(qst, button_text, clrs, fig_title)
 % Create a simple gui with two buttons to choose between two options.
 % qst:          One strin/char array for the question.
 % Button text:  Two string/char arrays for both buttons.
 
 % If no color input is present, use default dark theme or get from main 
 % app.
-if nargin == 2
+if nargin < 3 || isempty(clrs)
     csi_obj = findobj('type','figure','Tag','CSIgui_main');
     if isempty(csi_obj)
         clrs = [0.000 0.000 0.000; 0.941 0.941 0.941]; 
@@ -2128,12 +2137,15 @@ if nargin == 2
     end
 end
 
+if nargin < 3, fig_title = 'CSIgui - UserInput';
+else,          fig_title = 'CSIgui - ' + fig_title;
+end
 % --------------------- % Set GUI details
 
 % Create sub-figure
 fig_userinp = figure('ToolBar','None','Menubar','None','Unit','Pixels',...
                      'NumberTitle', 'Off', 'Color', clrs(1,:),...
-                     'Name','CSIgui - UserInput','Tag', 'CSIgui_UI_button'); 
+                     'Name',fig_title ,'Tag', 'CSIgui_UI_button'); 
 subdat = guidata(fig_userinp); axis off;
 
 % Total size of figure.
@@ -2199,7 +2211,7 @@ else
     userInput = [];
 end
 
-% -. Executed by button in getUserInput_Popup to save answer
+% -. Executed by button in getUserInput_Button to save answer
 function getUserInput_Buttons_setOutput(hObject,~,~)
 % When user closes, skips or continues the getUserInput dlg.
 
@@ -2490,7 +2502,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 quest = {'Specify the spatial FFT method, use automatic if unknown:'};
 defan = {{'Automatic', 'Circular shift', 'FFT shift'}};
-uans = getUserInput_Popup(quest,defan);
+uans = getUserInput_Popup(quest, defan, [], 'Spatial FFT');
 if isempty(uans), return; end
 
 % Set option
@@ -2560,7 +2572,10 @@ domain = CSI_getDomain(gui);
 if strcmp(domain, 'freq')
     CSI_Log({'MRS data is in frequency domain; '},...
             {'change it to time domain to apply forward FFT.'});
-    return;
+    qry = {'MRS-data is in frequency domain, apply FFT or abort?'};
+    uans = ...
+    getUserInput_Buttons(qry,{'Continue', 'Abort'});
+    if isempty(uans) || strcmp(uans, 'Abort'); return; end
 end 
 
 % Create backup
@@ -2577,7 +2592,7 @@ uans = getUserInput_Popup(...
            {'Correct for N term?',...
             'Correct for onesided fft in spectroscopy?',...
             'Shift before and after FFT? (Echo)'},...
-           {{'No','Yes'},{'Yes','No'},{'No','Yes'}});
+           {{'No','Yes'},{'Yes','No'},{'No','Yes'}},[],'FFT');
 if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 
 if strcmpi(uans{1},'yes'), correct_N = 1; else, correct_N = 0; end
@@ -2612,7 +2627,10 @@ domain = CSI_getDomain(gui);
 if strcmp(domain, 'time')
     CSI_Log({'MRS data is in time domain; '},...
             {'change to frequency domain to apply backward FFT.'});
-    return;
+    qry = {'MRS-data is in time domain, apply iFFT or abort?'};
+    uans = ...
+    getUserInput_Buttons(qry,{'Continue', 'Abort'});
+    if isempty(uans) || strcmp(uans, 'Abort'); return; end
 end 
 
 % Create backup
@@ -2626,7 +2644,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 uans = getUserInput_Popup(...
            {'Correct for onesided fft in spectroscopy?'},...
-           {{'Yes','No'}});
+           {{'Yes','No'}}, [], 'iFFT');
 if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 if strcmpi(uans{1},'yes'), onesided = 1;  else, onesided = 0; end
 
@@ -2687,7 +2705,7 @@ end
 uans = getUserInput_Popup({'Apodization filter-window:',...
                            'Show filter?'},...
                           {{'Hamming', 'Hann', 'Blackman','Flattop'},...
-                           {'No','Yes'}});
+                           {'No','Yes'}}, [] ,'K-space Apodization');
 if isempty(uans), CSI_Log({'Skipped Apodization.'},{''}); return; end
 
 % Selected type
@@ -2746,10 +2764,10 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % USER INPUT % ---------------------------------- %
 
 % Get filter to apply.
-quest = {'Filter algorithm:', 'FID or Echo:'};
+quest = {'Filter algorithm:', 'FID or Echo:', 'Flip window:'};
 defan = {{'Gaussian', 'Hamming','Hann', 'Exponential','Blackman',...
-          'Flattop', 'Sinebell'}, {'FID','Echo'}};
-uanstype = getUserInput_Popup(quest,defan);
+          'Flattop', 'Sinebell'}, {'FID','Echo'},{'No','Yes'}};
+uanstype = getUserInput_Popup(quest,defan,[], 'Apodization');
 if isempty(uanstype), CSI_Log({'Skipped apodization.'},{''}); return; end
 
 % Get options for specific algorithms
@@ -2788,6 +2806,9 @@ end
 % Set FID or Echo options
 if strcmp(uanstype{2},'FID'), opts(2) = 1; else, opts(2) = 2; end
 
+% Flip window
+if strcmp(uanstype{3},'Yes'), opts(3) = 1; else, opts(3) = 0; end
+
 % APPLY FILTER % ---------------------------------- %
 
 
@@ -2819,7 +2840,7 @@ function CSI_Normalize(gui)
 uans = getUserInput_Popup({'Normalize by: ','', 'Use component: '},...
     {{'Maximum','Peak','Noise','Value'},...
      {'per voxel','in volume'},...
-     {'Real','Imaginary'}});
+     {'Real','Imaginary'}},[],'Normalize');
 if isempty(uans), CSI_Log({'Skipped normalize data.'},{''}); return; 
 end  
 
@@ -2981,6 +3002,12 @@ fsz = size(data,1);
 window = CSI_filter(fsz, ftype, opts);
 if isnan(window), CSI_Log({'Cancelled apodization.'},{''}); return; end
 
+if size(opts,2) > 2
+    if opts(3) == 1
+        window = flip(window,1);
+    end
+end
+
 % Rearrange data to cell 
 sz = size(data); 
 cell_layout = ...
@@ -3071,7 +3098,8 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % Userinput % --------------------------------- %
 uans = getUserInput_Popup({'Save line width data (.txt): ',...
                            'Use FWHM method: (BETA)'},...
-                         {{'No','Yes'},  {'Intersect','Local minima'}});
+                         {{'No','Yes'},  {'Intersect','Local minima'}},...
+                         [], 'FWHM');
 if isempty(uans)
     CSI_Log({'Skipped linewidth calculations.'},{''}); return; 
 end
@@ -3193,18 +3221,13 @@ CSI_backupSet(gui, 'Before ISIS recon.')
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-% % % % % THIS IS OLD - NEEDS CLEAN UP --- QH 2020/10/12
-schemes = flipud({[1,1];... 
-                  [1,1,1,1];... 
-                  [1,1,1,1,1,1,1,1]});
-
-uans = getUserInput_Popup({'Cycle dimension: '},{csi.data.labels(2:end)});
+uans = getUserInput_Popup({'Cycle dimension: '},{csi.data.labels(2:end)},...
+    [], 'ISIS');
 if isempty(uans), CSI_Log({'Skipped ISIS'},{''}); return;  end
 
 % Add/Subtr scheme of ISIS data
 udimstr = uans{1}; udim = csi_findDimLabel(csi.data.labels, {udimstr});
 udimsz = size(csi.data.raw, udim); soi = ones(1, udimsz);
-
 
 % Go nuts and add/subtract according to chosen scheme over the dimension
 % called udimstr at index udim.
@@ -3231,7 +3254,6 @@ for kk = 1:sz(udim)
        outp = outp - data(kk,misc_index{:});
     end  
 end
-
  
 % Permute to original index
 data = ipermute(outp,pvec);
@@ -3580,7 +3602,7 @@ data_max = max(data,[],1);
 
 % CALCULATE T1/VOXEL/SLICE % ------------------------------------------- %
 % NB: other dimensions besides the TR-index (5) are ignored.
-T1 = struct;
+
 CSI_Log({'Calculating T1 for each voxel and slice.'},...
                {'Please be patient.'});
 for sli = 1:size(data_max,3)
@@ -3773,7 +3795,8 @@ end
 TEinit = str2double(uans{2}); TEstep = str2double(uans{1});
 
 % IMAGE PLOT % --- %
-uans = getUserInput_Popup({'Plot Images: '},{{'Yes','No'}});
+uans = getUserInput_Popup({'Plot Images: '},{{'Yes','No'}},...
+    [], 'T2-map');
 if isempty(uans), CSI_Log({'Skipped T2 calculations.'},{''}); return; end
 switch uans{1}, case 'Yes', imgPlot = 1; case 'No', imgPlot = 0; end
 
@@ -3788,7 +3811,7 @@ combine_fe = 0;
 if isfield(csi.data,'split')
     % From user: Calculate using FID and echoes?
     uans = getUserInput_Popup({'Use both FID and Echo data?'},...
-        {{'Yes', 'No'}});
+        {{'Yes', 'No'}}, [] , 'T2-map');
     if isempty(uans)
         CSI_Log({'Skipped splitting FID & Echo.'},{''}) ; return; 
     end
@@ -3974,14 +3997,15 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % USER INPUT % ------------------------- %
 
 uans = getUserInput({'Requested #samples after zero filling: '},...
-                    {size(csi.data.raw,1).*2});
+                    {size(csi.data.raw,1).*2}, [], 'Zerofill');
 if isempty(uans), CSI_Log({'Skipped zero filling.'},{''}) ; return; end
 
 % Convert to length after zero filling.
 N = str2double(uans{1});
 
 % Get zerofill direction from FID/Echo e.g post/both
-uans = getUserInput_Popup({'FID or Echo: (Post/Both)'},{{'FID','Echo'}});
+uans = getUserInput_Popup({'FID or Echo: (Post/Both)'},{{'FID','Echo'}},...
+    [], 'Zerofill');
 if isempty(uans), CSI_Log({'Skipped zero filling.'},{''}) ; return; end
 
 switch uans{1} % Direction for zerofilling of fids or echoes
@@ -4023,12 +4047,162 @@ function button_CSI_AutoPhase_Callback(~, ~, gui,backup)
 % Apply zero order phase correction to all voxels in the data set.
 if nargin < 4, backup = 1; end
 
-% BACKUP + APPDATA % ---------------------------- %
+
+% USER INPUT % ---------------------------------- %
+
+% Zeroth or First order corrections:
+uans = getUserInput_Popup({'Phase corrections for: '},...
+                          {{'Zeroth-order', 'First-order', 'Both'}},[],...
+                          'Phase Corrections');
+if isempty(uans), CSI_Log({'Aborted phase-corrections.'},{''}); return; end
 
 
+switch uans{1}
+    case 'Zeroth-order'
+        CSI_AutoPhase_Zero([],[], gui, backup);
+    case 'First-order'
+        CSI_AutoPhase_First([], [], gui, backup);
+    case 'Both'
+        CSI_AutoPhase_Zero([],[], gui, backup);
+        CSI_AutoPhase_First([],[], gui, backup);
+end
+
+
+% --- Executes via button_CSI_AutoPhase.
+function CSI_AutoPhase_First(~, ~, gui, backup)
+% Automatic first-order phasing
+
+% BACKUP + APPDATA % ------------------------------------------------- %
 
 % Create backup
-if backup, CSI_backupSet(gui, 'Before auto phase correction.'); end
+if backup, CSI_backupSet(gui, 'Before first-order auto-phase corrections.'); end
+
+% Get app data
+if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% USER INPUT % ------------------------------------------------------- %
+
+
+uans = getUserInput_Tick(...
+    {'Apply additional zeroth-order corrections afterwards: ',...
+     'Accuracy: ', 'Parallel Computing:'},...
+    {{'Yes', 'No'},...
+     {'Default','Custom'}, {'Yes', 'No'}},...
+     'First-order phase corrections',[1, 1, 0]);
+if isempty(uans)
+    CSI_Log({'Aborted first-order phase corrections.'},{''});
+    return; 
+end
+
+if uans(2), acc = 4e-2; 
+else
+    uans_acc = getUserInput(...
+        {'First-order phase correction accuracy:'},{'3e-2'});
+    if isempty(uans_acc)
+        CSI_Log({'Aborted first-order phase corrections.'},{''});
+        return;
+    end
+    acc = str2double(uans_acc{1}); 
+end
+do_zero = uans(1);
+do_parallel = uans(3);
+
+
+% CORRECT DATA-DOMAIN (I/II) % ----------------------------------------- %
+
+% Correct data domain (I/II)
+domain = CSI_getDomain(gui);  
+
+% Correct domain if possible
+if strcmp(domain, 'time')
+    CSI_Log({[ 'MRS data is in time domain; Autophase method requires ',...
+   'frequency domain data. Converting to time domain and back, use backup',...
+   '(ctrl+z) to undo.'] },{''});
+    % FFT from time to frequency domain.
+    csi.data.raw = csi_fft(csi.data.raw); 
+end
+
+% AUTO-PHASING % ------------------------------------------------------ %
+
+% MRSI data to cell format
+sz = size(csi.data.raw); 
+cell_layout = arrayfun(@ones,...
+    ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+cell_mrsi = mat2cell(csi.data.raw, sz(1), cell_layout{:});
+
+CSI_Log({'Calculating first-order phase corrections.'},{''});
+
+% Use cell-fun
+if ~do_parallel
+    
+    tic
+    % Apply auto zerophase to each cell
+    [cell_mrsi, cell_phase_change, cell_phase_change_zero] = ...
+    cellfun(@csi_autoFirstPhase, ...
+                cell_mrsi, ...                              % data
+                repmat({do_zero}, size(cell_mrsi)),...      % method
+                repmat({acc},      size(cell_mrsi)),...     % accuracy
+                repmat({0},size(cell_mrsi)),...             % display
+                'UniformOutput', 0);  
+    dt = toc;
+    
+    % MRSI data to array        
+    csi.data.raw = cell2mat(cell_mrsi);
+end
+
+% Use parallel computing
+if do_parallel
+    
+    % Reshape data to {nDim x nChan} x nVox
+    sz = size(cell_mrsi);
+    cell_mrsi = reshape(cell_mrsi,[],1);
+
+    p = gcp('nocreate'); 
+    if isempty(p)
+        nCores = feature('numcores');
+        parpool('Processes', nCores);
+    end
+
+    tic
+    parfor vi = 1:size(cell_mrsi,1)
+        cell_mrsi{vi} = csi_autoFirstPhase(cell_mrsi{vi},...
+                                           do_zero, acc, 0);
+    end
+    dt = toc;
+
+    % Undo list-shape
+    cell_mrsi = reshape(cell_mrsi, sz);
+    
+    % MRSI data to array        
+    csi.data.raw = cell2mat(cell_mrsi);
+end
+
+% CORRECT DATA-DOMAIN (II/II) % ---------------------------------------- %
+
+% Convert to starting data domain (II/II)
+if strcmp(domain,'time'), csi.data.raw = csi_ifft(csi.data.raw); end
+
+% SAVE AND CLEANUP % -------------------------------------------------- %
+
+% Save
+setappdata(gui.CSIgui_main,'csi',csi);
+
+% Update info to user.
+if do_zero, uans = {'Yes'}; else, uans = {'No'}; end
+CSI_Log({'Applied automatic first-order phase corrections. Accuracy: '},{acc});
+CSI_Log({'Included additional zeroth-order phase corrections:'}, uans);
+CSI_Log({'Elapsed time:'},{dt});
+
+
+% --- Executes via button_CSI_AutoPhase.
+function CSI_AutoPhase_Zero(~, ~, gui, backup)
+% Automatic zeroth-order phasing
+
+% BACKUP + APPDATA % ---------------------------- %
+
+% Create backup
+if backup, CSI_backupSet(gui, 'Before zeroth-order auto-phase correction.'); end
 
 % Get app data
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
@@ -4042,10 +4216,11 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 if isempty(poi), return; end
 
 % Get method of auto-phasing
-uans = getUserInput_Popup({'Auto phasing method:'},...
-    {{    'Match real part to maximum absolute signal.',...
-          'Maximize real part of signal.',...
-          'Correct for TE delay in FID by shift.'}});   
+qry = {'Automatic zeroth-order phase correction method:'}; 
+def = {'Match real part to maximum absolute signal.',...
+       'Maximize real part of signal.',...
+       'Correct for TE delay in FID by shift.'}; 
+uans = getUserInput_Popup(qry, {def}, [], 'Phase corrections');   
 if isempty(uans), CSI_Log({'Skipped zero-phasing.'},{''}) ; return; end
 
 switch uans{1}
@@ -4066,13 +4241,13 @@ domain = CSI_getDomain(gui);  % THIS DOES NOT UPDATE
 % Correct domain if possible
 if (phase_method == 3) && strcmp(domain,'freq')
     CSI_Log({['MRS data is in frequency domain; Autophase method requires '...
-             'time domain data. Converting to time domain and back, use backup'...
-             '(ctrl+z) to undo. ']},{''});
+     'time domain data. Converting to time domain and back, use backup'...
+     '(ctrl+z) to undo. ']},{''});
     csi.data.raw = csi_ifft(csi.data.raw); 
 elseif strcmp(domain,'time') && (phase_method ~= 3)
     CSI_Log({[ 'MRS data is in time domain; Autophase method requires ',...
-               'frequency domain data. Converting to time domain and back, use backup',...
-               '(ctrl+z) to undo.'] },{''});
+     'frequency domain data. Converting to time domain and back, use backup',...
+     '(ctrl+z) to undo.'] },{''});
          
     csi.data.raw = csi_fft(csi.data.raw); 
 end
@@ -4120,12 +4295,12 @@ end
 setappdata(gui.CSIgui_main,'csi',csi);
 
 % Update info to user.
-CSI_Log({'Applied automatic zero order phase correction:'},uans);
+CSI_Log({'Applied automatic zero-order phase corrections:'}, uans);
 
 % --- Executes on button press phase-correction by shift of fid.
-function new = CSI_shift_phasing(data,shift_index)
+function new = CSI_shift_phasing(data, shift_index)
 new = zeros(size(data,1),1);
-new(1:(size(data,1)-shift_index+1))= data(shift_index:end); 
+new(1:(size(data,1) - shift_index+1))= data(shift_index:end); 
 
 % --- Executes on button press in button_CSI_Flip.
 function button_CSI_Flip_Callback(~, ~, gui)
@@ -4315,7 +4490,8 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 
 % Get user input for coil-combination method.
 methods = {'Roemer', 'WSVD', 'SNR Weighted', 'Manual', 'WSVD - Static'};
-uans = getUserInput_Popup({'Coil combination method:'},{methods});
+uans = getUserInput_Popup({'Coil combination method:'},{methods},...
+                          [], 'Coil Weighting');
 if isempty(uans), return; end
 
 
@@ -4372,7 +4548,7 @@ qry = {'Apply noise decorrelation: ', ...
 opt = {{'Yes','No'},  {'Measurement', 'Data'}, {'Yes','No'}, {psz_def},...
        {'Default', 'Identity-matrix', 'Decorrelated'}, {'Fast', 'Default'}};
 % Ask user
-uans = getUserInput_Popup(qry,opt);
+uans = getUserInput_Popup(qry,opt, [], 'Roemer');
 if isempty(uans), CSI_Log({'Roemer:'},{'Aborted.'}); return; end
 
 % Process user input % 
@@ -4448,6 +4624,8 @@ if do_NoiseDecorrelation
         non_spat_ind(isnan(non_spat_ind)) = []; 
         non_spat_ind(non_spat_ind > numel(sz)) = [];
         sz(non_spat_ind) = [];
+
+        if isempty(sz), sz = 1; end
 
         % Covariance matrix
         noise_cov = repmat({noise_cov}, sz);
@@ -4629,10 +4807,8 @@ if ~isempty(chan_ind_avg) && ...
     % Get userinput request to average of concatenate
     uans_noise = getUserInput_Popup(...
         {'Noise covariance matrix calculations, concatenate averages:'},...
-        {{'Yes', 'No'}});
-    if isempty(uans_noise)
-        CSI_Log({'Roemer:'}, {'Aborted.'}); return; 
-    end
+        {{'Yes', 'No'}}, [], 'Noise Covariance');
+    if isempty(uans_noise), noise_cov = NaN; return; end
     
     % Concatenate or average
     if strcmp('Yes', uans_noise{1}) % Concatenate noise nsa
@@ -4844,13 +5020,14 @@ spat_dim(isnan(spat_dim)) = [];
 lab = csi.data.labels; lab([1 spat_dim]) = [];
 
 uans_dim = ...
-    getUserInput_Popup({'Dimension used to calculate weights: '},{lab});
+    getUserInput_Popup({'Dimension used to calculate weights: '},{lab},...
+    [], 'WSVD - Static');
 if isempty(uans_dim), CSI_Log({'Aborted WSVD.'},{''}); return; end
 dim_of_int = csi_findDimLabel(csi.data.labels,uans_dim);
 
 % Value ...
 uans_dim_val = getUserInput_Popup({'Index to use for weights: '},...
-    {num2cell(1:csi.data.dim(dim_of_int)) });
+    {num2cell(1:csi.data.dim(dim_of_int))}, [], 'WSVD - Static');
 if isempty(uans_dim_val), CSI_Log({'Aborted WSVD.'},{''}); return; end
 dim_of_int_val = str2double(uans_dim_val{1});
 
@@ -5144,8 +5321,8 @@ opt = {{'Measurement', 'Data'}, {'Yes','No'}, {psz_def},...
        {'Fast', 'Default'}, avg_opt, {'No', 'Yes'}};
 
 % Ask user
-uans = getUserInput_Popup(qry,opt);
-if isempty(uans), CSI_Log({'Roemer:'},{'Aborted.'}); return; end
+uans = getUserInput_Popup(qry,opt, [], 'WSVD');
+if isempty(uans), CSI_Log({'WSVD:'},{'Aborted.'}); return; end
 
 % Process user input % 
 
@@ -5173,7 +5350,7 @@ qry = {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
 opt = repmat({{'Yes', 'No'}}, size(qry));
 dans = ones(1,size(qry,2));  
 uans_disp = getUserInput_Tick(qry,opt,dans); 
-if isempty(uans_disp), CSI_Log({'Aborted WSVD.'},{''}) ; return; end
+if isempty(uans_disp), CSI_Log({'WSVD:'},{'Aborted.'}) ; return; end
 
 
 % Prepare Noise Data % ----------------------------------------------- %
@@ -5181,7 +5358,7 @@ if do_NoiseData
     if isfield(csi.data,'noise')
         % Run noise-prepare fcn
         [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
-        if ~isstruct(csi), CSI_Log({'Roemer:'}, {'Aborted.'}); return; end
+        if ~isstruct(csi), CSI_Log({'WSVD:'}, {'Aborted.'}); return; end
 
         % Message to user
         CSI_Log({'WSVD:'},{'Noise-data processed and stored.'});  
@@ -5225,7 +5402,7 @@ if do_PCA
     tic
     % Principle Component Analysis - Denoising
     CSI_Log({'WSVD: Applying PCA-denoising. Patch size:'},{patch_size});
-    CSI_Log({'WSVD: SVD-Method:'},{uans{6}});
+    CSI_Log({'WSVD: SVD-Method:'},{uans{4}});
     CSI_Log({'WSVD:'},{'Starting a parallel pool of workers.'});
     csi.data.raw = csi_pca_denoising(...
         csi.data.raw, ind_cha, patch_size, do_svd);
@@ -5238,7 +5415,10 @@ if ~exist('noise_cov', 'var') && do_NoiseData
     % Get noise-cov using noise data
     noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
                                               csi.data.noise.labels);
+    if isnan(noise_cov), CSI_Log({'WSVD:'},{'Aborted.'}); return; end
+
     noise_cov = repmat({noise_cov}, size(csi.data.raw)); 
+    
     CSI_Log({'WSVD:'},...
     {'Calculated a noise-covariance matrix for WSVD using noise-data.'});
 
@@ -5269,8 +5449,6 @@ comb.Q = zeros(nvox,1);
 comb.W = zeros(size(ch_incl,2), nvox); 
 comb.A = zeros(nvox, size(ch_incl,2)); 
 
-% nS = size(csi.data.raw, 1); half_nm_size = round(nS./6);
-% noise_mask = [1:half_nm_size nS - half_nm_size];
 
 % WSVD loop. 
 % Apply for every indices excluding the channel index: e.g. every voxel.
@@ -5338,10 +5516,9 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Display info to user
 CSI_Log({'WSVD; Channels are combined.',...
-                'WSVD; Average quality:','WSVD; Included channels:'},...
-                {'',mean(comb.Q(:)),ch_incl});   
-            % Display info to user
-CSI_Log({'WSVD; Close 2D plot before replotting!'},{''});  
+         'WSVD; Average quality:','WSVD; Included channels:'},...
+        {'',mean(comb.Q(:)),ch_incl});   
+ 
 
 
 % ------------------------------------------------------------------ %
@@ -5357,7 +5534,8 @@ function button_CSI_MaxValue_Callback(~, ~, gui)
 
 % Get option from user: per slice or in 3D.
 uans = getUserInput_Popup({'Select display of maxima option: '},...
-                         {{'Maximum per slice','Maximum in 3D'}});                     
+                         {{'Maximum per slice','Maximum in 3D'}}, [], ...
+                         'Maximum Maps');                     
 if isempty(uans), CSI_Log({'Skipped calculating data maximum.'},{''}) ; return; end                
  
 % Launch maximum function
@@ -5382,7 +5560,8 @@ csi = getappdata(gui.CSIgui_main,'csi');
 % USERINPUT % --------------------------------- %
 uans = getUserInput_Popup({'Display type: ',...
                            'Select peak: '},...
-                          {{'Map','Graph', 'Table'},{'Yes','No'}});
+                          {{'Map','Graph', 'Table'},{'Yes','No'}}, [], ...
+                          'Maximum per slice');
 if isempty(uans)
     CSI_Log({'Skipped max/slice.'},{''}) ; return; 
 end
@@ -5401,7 +5580,7 @@ combine_fe = 0;
 if isfield(csi.data,'split')
     % From user: Calculate using FID and echoes?
     uans = getUserInput_Popup({'Use both FID and Echo data?'},...
-        {{'Yes', 'No'}});
+        {{'Yes', 'No'}}, [], 'Maximum per Slice');
     if isempty(uans), CSI_Log({'Skipped max/slice.'},{''}) ; return; end
     
     % Combine fid and echo yes or no?
@@ -5474,7 +5653,8 @@ switch dataDisp
         uans = getUserInput_Popup(...
             {'Data range to show: ','Color scale range: '},...
            {{'All', 'Current slice'},...
-            {'Min to Max', 'Histogram optimized'}});                                                 
+            {'Min to Max', 'Histogram optimized'}}, [], ...
+            'Maximum per Slice');                                                 
         if isempty(uans), return; end
         labels = csi.data.labels;
         
@@ -5646,7 +5826,7 @@ mask_size = str2double(uans{1});
 
 % SNR-method (real/magnitude) and display method (table or graph)
 uans = getUserInput_Popup({'SNR Signal unit: '},...
-                         {{'Real', 'Magnitude'}});
+                         {{'Real', 'Magnitude'}}, [], 'SNR');
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 switch uans{1} % SNR method
     case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; 
@@ -5723,7 +5903,7 @@ appdat = getappdata(gui.CSIgui_main);
 assignin('base', 'appdat', appdat);
 
 % --- Executes on button press in button_Info.
-function button_Info_Callback(hObject, eventdata, gui)
+function button_Info_Callback(~, ~, gui)
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -5737,6 +5917,9 @@ csi.data.log = char(log);
 assignin('base', 'csi',csi.data);
 csi.data
 fprintf('Variable "csi" accessible from workspace.\n');
+
+% Open data-directory
+CSI_openDataDirectory(gui)
 
 % --- Executes on button press in button_CSI_Peak_Map.
 function button_CSI_Peak_Map_Callback(~, ~, gui)
@@ -5942,7 +6125,8 @@ if ~isfield(csi.data,'split')
 
     % Get FID/Echo dimension
     uansDim = getUserInput_Popup(...
-    {'Which dimension represents the FID and echoes?'},{csi.data.labels});
+    {'Which dimension represents the FID and echoes?'},{csi.data.labels},...
+    [], 'FID/ECHO');
     if isempty(uansDim), CSI_Log({'Skipped FID & Echo split.'},{''}); return; 
     end
     
@@ -5952,7 +6136,7 @@ if ~isfield(csi.data,'split')
 
     % Get FID index @ FID/Echo dimension
     uansInd = getUserInput_Popup({'Which index in this dimension is the FID?'},...
-                          {{1:dim_sz}});
+                          {{1:dim_sz}}, [], 'FID/ECHO' );
     if isempty(uansInd), CSI_Log({'Skipped FID & Echo split.'},{''}); return; 
     end
     
@@ -7970,7 +8154,7 @@ vox_cor = 1; fft_cor = 0; % Default settings.
 ori.res       = str2double(strsplit(uans{1},' '));
 ori.offcenter = str2double(strsplit(uans{2},' '));
 ori.shift     = str2double(strsplit(uans{3},' '));
-ori.shiftCorrection = str2double(strsplit(uans{4}));
+ori.flipCorrection = str2double(strsplit(uans{4}));
 ori.voxShiftCorrection = str2double(strsplit(uans{5}));
 
 % Dimensions of data  [AP LR FH]
@@ -8158,7 +8342,7 @@ function button_MRI_PlotIMG_Grid_Callback(~, ~, gui)
 MRI_plotImage_tabbed(gui);
 
 % --- Executes on button press in button_MRI_PlotIMG_inCSI.
-function button_MRI_PlotIMG_inCSI_Callback(hobj, evt, gui)
+function button_MRI_PlotIMG_inCSI_Callback(hobj, ~, ~)
 % Show image in current displayed MRS array.
 MRI_plotImage_current_CSI(hobj);
 
@@ -8223,7 +8407,7 @@ imgori.fov = imgori.dim.*imgori.res;
 % Dont use this as is the spacing between the center of each adjacent slice
 % and not the gap between two slices after adding the slicethickness. This
 % also includes any overlap of slices during acquisition.
-imgori.gap = mri.par{1}.SpacingBetweenSlices;
+% imgori.gap = mri.par{1}.SpacingBetweenSlices;
 
 
 % Process remaining ranges % -------------------------------------------- %
@@ -8752,7 +8936,8 @@ end
                    % ------ % UserInput % -------- %
 
 uans = getUserInput_Popup(...
-    {'Which images to save: '},{{'All','Converted','MRS Matching'}});
+    {'Which images to save: '},{{'All','Converted','MRS Matching'}}, [],...
+    'Save MRI');
 if isempty(uans), CSI_Log({'Skipped exporting images.'},{''}); return; end
 
 
@@ -8967,10 +9152,12 @@ function button_MRI_Delete_IMG_Data_Callback(~, ~, gui)
 % Delete MRI and CONV appdata 
 if isappdata(gui.CSIgui_main, 'mri')
     rmappdata(gui.CSIgui_main, 'mri'); 
+    gui.txt_fnIMG.String = '';
 end
 if isappdata(gui.CSIgui_main, 'conv')
     rmappdata(gui.CSIgui_main, 'conv');
 end
+
 
 
 
@@ -10258,7 +10445,12 @@ if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
     % Bandwidth (Receiver)
     dwelltime = csi.twix.Config.DwellTime;
     % nanosecond and OS correction
-    xaxis.BW = ((1/dwelltime) / csi.twix.Config.ReadOSFactor) * 10^9; 
+    OSvectorsz = csi.twix.Config.VectorSize*csi.twix.Config.ReadOSFactor;
+    if  OSvectorsz == size(csi.data.raw,1)
+        xaxis.BW = (((1/dwelltime)) * 10^9); 
+    else
+        xaxis.BW = (((1/dwelltime) / csi.twix.Config.ReadOSFactor) * 10^9); 
+    end
     
     switch xaxis.nucleus 
         case '1H',  xaxis.gyro = 42.57747892*10^6;
@@ -11442,19 +11634,124 @@ end
 function panel_1D_PhasingMethod(hObj, ~)
 % Gives the user choice to correct zeroth and first order phases manually,
 % automatic (zeroth only) or apply manual phasing to all.
+%
+% This function acts like a phase-corrections manager.
 
-uans = getUserInput_Popup({'Choose desired phasing method: '},...
-                    {{'Manual', 'Automatic', 'Phase Parts'}});
-if isempty(uans), return; end  
 
+% Manual VS. Automatic % -------------------------------------------- %
+
+% Manual or automatic phasing?
+qry = {'Automatic or manual phasing:',...
+       'Apply phase single spectrum or parts of MRS-volume:'};
+opt = {{'Automatic', 'Manual'}, {'Phase Spectrum', 'Phase Parts'}};
+uans = getUserInput_Popup(qry, opt, [], 'Phase Corrections (1D)');
+if isempty(uans), CSI_Log({'CSIgui-1D: Aborted phase corrections.'},{});
+    return;
+end
+
+% Process userinput
 switch uans{1}
     case 'Manual'
-        panel_1D_PhaseCorrection_Manual(hObj);
+        panel_1D_PhaseCorrection_Manual(hObj); 
+        do_auto = 0;
     case 'Automatic'
-        panel_1D_PhaseCorrection_Auto(hObj);
-    case 'Phase Parts'
-        panel_1D_PhaseCorrection_ApplyToAll(hObj);
+        do_auto = 1;
 end
+
+switch uans{2}
+    case 'Phase Spectrum', do_parts = 0;
+    case 'Phase Parts', do_parts = 1;
+end
+
+% Automatic phase-corrections % ------------------------------------ %
+
+% Only continue this part if automatic is chosen
+if do_auto    
+    % User input
+    qry = {'Automatic zeroth- or first- order phase corrections:'};
+    opt = {{'Both', 'Zeroth', 'First'}};
+    uans = getUserInput_Popup(qry, opt, [], 'Phase Corrections (1D)');
+    if isempty(uans), CSI_Log({'CSIgui-1D: Aborted phase corrections.'},{});
+        return;
+    end
+    
+    switch uans{1}
+        case 'Zeroth'        
+            panel_1D_PhaseCorrection_Zero_Auto(hObj);
+        case 'First'
+            panel_1D_PhaseCorrection_Auto_First(hObj);
+        case 'Both'
+            panel_1D_PhaseCorrection_Zero_Auto(hObj);
+            panel_1D_PhaseCorrection_Auto_First(hObj);
+    end
+end
+
+% Phase Parts % ---------------------------------------------------- %
+
+if do_parts
+    panel_1D_PhaseCorrection_ApplyToAll(hObj);
+end
+
+% --- Executes when user in "Phasing" -> "Automatic" & "First"
+function panel_1D_PhaseCorrection_Auto_First(hObj, ~, ~)
+% Apply automatic first-order phase corrections
+
+% PREP DATA % ------------------------------------ %
+
+% Get CSIgui 1D figure object
+obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
+% Do checks and get CSI_1D object, data_1D appdata and data array
+[CSI_1D_obj, appdata1D, data] = CSI_1D_getData(obj1D);
+
+
+% USER INPUT % ----------------------------------- %
+
+% Ask userinput
+qry = {'Apply additional zeroth-order corrections afterwards: ',...
+       'Accuracy: '};
+def = {{'Yes', 'No'}, {'Default','Custom'}}; 
+uans = getUserInput_Tick(qry, def, ...
+        'First-order phase corrections', [1, 1]);    
+if isempty(uans)
+    CSI_Log({'Aborted first-order phase corrections.'},{''});
+    return; 
+end
+
+% Process userinput
+if uans(2), acc = 4e-2; 
+else
+    qry = {'First-order phase correction accuracy:'};
+    def = {'3e-2'};
+    uans_acc = getUserInput( qry,def, [], 'First-order phase corrections');
+    if isempty(uans_acc)
+        CSI_Log({'CSIgui-1D: Aborted first-order phase corrections.'},{''});
+        return;
+    end
+    acc = str2double(uans_acc{1}); 
+end
+do_zero = uans(1);
+
+% APPLY CORRECTION % ----------------------------- %
+[data_phased, dphase, cphase] = csi_autoFirstPhase(data, do_zero, acc, 0);
+
+% PLOT & SAVE % ---------------------------------- %
+
+% Add 1D data structure to the 1D figure.
+appdata1D.voxel.processed = data_phased;
+appdata1D.phasing.zero    = cphase;
+appdata1D.phasing.first   = dphase;
+
+% Save
+setappdata(CSI_1D_obj,'data1D',appdata1D);
+
+% Plot the 1D data
+CSI_1D_displayData(CSI_1D_obj);
+
+% Update info to user.
+CSI_Log({'CSIgui-1D:'},{'Applied automatic first-order phase correction.'});
+if do_zero, uans = 'Yes'; else, uans = 'No'; end
+CSI_Log({'CSIgui-1D: Additional zeroth-order phasing: '},{uans});
+CSI_Log({'CSIgui-1D: Calculation accuracy:'},{acc});
 
 % --- Executes if user chooses in "Phasing" -> "Manual"
 function panel_1D_PhaseCorrection_Manual(hObj, ~)
@@ -11501,8 +11798,9 @@ CSI_Log({'CSIgui-1D:'},{'Applied manual phase correction.'});
 
 % --- Executes if user chooses in "Phasing" -> "Phase All"
 function panel_1D_PhaseCorrection_ApplyToAll(hObj,~)
-% See if there is any phase correction data. Else call this function first
-% and then apply it to all voxel in the data set or a slice.
+% See if there is any phase correction data. Else call the manual 
+% phasing function first and then apply it to all voxel in the data 
+% set or a slice.
 
 % INITIATE % ------------------------------------------- %
 
@@ -11514,14 +11812,15 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % 2D/3D appdata
 CSImain_obj = findobj('Tag','CSIgui_main');
 if isempty(CSImain_obj)
-    fprintf('Error: CSIgui appears to be closed. Returning.');
+    fprintf('Error: CSIgui appears to be closed. Returning.\n');
     return; % CSIgui is closed!
 end
 csi = getappdata(CSImain_obj, 'csi');
 
 % Get user input for volume or slice phasing
 uans = getUserInput_Popup({'Apply phasing to: '},...
-                         {{'Full volume', 'Current slice'}});
+                         {{'Full volume', 'Current slice'}},...
+                         [], 'Phase Corrections (1D)');
 if uans{1} == 0, return; end
 if strcmpi(uans{1}, 'Full volume'), vol_or_sli = 0;
 else, vol_or_sli = 1;
@@ -11540,6 +11839,10 @@ end
 
 % 2. Apply phasing to all voxels.
 magn = abs(csi.data.raw); pha = angle(csi.data.raw);
+
+% Backup of CSI data.
+CSI_backupSet(guidata(CSImain_obj),'Before 1D-phase-corrections to data.');
+csi = getappdata(CSImain_obj, 'csi');
 
 if vol_or_sli == 0
 
@@ -11587,9 +11890,9 @@ CSI_2D_initiate2D();
 % Update info to user.
 CSI_Log({'CSIgui-1D:'},{log_msg});
 
-% --- Executes if user chooses in "Phasing" -> "Automatic"
-function panel_1D_PhaseCorrection_Auto(hObj, ~)
-% Apply auto first order phase correction.
+% --- Executes if user chooses in "Phasing" -> "Automatic" & "Zeroth"
+function panel_1D_PhaseCorrection_Zero_Auto(hObj, ~)
+% Apply auto zeroth order phase correction.
 
 % PREP DATA % ---------------------------------- %
 
@@ -11604,9 +11907,14 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 range = CSI_getPeakOfInterest(appdata1D.axis, ...
                               'CSIgui-1D: Automatic phase correction');
 
-uans = getUserInput_Popup({'Method'},{{1,2}});
+qry = {'Phase corrections method:'};
+def = {'Maximize the real-component.','Match real-compontent to absolute.'}; 
+uans = getUserInput_Popup(qry,{def}, [], 'Phase Corrections (1D)');
 if isempty(uans), return; end
-ph_meth = str2double(uans{1});
+switch uans{1}
+    case 'Maximize the real-component.', ph_meth = 1;
+    case 'Match real-compontent to absolute.', ph_meth = 2;
+end
 
 % APPLY CORRECTION % ----------------------------- %
 
@@ -11614,12 +11922,14 @@ ph_meth = str2double(uans{1});
 if length(range) > 1, poi = range(1):range(2); end
 
 % Apply autophasing function
-data_phased = csi_autoZeroPhase(data, poi, ph_meth, 0);
+[data_phased, phase_change] = csi_autoZeroPhase(data, poi, ph_meth, 0);
 
 % PLOT & SAVE % ---------------------------------- %
 
 % Add 1D data structure to the 1D figure.
 appdata1D.voxel.processed = data_phased;
+appdata1D.phasing.zero = phase_change;
+appdata1D.phasing.first = zeros(1,size(data_phased,1));
 
 % Save
 setappdata(CSI_1D_obj,'data1D',appdata1D);
@@ -11652,7 +11962,8 @@ target_sz = str2double(uans{1});
 if target_sz < size(data,1), return; end
 
 % Get zerofill direction (pre/post/both)
-uans = getUserInput_Popup({'Append direction:'},{{'Post','Pre','Both'}});
+uans = getUserInput_Popup({'Append direction:'},{{'Post','Pre','Both'}},...
+                          [], 'Zerofill');
 if isempty(uans), return; end
 dir = uans{1}; % Direction for zerofilling of fids
 
@@ -11709,7 +12020,8 @@ uans = getUserInput_Buttons('Calculate SNR:',{'Automatic', 'Individual'});
 if isempty(uans), return; end
 
 % SNR method
-method = getUserInput_Popup({'Signal unit: '},{{'Real','Magnitude'}});
+method = getUserInput_Popup({'Signal unit: '},{{'Real','Magnitude'}},...
+                            [], 'SNR (1D)');
 if isempty(method), return; end
 switch method{1}, case 'Real', method = 1; case 'Magnitude', method = 0; end
 
@@ -11801,10 +12113,11 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 [~, appdata1D, data] = CSI_1D_getData(obj1D);
 
 % Automatic or manual calculation?
-uans = getUserInput_Popup({'FWHM estimation method:',...
-                           'Calculate FWHM for one individual peak or all automagically:'},...
-                         {      {'Local minima', 'Intersection'},...
-                                {'Automatic', 'Individual'}});
+qry = {'FWHM estimation method:',...
+       'Calculate FWHM for one individual peak or all automagically:'};
+def = {{'Intersection', 'Local minima'},...
+       {'Individual', 'Automatic'}};
+uans = getUserInput_Popup(qry, def, [], 'FWHM (1D)');
 if isempty(uans), return; end
 
 if strcmp(uans{1}, 'Intersection')
@@ -12068,11 +12381,11 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % USER DATA % ---------------------------------- % 
 
 % Get user input
-uans = getUserInput_Popup(...
-           {'Correct for N term?',...
+qry =  {'Correct for N term?',...
             'Correct for onesided fft in spectroscopy?',...
-            'Shift before and after FFT? (Echo)'},...
-           {{'No','Yes'},{'Yes','No'},{'No','Yes'}});
+            'Shift before and after FFT? (Echo)'};
+def = {{'No','Yes'}, {'Yes','No'}, {'No','Yes'}};
+uans = getUserInput_Popup(qry, def, [], 'FFT (1D)');
 if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 
 if strcmpi(uans{1},'yes'), correct_N = 1; else, correct_N = 0; end
@@ -12114,7 +12427,7 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 uans = getUserInput_Popup(...
            {'Correct for onesided fft in spectroscopy?'},...
-           {{'Yes','No'}});
+           {{'Yes','No'}}, [], 'iFFT (1D)');
 if isempty(uans), CSI_Log({'Skipped FFT.'},{''}); return; end
 if strcmpi(uans{1},'yes'), onesided = 1;  else, onesided = 0; end
 
@@ -12153,9 +12466,10 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % USER INPUT % --------------------------------- %
 
 % Get filter to apply.
-uanstype = getUserInput_Popup({'Filter Method'},...
-                          {{'Gaussian', 'Hamming','Hann', 'Exponential',...
-                            'Blackman', 'Flattop'}});
+qry = {'Filter Method', 'Flip window: '};
+def = {{'Gaussian', 'Hamming','Hann', 'Exponential', 'Blackman', ...
+        'Flattop'}, {'No', 'Yes'}};
+uanstype = getUserInput_Popup(qry, def, [], 'Apodization (1D)');
 if isempty(uanstype), return; end
 
 % Additional options for specific filters
@@ -12180,10 +12494,14 @@ switch uanstype{1}
             {'Exponential decay strength (Samples): '},{0.5});
 end
 
+if strcmp(uanstype{2}, 'Yes'), opts(3) = 1; end
+
 % Set options if applicable
-if exist('uansopts', 'var'), opts = str2double(strsplit(uansopts{1},' '));
-else, uansopts = {''}; opts = 0;
+if exist('uansopts', 'var'), opts(1) = str2double(strsplit(uansopts{1},' '));
+else, uansopts = {''}; opts(1) = 0;
 end
+
+
 
 % APODIZATION % ---------------------------------- %
 % Create window and apply filter
@@ -12225,8 +12543,9 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 % X-axis ------------ %
 uans = getUserInput_Popup({'X-axis type: ','Plot unit: '},...
-                          {{'PPM', 'Frequency','Time','None'},...
-                           {'Real', 'Magnitude','Phase','Imaginary'}});
+                          {{'PPM', 'Frequency', 'Time','None'},...
+                           {'Real', 'Magnitude', 'Phase', 'Imaginary'}},...
+                           [], 'Data Display (1D)');
 if isempty(uans), return; end
 
 % User input handling
@@ -12387,8 +12706,9 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % Shift % ---------------------------------------- %
 data  = dataOri;
 
-
-uans = getUserInput_Popup({'Method: '},{{'Automatic','Use echotime (TE)'}});
+qry = {'Shift method: '};
+def = {{'Automatic','Use echotime (TE)'}};
+uans = getUserInput_Popup(qry, def, [] , 'Phase Shift (1D)');
 if isempty(uans), CSI_Log({'CSigui-1D: Skipped 1D Shift'},{''}); return; 
 end  
 
@@ -12417,9 +12737,8 @@ switch uans{1}
         % --> Use max/min to define peak prom. - less local - more global
         % Use %FID size
         
-        % FDITTING DATA HERE
-        
-        
+        % FITTING DATA HERE
+                
         % Smooth data
         datasmo = smoothdata(real(data),'sgolay', 'degree', 1);
 
@@ -12498,13 +12817,14 @@ switch uans{1}
         shiftval = round(TE./(mean(diff(appdata1D.xaxis.time)).*1000));
         sz = size(data,1);
         
+        % Output
+        CSI_Log({'CSIgui-1D: FID shifted by '},{shiftval});
+
         % Save new data.
         appdata1D.voxel.processed = zeros(sz,1);
         appdata1D.voxel.processed(1:(sz-shiftval+1)) = dataOri(shiftval:end);
         
 end
-% OOOOOOR TE
-% TE ==> TE./axis.dt = nShift in time domain
 
 
 % PLOT AND SAVE % ------------------------------ %
@@ -12744,16 +13064,17 @@ if isempty(uans)
     CSI_Log({'Noise Preperation:'},{'Aborted.'}); csi = NaN; return; 
 end
 
-
-% UANS 1: process noise data?
-if uans(1) == 0, csi = getappdata(gui.CSIgui_main,'csi'); return; end
+% UANS 1: process noise data? or no options enabled
+if uans(1) == 0 || sum(uans(2:end)) == 0
+    csi = getappdata(gui.CSIgui_main,'csi'); return; 
+end
 
 % Process noise by setting it as active data set    
 CSIgui_Noise_ViewManager(hobj, [], []);
 
 % Noise - Delete channel
 if uans(2)
-    button_CSI_Delete_Callback([],[],gui, 1);
+    button_CSI_Delete_Callback([],[],gui, 0);
     gui = guidata(hobj);
 end
 
@@ -13058,7 +13379,7 @@ if isappdata(gui.CSIgui_main,'csi')
     % Reduce file size?
     reduce_size = getUserInput_Popup(...
         {'Reduce file size by converting to single?'},...
-        {{'Yes','No'}});
+        {{'Yes','No'}}, [], 'Save Data');
     
     % Get MRSI data
     csigui = csi.data;
@@ -13164,7 +13485,8 @@ uans = getUserInput_Popup({'Specify figure(s) to save:',...
                            'Fast mode: '},...
                          {{'Current figure', 'All', 'All of current slice'},...
                            cat(2,num2cell(0:200:1200),'Custom'),...
-                           {'No','Yes'},{'Yes','No'},{'No','Yes'}});
+                           {'No','Yes'},{'Yes','No'},{'No','Yes'}}, ...
+                         [], 'Save Figure');
 if isempty(uans), CSI_Log({'Skipped exporting figures.'},{''}); return; 
 end  
 
@@ -13423,7 +13745,7 @@ end
 bup_list = fieldnames(csi.backup);
 
 % Remove lastBackup if included
-loc = contains(bup_list,'lastBackup'); bup_list(loc) = [];
+loc = contains(bup_list, 'lastBackup'); bup_list(loc) = [];
 
 if askUser == 1 % Ask user which backup to get...
     % Get tags of backups
@@ -13444,7 +13766,8 @@ if askUser == 1 % Ask user which backup to get...
     for kk = 1:size(bup_disp,1), bup_disp{kk}(col_ind) = ' '; end
 
     % Display to user to select backup of interest
-    uans = getUserInput_Popup({'Available backups: '},{bup_disp});
+    uans = getUserInput_Popup({'Available backups: '}, {bup_disp},...
+                              [], 'Backup Manager');
     if isempty(uans), return; end
 
     % Process user choice: backup of interest
@@ -13511,9 +13834,6 @@ end
 % Get list of available backup fields
 bup_list = fieldnames(csi.backup);
 
-% Get list of available backup fields
-bup_list = fieldnames(csi.backup);
-
 % Remove lastBackup if included
 loc = contains(bup_list,'lastBackup'); bup_list(loc) = [];
 
@@ -13536,7 +13856,8 @@ if askUser == 1 % Ask user which backup to get...
     for kk = 1:size(bup_disp,1), bup_disp{kk}(col_ind) = ' '; end
 
     % Display to user to select backup of interest
-    uans = getUserInput_Popup({'Available backups: '},{bup_disp});
+    uans = getUserInput_Popup(...
+        {'Available backups to delete:'},{bup_disp},[], 'Backup Manager');
     if isempty(uans), return; end
 
     % Process user choice: backup of interest
@@ -14414,7 +14735,7 @@ poi = sel.poi;       % Peak of interest index
 % Phasing
 
 uans = getUserInput_Popup({['Apply phasing to ' poi_tag ' peak?']},...
-                          {{'No','Yes'}});
+                          {{'No','Yes'}}, [], 'Merge Voxels');
 if isempty(uans{1})
         CSI_Log({'Skipped SNR filtering merging voxels.'},{''}); 
         return; 
@@ -14872,7 +15193,7 @@ function button_CSI_FrequencyAlignment_Callback(~, ~, gui)
 % Align the seperate voxels to a specific peak e.g. frequency alignment or
 % peak alignment.
 
-display('This function is under construction')
+disp('This function is under construction')
 
 domain = CSI_getDomain(gui);
 if strcmp(domain, 'time')
@@ -14894,9 +15215,9 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 [doi, doi_axis, range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
 
 % Which voxel to use as reference? Or highest SNR?
-uans = getUserInput_Popup(...
-           {'Reference voxel or voxels for shift: '},...
-                {{'Single voxel','Along a dimension'}});
+qry = {'Reference voxel or voxels for shift: '};
+def = {{'Single voxel','Along a dimension'}};
+uans = getUserInput_Popup(qry, def, [], 'Frequency Alignment');
 if isempty(uans), CSI_Log({'Skipped alignment.'},{''}); return; end
 
 switch uans{1}
@@ -14931,19 +15252,19 @@ switch uans{1}
      case 'Along a dimension'
          
         % Get reference dimension
-        uans = getUserInput_Popup(...
-            {'Reference dimension: ', },...
-            {csi.data.labels(2:end)});
+        uans = getUserInput_Popup({'Reference dimension:'},...
+                                  {csi.data.labels(2:end)},...
+                                  [], 'Frequency Alignment');
         if isempty(uans), return; end
         % Dimension of interest for voxel-reference
         ind_dim = find(strcmp(csi.data.labels, uans{1})==1);
          
         % Get reference voxel
-        uans = getUserInput_Popup(...
-            {'Reference voxel in this dimension: ', },...
-            {{1:size(csi.data.raw,ind_dim)}});
+        uans = getUserInput_Popup({'Reference voxel in this dimension:'},...
+                                  {{1:size(csi.data.raw,ind_dim)}},...
+                                  [], 'Frequency Alignment');
         if isempty(uans), return; end        
-                % Reference voxel for each voxel along ind_dim to shift to
+        % Reference voxel for each voxel along ind_dim to shift to
         ind_vox = str2double(uans{1});
         
           
@@ -14965,13 +15286,14 @@ switch uans{1}
           % Create cell of raw data
         sz = size(csi.data.raw);
         cell_layout = ...
-        arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
+        arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'Uniform',0);
         % Creat cell of data.
         data = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
         
         % Apply shift
-        csi.data.raw = cell2mat(cellfun(@circshift, data, num2cell(-1.*shiftval),...
-            repmat({1},size(data)),'uniform', 0));
+        csi.data.raw = cell2mat(cellfun(@circshift, ...
+            data, num2cell(-1.*shiftval), repmat({1},size(data)), ...
+            'Uniform', 0));
 end
 
         
@@ -15051,12 +15373,15 @@ if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Get index to delete
-uans = getUserInput_Popup({'Index:'}, { csi.data.labels(2:numel(size(csi.data.raw))) } );
+qry = {'Data index/dimension to delete from:'};
+def = {csi.data.labels(2:numel(size(csi.data.raw)))};
+uans = getUserInput_Popup(qry, def, [], 'Delete MRS data');
 if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
 
-uans = getUserInput(...
-{'Specify data index to delete: (M:N or mutliple allowed)'},{'1'});
+qry = {'Specify data index to delete: (M:N or mutliple allowed)'};
+def = {'1'};
+uans = getUserInput(qry, def, [], 'Delete MRS data');
 if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
 tmp = strfind(uans{1},':');
 if isempty(tmp)
@@ -15083,7 +15408,7 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
 
 % --- Executes on button press in button_CSI_Concatenate.
-function button_CSI_Concatenate_Callback(hObj, evt, gui)
+function button_CSI_Concatenate_Callback(~, ~, gui)
 % Concatenate specific dimensions of the MRS data matrix.
 % Create backup
 CSI_backupSet(gui, 'Before concatenating data.');
@@ -15093,13 +15418,18 @@ if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Get indexes to merge
-uans = getUserInput_Popup({'Dimension to merge #1:','Dimension to merge #2:'},...
-                          { csi.data.labels(2:numel(size(csi.data.raw))),...
-                            csi.data.labels(2:numel(size(csi.data.raw)))} );
+qry = {'Dimension to merge #1:','Dimension to merge #2:'};
+def =  { csi.data.labels(2:numel(size(csi.data.raw))),...
+                            csi.data.labels(2:numel(size(csi.data.raw)))};
+uans = getUserInput_Popup(qry, def, [], 'Concatenate CSI');
 if isempty(uans), CSI_Log({'Aborted concatening data.'},{''}); return; end
+
+% Process userinput
 ind1 = find(strcmp(uans{1},csi.data.labels)); lab1 = uans{1};
 ind2 = find(strcmp(uans{2},csi.data.labels)); lab2 = uans{2};
-if isequal(ind1,ind2), CSI_Log({'Cant merge the same indexes!'},{''});return; end
+if isequal(ind1,ind2)
+    CSI_Log({'Cant merge the same indexes!'},{''}); return; 
+end
 
 % Merge!
 sz = size(csi.data.raw); 
@@ -15144,18 +15474,19 @@ if isnan(doi), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 
 
 % Get index to use
-uans = getUserInput_Popup({'Flip angle dynamics index:',...
-                           'Zeroth-order phase corrections:', ...
-                           'Fit equation:',...
-                           'Add data point S(FA=0) = 0:',...
-                           'Display graphs:'},...
-                          {csi.data.labels(2:numel(size(csi.data.raw))),...
-                          {'Full','No','After zero-crossing'},...
-                          {'S(FA): Simple Sine',...
-                           'S(FA,TR,T1): MRS Signal equation',...
-                           'S(FA): Simple 3rd-deg polynomal'},...
-                          {'Yes','No'},...
-                          {'Yes','No'}});
+qry = {'Flip angle dynamics index:',...
+       'Zeroth-order phase corrections:', ...
+       'Fit equation:',...
+       'Add data point S(FA=0) = 0:',...
+       'Display graphs:'};
+def = {csi.data.labels(2:numel(size(csi.data.raw))),...
+      {'Full','No','After zero-crossing'},...
+      {'S(FA): Simple Sine',...
+       'S(FA,TR,T1): MRS Signal equation',...
+       'S(FA): Simple 3rd-deg polynomal'},...
+      {'Yes','No'},...
+      {'Yes','No'}};
+uans = getUserInput_Popup(qry, def, [], 'FA Dynamic');
 if isempty(uans), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
 
@@ -15173,7 +15504,7 @@ switch uans{3}
     case 'S(FA): Simple 3rd-deg polynomal',  fit_method = 2;
 end
 
-% USER: Add zero@zero
+% USER: Add data zero @ time zero
 switch uans{4}, case 'Yes', add_zero = 1; case 'No', add_zero = 0; end
 
 % USER: Plot
@@ -15571,20 +15902,47 @@ CSI_backupSet(gui, 'Before removing oversampling.');
 % ------------------------------------------------- %
 
 % 1. Get dimensions to remove OS: doi
-uans = getUserInput_Popup({'Index:'}, {csi.data.labels} );
+uans = getUserInput_Popup({'Index:'}, {csi.data.labels}, [], 'Remove OS');
 if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
 ind = find(strcmp(uans{1},csi.data.labels)); ind_lab = uans{1};
 
+% 2. Get method of removal
+qry = {'Split data by:'};
+def = {{'Split','Odd values','Even values'}};
+uans = getUserInput_Popup(qry, def, [], 'Remove OS');
+if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
+switch uans{1}
+    case 'Split',       method = 'Split';
+    case 'Odd values',  method = 'Odd';
+    case 'Even values', method = 'Even';
+end
 
-% 2. Get value of OS to remove: osval
+% 3. Get value of OS to remove: osval
 uans = getUserInput({'New size of dimension:'},...
                     {round(csi.data.dim(ind)./2)});
 if isempty(uans),CSI_Log({'Aborted OS removal.'},{''}); return; end
 osval = str2double(uans{1});
 
 % 3. Apply on given dim: csi.data.raw @ doi = 1:osval
-sz = csi.data.dim; sz(ind) = osval;
-rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+
+sz = csi.data.dim;
+if ~strcmp(method, 'Split')
+    % Bandwidth changes if you take odd or even values from data.
+    csi.xaxis.BW = csi.xaxis.BW / (sz(1) / osval);
+end
+
+switch method
+    case 'Split'        
+        sz(ind) = osval;
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+    case 'Odd'               
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+        rng{1} = 1:2:osval*2;
+    case 'Even'        
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+        rng{1} = 2:2:osval*2;
+end
+
 
 % Cut the data with the new value
 csi.data.raw = csi.data.raw(rng{:});
@@ -15599,6 +15957,8 @@ if isappdata(gui.CSIgui_main,'CSIpar')
     rmappdata(gui.CSIgui_main,'CSIpar');
 end
 
+
+
 % Store data %
 setappdata(gui.CSIgui_main,'csi', csi);
 
@@ -15606,8 +15966,8 @@ setappdata(gui.CSIgui_main,'csi', csi);
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
-CSI_Log({'Removed oversampling (dimension | size): '}, ...
-        {[ind_lab, '/', num2str(osval)]});
+CSI_Log({'Removed oversampling (dimension | size | Method): '}, ...
+        {[ind_lab, '/', num2str(osval) '/' method]});
 
 % --- Executes on button press in button_CSI_MapB1.
 function button_CSI_MapB1_Callback(hObj, ~, gui, backup)
@@ -15633,13 +15993,15 @@ uans = getUserInput_Popup({'Data type (calculations): ',...
                            'Data type (results): '},...
                          {{'Real', 'Magnitude','Complex'},...
                           {'Real', 'Magnitude', 'Imaginary',...
-                           'Real raw','Imaginary raw', 'Complex'}});
+                           'Real raw','Imaginary raw', 'Complex'}},...
+                         [], 'B1-mapping');
 if isempty(uans), CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; end
 
 % \\ B1 index
 B_ind = find(strcmpi(csi.data.labels,'b1'));
 if isempty(B_ind)
-    B_ind = getUserInput_Popup({'Data B1 index'},{csi.data.labels});
+    B_ind = getUserInput_Popup({'Data B1 index'},{csi.data.labels},...
+                               [], 'B1-mapping');
     if isempty(B_ind)
         CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
     end 
@@ -15839,7 +16201,8 @@ if isempty(uans),CSI_Log({'Aborted interpolation.'},{''}); return; end
 new_dim = str2double(strsplit(uans{1}, ' '));
 
 uans = getUserInput_Popup({'Interpolation method: '},...
-    {{'Spline', 'Cubic', 'Linear', 'Nearest', 'Makima'}});
+    {{'Spline', 'Cubic', 'Linear', 'Nearest', 'Makima'}},...
+    [], 'Spatial Interpolation');
 if isempty(uans{1}),CSI_Log({'Aborted interpolation.'},{''}); return; end
 meth = uans{1};
 
@@ -15871,7 +16234,7 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 qry = 'Choose a map to calculate: ';
 opts = {'SNR','Linewidth','Maximum','Peak', 'Ratio'};
 
-maptype = getUserInput_Popup({qry},{opts});
+maptype = getUserInput_Popup({qry},{opts}, [], 'Mapping');
 if isempty(maptype), return; end
 
 switch maptype{1}
@@ -15918,6 +16281,7 @@ nmap = CSI_dataAs_SNRfilter(nmap, 'peak-ratio', gui, doi_range{1});
 
 % \\ Display Data
 CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
+
 
 % --- Executes by dataAs-scripts to filter calculated data
 function data = CSI_dataAs_SNRfilter(data, tag, gui, doi_range)
@@ -15977,6 +16341,7 @@ if str2double(filter_snr{1}) ~= 0
 
 end
 
+
 % --- Executes by map-scripts to start any visualiziation of data
 function CSI_dataAs_Initiate(data, data_tag, gui, labels)
 % After calculating some maps or anything 3D, and one wants to display it.
@@ -15991,7 +16356,8 @@ end
 
 % Display type from user
 uans = getUserInput_Popup({'Display type: '},...
-                          {{'Map','Graph','Table','Histogram'}});
+                          {{'Map','Graph','Table','Histogram'}},...
+                          [], 'Data Display');
 if isempty(uans)
     CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); 
     return; 
@@ -16044,16 +16410,16 @@ CSI_Log({[ data_tag ' statistics ------------------------------- %'],...
           sprintf('%.2f', stats.median), ...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 
+
 % --- Executes by CSI_dataAs_Initiate to prepare data for tabbed-maps
 function [data, color_scale, sloi] = CSI_dataAsTabs_Prepare(data, gui)
 % This function will get userinput, prep the data and return required
 % variables to plot data-array in a tabbed-figure.
 
 % USERINPUT: What data to show?
-uans = getUserInput_Popup(...
-    {'Data range to show: ','Color scale range: '},...
-   {{'All', 'Current Slice'},...
-    {'Min to Max', 'Histogram optimized'}});                                                 
+qry = {'Data range to show: ','Color scale range: '};
+def = {{'All', 'Current Slice'}, {'Min to Max', 'Histogram optimized'}};
+uans = getUserInput_Popup(qry, def, [], 'Data Display - Maps');                                                 
 if isempty(uans), return; end
 
 % \\ Get part of data-array to visualize
@@ -16095,8 +16461,9 @@ switch uans{2}
         color_scale = [min(data(:)) maxval];                         
 end
 
+
 % --- Executes on button press in button_CSI_Noise_openFile.
-function button_CSI_Noise_openFile_Callback(hobj, ~, gui)
+function button_CSI_Noise_openFile_Callback(~, ~, gui)
 % Load a separate data-file containing noise data.
 %
 %
@@ -16226,7 +16593,7 @@ qry = {'Apply noise decorrelation: ', ...
        'PCA patch-size:', 'PCA SVD-method:'};
 opt = {{'Yes','No'},  {'Measurement', 'Data'}, {psz_def},...
        {'Fast', 'Default'}};
-uans = getUserInput_Popup(qry, opt);
+uans = getUserInput_Popup(qry, opt, [], 'PCA-Denoising');
 if isempty(uans), CSI_Log({'PCA Denoising cancelled'},{''}); return; end
 
 % Process user input % 
@@ -16310,7 +16677,7 @@ end
 tic
 % Principle Component Analysis - Denoising
 CSI_Log({'PCA: Applying PCA-denoising. Patch size:'},{patch_size});
-CSI_Log({'PCA: SVD-Method,'},{uans{4}});
+CSI_Log({'PCA: SVD-Method,'},uans(4));
 CSI_Log({'PCA:'},{'Starting a parallel pool of workers.'});
 csi.data.raw = ...
     csi_pca_denoising(csi.data.raw, chan_ind, patch_size, do_svd);
@@ -16324,12 +16691,13 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % Output
 CSI_Log({'PCA: Done.'},{''});
 
+
 % --- Executes on button press in button_CSI_Fieldmap.
-function button_CSI_Fieldmap_Callback(hobj, ~, gui)
-% Calculate and show fieldmaps
+function button_CSI_Fieldmap_Callback(~, ~, gui)
+% Calculate and show fieldmaps as used by Roemer weighting method.
 
 % Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'),return; end
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Preperation of data % ---------------------------------------------- %
@@ -16347,7 +16715,7 @@ end
 
 % Sensitivity Maps % -------------------------------------------------- %
 [sens_maps, permv, szr]  = CSI_Sensitivity_Maps(fid, chan_ind);
-CSI_Log({'Fieldmaps'},{'Calculated.'});
+CSI_Log({'Fieldmaps'},{'calculated.'});
 
 % Reshape the data
 szr(1) = 1; szr(2) = 1;  sens_maps = reshape(sens_maps, szr); 
@@ -16364,13 +16732,51 @@ sens_maps = permute(sens_maps, restore_permv);
 
 % Display % ------------------------------------------------------------ %
 
-% Output
-CSI_Log({'Displaying fieldmaps.'},{''});
+% User input
+qry = {'Display data:', 'Data Type', 'Save data'};
+opt = {{'Yes','No'},  {'Real','Imaginary', 'Absolute'}, {'No','Yes'}};
+uans = getUserInput_Popup(qry, opt, [], 'Display Fieldmaps');
+if isempty(uans), CSI_Log({'Skipped field map display.'},{''}); return; end
 
-CSI_dataAs_Initiate(real(sens_maps), 'Fieldmaps (Real)', gui,...
-    csi.data.labels)
+if strcmp(uans{1}, 'Yes')
+    % Output
+    CSI_Log({'Displaying fieldmaps.'},{''});
 
-CSI_dataAs_Initiate(abs(sens_maps), 'Fieldmaps (Abs)', gui,...
-    csi.data.labels)
+    if strcmp(uans{2}, 'Real')
+        CSI_dataAs_Initiate(real(sens_maps), 'Fieldmaps (Real)', gui,...
+        csi.data.labels)
+    elseif strcmp(uans{2}, 'Imaginary')
+        CSI_dataAs_Initiate(imag(sens_maps), 'Fieldmaps (Imaginary)', gui,...
+        csi.data.labels)
+    elseif strcmp(uans{2}, 'Absolute')
+        CSI_dataAs_Initiate(abs(sens_maps), 'Fieldmaps (Abs)', gui,...
+        csi.data.labels)
+    end
+end
 
+% Save data
+if strcmp(uans{3}, 'Yes')
+    if isfield(csi,'filepath'), fp = csi.filepath;
+    else, fp = [];
+    end
+       
+    % Get file path and extension from user
+    [fn, fp, fi] = uiputfile({'*.mat', 'Matlab file'},...
+                             'Save fieldmap data...',fp);
+    if fi == 0, return; end
+    [~,fn, ext] = fileparts(fn);
+
+    % Save file
+    save([fp '\' fn ext], 'sens_maps');
+end
+
+
+% Opens on button click of the file-name
+function CSI_openDataDirectory(gui)
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+if isfield(csi,'filepath')
+    winopen(csi.filepath)
+end
 

@@ -90,6 +90,7 @@ threshold = r - threshold;
 % Undo flip of eigenvec.
 eigenvec = flip(eigenvec);
 
+
 % Modified to avoid local areas without denoising
 if threshold <= 1, threshold = 1; end
 Snew = zeros(size(S));

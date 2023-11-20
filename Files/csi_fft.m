@@ -2,7 +2,7 @@ function spec = csi_fft(fid, corr_N, corr_onesided, double_shift)
 %%%% Description:                    Forward Fourier of FIDs in CSI volume.
 %%% Creator: Ir. Q. van Houtum       Version: 1.2          Date: 2017-07
 %%% --------------------------------------------------------------------
-%%% Backward fourier of spectra ordered in space (1-ND). Expects the
+%%% Foward fourier of spectra ordered in space (1-ND). Expects the
 %%% frequency dimension/FID samples to be on index 1.
 %%%
 %%% Input:      spec - Array with each FID on the first dimension.
