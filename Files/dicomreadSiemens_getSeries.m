@@ -10,9 +10,20 @@ function files = dicomreadSiemens_getSeries(varargin)
 %        filepath only ending with backwards dash '\'
 %               Returns a cell array with groups of matching ima-files.
 %
+% output: files
+% 
 % Returns NaN if no group is found.
+%
+% 
 
-if nargin == 1
+if nargin == 0
+    [fn, fp, id] = uigetfile({'*.ima', 'Siemens DICOM files (*.ima)'},...
+                    'Select one or multiple dicom files.',...
+                    'MultiSelect', 'on');
+    if id == 0, return; end    
+    [fp, fn, ext] = fileparts([fp fn]);
+    fn = [fn ext];
+elseif nargin == 1
     % Either a directory or full file path
     if isfolder(varargin{1})
         fp = varargin{1}; fn = [];

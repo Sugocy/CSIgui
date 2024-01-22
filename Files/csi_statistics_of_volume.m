@@ -49,3 +49,6 @@ stats.min_index = (tmp_ind);
 [stats.max, indMx] = max(data(:));
 [tmp_ind{:}] = ind2sub(size(data),indMx);
 stats.max_index = (tmp_ind);
+
+% Number of decimals
+stats.num_decimals = findDecimals(stats.median);

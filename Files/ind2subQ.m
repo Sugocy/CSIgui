@@ -2,6 +2,8 @@ function subs = ind2subQ(matrix_size, index)
 % Returns the converted subindex for each dimensions of a matrix from a
 % linear index.
 %
+% Input: matrix size, index
+%
 % Q. van Houtum
 
 sz = repmat(matrix_size, [1 numel(matrix_size)]);

@@ -29,7 +29,7 @@ fwhmline = cat(2,ax',repmat(fwhm,N,1));
 
 % The answer in PPM or unit-less: ALWAYS use the first two - if more
 % intersects are found, data is wrong anyways... 
-if size(xest,1) == 1 % The peak is not within the peak_range probabaly
+if size(xest,1) == 1 || size(xest,1) == 0 % The peak is not within the peak_range probabaly
     linewidth = NaN; xest = NaN; yest = NaN;
 else
     xest = [xest(1) xest(end)]; % yest = [yest(1) yest(end)];

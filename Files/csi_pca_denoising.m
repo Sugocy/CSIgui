@@ -1,11 +1,12 @@
 function spec = csi_pca_denoising(spec, chan_ind, patch_size, svd_method)
 % For a more detailed explanation of this method see sources below.
 % 
-% Input:        volume of spectra, channel index, odd patch-size.
+% Input:        volume of spectra (3D!), channel index, odd patch-size.
 % Output:       volume of spectra PCA denoised.
 % 
 % Data will be reshaped to nSamples x nVoxels x nChan for calculations,
-% therefor it requires the index of the channels/coils.
+% therefor it requires the index of the channels/coils. Other
+% data-dimensions should be excluded and calculated separately! 
 %
 % This function uses parallel computing to speed up calculations.
 %
@@ -14,7 +15,7 @@ function spec = csi_pca_denoising(spec, chan_ind, patch_size, svd_method)
 %
 % Explanation of PCA denoising method:
 % Generate a local-patch with patch-size and convolve over the data set.
-% For each voxel in the spec-volume, all voxels within this patch are 
+% For each voxel in the volume, all voxels within this patch are 
 % concatenated into matrix M: rows represent the voxels in the local-patch,
 % the columns represent the real and imaginary values (concatenated). 
 % Singular Value Decomposition is applied to matrix M to find eigenvalues 
@@ -46,7 +47,7 @@ if nargin < 4, svd_method = 1; end
 dim = size(spec); 
 dim_spat = dim; dim_spat(chan_ind) = []; dim_spat(1) = [];
 
-% Reshape datan S x nVox x nCh % --------------------------------------- %
+% Reshape data nS x nVox x nCh % --------------------------------------- %
 
 % CH to outer dimensions
 if chan_ind < numel(dim)                                       
@@ -92,10 +93,6 @@ parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
         
         % -------------------------------- %
 
-        % if chi == 17 && vi == (3*16)+9 + (7*(16*9))
-        %      disp('');
-        % end
-
         % Get the local-voxels neighbourhood around voxel vi
         nbh = data_single_chan(:,lin_nbh);
             
@@ -114,6 +111,10 @@ parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
         % Back to complex
         denoised_patch = complex(denoised_patch(:,1:nS)',...
                                  denoised_patch(:,nS+1:end)');
+        
+        % This is  wrong and flips the FID over the x-axis.
+        % denoised_patch = complex(denoised_patch(:,1:nS),...
+        %                          denoised_patch(:,nS+1:end))';
 
         % Summate the denoised data
         data_single_chan_denoised(:,lin_nbh) = ...
@@ -125,9 +126,6 @@ parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
     spec(:,:,chi) = (data_single_chan_denoised ./ (psz.^3));
 end
 dt = toc; fprintf('PCA duration without parallel pool startup: %fs\n', dt);
-
-% Correct conjugate change of spec-fid
-% spec = csi_fft(conj(csi_ifft(spec)));
 
 % Undo Reshape and Permute % ------------------------------------------- %
 

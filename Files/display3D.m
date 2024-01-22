@@ -4,7 +4,7 @@
 %%% 
 %%% display3D(data, varargin)
 %%% 
-%%% data        ND data array with widht and height of "image" data on
+%%% data        ND data array with width and height of "image" data on
 %%%             first and second index.
 %%%
 %%% Variable input arguments: 'label', label input;
@@ -26,7 +26,7 @@ function fh = display3D(data,varargin)
 % data.
 
 if nargin == 0
-    data = rand(25,25).*10;
+    data = rand(25,25, 5).*10;
 end
 
 % --- Process input
@@ -88,6 +88,9 @@ if isfield(opt,'pos')
     end
 end
 
+% Detect figure-size changes
+fh.SizeChangedFcn = @screensizeUpdated;
+
 
 % --- Add UI elements
 
@@ -95,7 +98,7 @@ end
 ax = axes(fh,'Position',[0 0 1 1]);
 ax.XTick = []; ax.YTick = []; ax.Box = 'off';
 ax.Color = 'Black'; ax.YColor = 'Black'; ax.XColor = 'Black';
-
+ax.Units = 'Normalized';
 
 % 2. SCROLLBAR
 sb = uicontrol(fh,'Style','Slider','Units', 'Normalized',...
@@ -132,18 +135,17 @@ else
     tag = [];
 end
 
-
-% EDIT CONTAST
-edit_w = 80;
+% 5. EDIT CONTRAST
 edit = uicontrol(fh,'Style','edit','Units','Pixels',...
                'Position',[0 fh.Position(4)-9 100 10],...
                'ForegroundColor','Yellow','BackgroundColor','Black',...
-               'HorizontalAlignment','Center','FontSize',7,'String','TEST');    
+               'HorizontalAlignment','Center','FontSize',7,'String','TBD');    
 edit.String = 'contrast'; edit.FontWeight = 'bold';
+edit.Callback = @setContrast_edit;
+% edit.Units = 'Normalized';
 
+% MISCELLANEOUS UPDATES 
 
-
-           
 % Normalize UI elements
 fh.Units = 'Normalized'; sb.Units  = 'Pixels';
 
@@ -345,3 +347,45 @@ contrast = double( [min(data(:)) max(data(:))] );
 
 % Safety check contrast
 if contrast(1) >= contrast(2), contrast(2) = contrast(1)+1; end
+
+
+function setContrast_edit(hobj, ~)
+% Set contrast through edit-box
+
+% Get parent of edit-obj
+fh = hobj.Parent;
+% Get gui-data
+gui = guidata(fh);
+% Get entered contrast
+contrast = str2double(strsplit(hobj.String));
+% Set contrast
+gui.ax.CLim = contrast;
+% Store contrast
+gui.opt.limit = contrast;
+
+% Update GUI-handle.
+guidata(fh,gui);
+
+
+function screensizeUpdated(hobj, ~)
+% Initiates during screensize changes, allowing updates of certain GUI
+% elements.
+%
+% EDIT-BOX: position update without size changes.
+
+% GUI-data
+gui = guidata(hobj);
+
+% Work in normalized-units
+gui.edit.Units = 'normalized';
+
+% Update position of edit-box
+gui.edit.Position(2) = 1 - gui.edit.Position(4);
+
+% Return it to pixels such that the width of the edit-box does not change
+% with respect to the figure-change.
+gui.edit.Units = 'pixels';
+
+% Update GUI-data
+guidata(hobj, gui);
+

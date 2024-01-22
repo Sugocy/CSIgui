@@ -2,12 +2,14 @@ function [img, nfo] = dicomreadSiemens(varargin)
 % Read dicom files from Siemens platforms, ima-files.
 %
 % Input: none - opens a select-file(s) user interface.
-%        path - a full path to file
+%        path - a full path to file or directory
 %        filepath, filename - full path to directory of file(s) and
 %                             corresponding filename(s). Filename must be a 
 %                             cell arry with 1xN filenames. The image size
 %                             for each filename is expected equal.
-%                             
+%
+% Output: images
+%         nfo
 %
 % Creator: Quincy van Houtum, PhD. 2023
 % quincyvanhoutum@gmail.com
@@ -19,10 +21,15 @@ if nargin == 0
                     'Select one or multiple dicom files.',...
                     'MultiSelect', 'on');
     if id == 0, return; end    
-    fn = {fn};
+    if ~iscell(fn), fn = {fn}; end
 elseif nargin == 1 % Only file-path to file
     [fp, fn, ext] = fileparts(varargin{1}); 
-    fn = {[fn ext]};    
+    if isempty(ext)
+        files = dicomreadSiemens_getSeries(varargin{1});
+        fp = varargin{1}; fn = files{1};
+    else
+        fn = {[fn ext]};    
+    end
 elseif nargin == 2 % Directory path and filename.
     fp = varargin{1}; fn = varargin{2};
     if ~iscell(fn), fn = {fn}; end        
@@ -37,8 +44,8 @@ setDicomDict(fp, fn{1});
 % Check mr-data type
 [type, sop] = checkDicomModality(fp, fn{1});
 if strcmpi(type,'mrs') || strcmpi(type,'nan')
-    warning('dicomreadSiemens | Incompatible dicom-type (%s) file: %s',...
-        sop, fn{1});
+    warning('dicomreadSiemens | Incompatible dicom-type (%s) file: %s, %s',...
+            type, sop, fn{1});
     img = nan; nfo = {nan}; return;
 end
 
@@ -78,7 +85,7 @@ function [type, sopclass] = checkDicomModality(fp, fn)
     elseif strcmpi(sopclass,'1.2.840.10008.5.1.4.1.1.4.2') % MRS   
         type = 'mri';
     elseif strcmpi(sopclass,'1.3.12.2.1107.5.9.1 ')
-        type = 'CSA Non-Image';
+        type = 'CSA Non-Image'; 
     else
         type = 'nan';
     end
