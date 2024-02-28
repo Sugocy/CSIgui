@@ -74,7 +74,8 @@ end
 % Expected: All spectra are in absorption mode.
 
 % Phase-correct after zero-crossing only
-if phase_data >= 1 , doi_main = phaseCorrection_zeroCrossing(doi_phased);
+if phase_data >= 1
+    [doi_main, ~] = phaseCorrection_zeroCrossing(doi_phased);
 end
 
 
@@ -83,11 +84,10 @@ end
 % before the zero-crossing and minimum values after the zero-crossing need
 % to be calculated accordingly.
 
-% Find initial zero-crossing in data.
-[~, mxmn] = findZeroCross(max(real(doi_main)));
-
-% Get maximum and minimum of spectra
+% Find initial zero-crossing in data: using abs-magnitude of min/max of a
+% spectrum.
 mx = max(real(doi_main)); mn = min(real(doi_main));
+mxmn = (abs(mx) <= abs(mn));
 
 % Get max/min according to initial zero-crossing
 vals = NaN(1,size(mx,2));
@@ -133,7 +133,7 @@ elseif fit_method == 1
     rat = (TR.*10^-3)./(T1.*10^-3);
 
     % Fit function for MR signal: par(1:2) = [Amplitude Period RatioTR/T1]
-    func = @(par, FA) par(1).*(sind(FA + par(2)) .* ...
+    func = @(par, FA) par(1) .*(sind(FA + par(2)) .* ...
     ((1-exp(-1.*par(3))) ./ (1 - exp(-1.*par(3)).*cosd(FA + par(2)))));
 
     % Initial parameters
@@ -251,7 +251,7 @@ if plot_data
 
     % Plot calculated zero-crossing.
     zc_list = [zc_data zc_ext]; zc_ind = [zc_data_ind zc_ext_ind];
-    for kk = 1:2
+    for kk = 2:2 % ZC from data is disabled.
         if kk == 1, tmpy = fitval_HR(zc_ind(kk));
         else,       tmpy = fitval_HR_ext(zc_ind(kk));
         end
@@ -265,7 +265,7 @@ if plot_data
     plot([xdata(1) xdat_HR_ext(end)],[0 0], '--k','Linewidth', 1.5);
 
     lg = legend('Data','Fit', 'Zero-crossing'); 
-    lg.FontSize =  6; lg.Location = 'northwest';
+    lg.FontSize =  6; lg.Location = 'southwest';
         
     % Write to file.
     if save_plot
@@ -295,7 +295,7 @@ doi_phased = cellfun(@csi_autoZeroPhase, ...
             'UniformOutput', 0);      
 doi_phased = cell2mat(doi_phased); 
 
-function doi_phased = phaseCorrection_zeroCrossing(doi)    
+function [doi_phased, indmin ]= phaseCorrection_zeroCrossing(doi)    
 % Phase-correct all spectra after zero-crossing, reversing the full
 % absoprtion mode by 180degrees.
 

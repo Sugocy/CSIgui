@@ -13,9 +13,8 @@ function stats = csi_statistics_of_volume(data, filter, filter_val)
 %%% Dr. Quincy van Houtum, ELH-Institute Essen, 2023/04.
 %%% quincyvanhoutum@gmail.com
 
-if nargin == 1
-    filter = ones(size(data)); filter_val = 1;
-end
+% Process input
+if nargin == 1, filter = ones(size(data)); filter_val = 1; end
 
 % Output struct.
 stats = struct;
@@ -24,7 +23,9 @@ stats = struct;
 data(filter < filter_val) = NaN;
 
 % Mean +/- std
-stats.mean = nanmean(data(:)); stats.std = nanstd(data(:));
+
+stats.mean = mean(data(:), 'omitnan'); 
+stats.std = std(data(:), 'omitnan');
 
 % Mode: rounded by 100th decimal
 tmp = round(data.*100)./100; 
@@ -36,8 +37,7 @@ end
 clear('tmp');
 
 % Median
-tmp = data(:);
-stats.median = median(tmp(~isnan(tmp)));
+stats.median = median(data(:), 'omitnan');
 
 % Min/Max and location in array
 tmp_ind = cell(1,numel(size(data)));

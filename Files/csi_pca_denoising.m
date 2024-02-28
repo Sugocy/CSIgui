@@ -44,7 +44,7 @@ if nargin < 3, patch_size = 5; svd_method = 0; end
 if nargin < 4, svd_method = 1; end
 
 % Data dimensions
-dim = size(spec); 
+dim = size(spec,1,2,3,4,5,6,7,8,9,10); 
 dim_spat = dim; dim_spat(chan_ind) = []; dim_spat(1) = [];
 
 % Reshape data nS x nVox x nCh % --------------------------------------- %
