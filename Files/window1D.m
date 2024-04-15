@@ -31,7 +31,7 @@ type = lower(type); state = lower(state);
 %% Set window type
 
 switch type
-    case 'hamming',  ac = [ 25/46 0.46 0 0 0 ];
+    case 'hamming',  ac = [ 0.53836 0.46164 0 0 0 ];
     case 'hann'   ,  ac = [ 0.50 0.50 0 0 0 ];
     case 'blackman', ac = [ 0.42 0.50 0.08 0 0 ];
     case 'flattop',  ac = [ 0.21557895  0.41663158  ...

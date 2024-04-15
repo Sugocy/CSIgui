@@ -879,6 +879,10 @@ end
 function success = parse_datfile(fp, fn, gui)
 % Load dat-file from Siemens platform into memory using the mapVBVD
 % function from Philipp Ehses
+%
+% This function is basic as possible, loading the data into memory and
+% setting the dimension labels. 
+% Other data-operations and header-nfo will be parsed in separate functions
 
 % Twix-loading
 twix = mapVBVD([fp '\' fn '.dat']);
@@ -899,9 +903,9 @@ dims_txt = dims_txt(twix.image.dataSize>1);
 
 % Correct data labels from twix-file.
 % Labels in dat-file
-labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
+labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave', 'set'}; 
 % Library for other name
-labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
+labels_match_library = {'fid','chan','ky','kz','kx', 'aver', 'aver'};    
 dims_txt_corrected = cell(1,size(dims_txt,2));
 for ti = 1:size(dims_txt,2)        
     ind = strcmpi(labels_dat_file, dims_txt{ti});
@@ -2836,9 +2840,9 @@ if ~strcmp(domain, 'time')
     CSI_Log({'MRS data is possibly in frequency domain; '},...
             {'Apodization requires time domain data.'});
     qry = {'MRS-data is possibly in frequency domain:'};
-    def = {{'Convert', 'Ignore', 'Abort'}};
+    def = {{'Ignore', 'Convert', 'Abort'}};
     uans = getUserInput_Popup(qry,def,[],'Apodization');
-    if isempty(uans) || strcmp(uans, 'Abort'); return; end
+    if isempty(uans) || strcmp(uans{1}, 'Abort'); return; end
     if strcmp(uans{1}, 'Convert'), doFFT = 1; end
 end 
 
@@ -3588,11 +3592,11 @@ sprintf('Binned dimension "%s" over %i bins', csi.data.labels{dim}, nbin);
 CSI_Log({msg},{''});
 
 % --- Executes on button press in button_CSI_Sum.
-function button_CSI_Sum_Callback(~, ~, gui, backup)
+function button_CSI_Sum_Callback(hobj, ~, gui, backup)
 % Summate MRSI data over a specific dimensions
 
 % BACKUP + APPDATA % ------------------- %
-
+if nargin < 3, gui = guidata(hobj); end
 if nargin < 4, backup = gui.checkbox_backup.Value; end
 if backup, CSI_backupSet(gui, 'Before summation.');  end
 
@@ -4957,7 +4961,14 @@ function button_CSI_Single_Callback(~, ~, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-csi.data.raw = single(csi.data.raw);
+if isa(csi.data.raw, 'double')
+    csi.data.raw = single(csi.data.raw); msgA = 'single'; msgB = 'double';
+else
+    csi.data.raw = double(csi.data.raw); msgB = 'single'; msgA = 'double';
+end
+
+CSI_Log({['CSI data converted to ' msgA '-precision.']},...
+        {['Press again to set to ' msgB '-precision.']});
 
 setappdata(gui.CSIgui_main, 'csi', csi);
 
@@ -6587,7 +6598,8 @@ for ri = 1:size(rem_index,1)
     % Plot scatter
     tmp(tmp == 0) = eps; tmp(~isfinite(tmp)) = eps;tmp(isnan(tmp)) = eps;
    % tmp = tmp + abs(min(tmp(:))).*1.01;
-    scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
+    sc = scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
+%     sc.MarkerFaceAlpha =  0.2;
     
     % Axes cosmetics
     lim_sz = size(tmp); lim_sz = lim_sz+1;
@@ -6714,9 +6726,11 @@ log = get(gui.listbox_CSIinfo,'String');
 csi.data.log = char(log);
 
 % Send to workspace
-assignin('base', 'csi',csi.data);
-csi.data
+assignin('base', 'csi', csi.data);
 fprintf('Variable "csi" accessible from workspace.\n');
+
+% Open viewer
+NFOviewer(csi);
 
 % Open data-directory
 CSI_openDataDirectory(gui)
@@ -7874,6 +7888,12 @@ for sl = 1:size(data,4)
         'BackgroundColor', 'Black', 'ForegroundColor', [0.94 0.94 0.94],...
         'Callback', @CSI_dataAsTable_SaveButton);
     
+    % To copy to clipboard
+    tgui.tab{sl}.savebutton_clip = uicontrol(tgui.tab{sl}.tabh,...
+        'Position', [235 2.5 100 15],'String','Copy to Clipboard',...
+        'BackgroundColor', 'Black', 'ForegroundColor', [0.94 0.94 0.94],...
+        'Callback', @CSI_dataAsTable_SaveButton);
+    
     % DATA: prepare % -------------------------------------------------- %
 
     % Slice-selection and higher dimension selection.
@@ -8067,49 +8087,52 @@ function CSI_dataAsTable_SaveButton(hObj, evt)
 tab_obj = hObj.Parent; tgui = guidata(tab_obj); 
 fparent = evt.Source.String;
 
-% Get file destination from user.
-[fn, fp, fi] = ...
-    uiputfile({'*.txt', 'Text Files (*.txt)';...
-               '*.mat', 'MATLAB File (*.mat)'},...
-               'Save table data...');
-if fi == 0, return; end
-ext = fn(end-3:end);
+
 
 % Save according to function-parent e.g. button.
+saveToFile = 1;
 switch fparent
     case 'Save all'
         dsize = [size(tgui.tab{1}.table.Data) size(tgui.tab,2)];
-        data = NaN(dsize);
+        data = NaN(dsize); datastr = cell(dsize);
+        % Get data as string
+
+
+        % Get data as double and string
         for sli = 1:size(tgui.tab,2)
             data(:,:,sli) = ...
                 cellfun(@str2double, tgui.tab{sli}.table.Data);
+            datastr(:,:,sli) = tgui.tab{sli}.table.Data;
         end
 
-        % Indexes for nan-values at single-slice location
-        ind = ind2subQ(size(data), find(isnan(data)));
-        
+        % Find all header-rows: starts with "Ind"
+        ind = contains(datastr, 'Ind');
+        ind = find(ind == 1);
+        ind = ind2subQ(dsize,ind);
+
         % row/col/slice indexes
-        row = unique(ind{1}); col = unique(ind{2}); sli = unique(ind{3});        
+        row = unique(ind{1}); 
 
         % Number of row/col/slices
         extr = size(row,1); % Number of additional slices
         nrow = (size(data,1) - extr)/extr; % nRows in slice
-        ncol = size(col,1); % #Col in slice
-        nsli = size(sli,1); % #Number of actual slices
+        ncol = size(data,2); % #Col in slice
+        nsli = size(data,3); % #Number of actual slices
         
         outp = NaN(nrow,ncol,nsli, extr);
         for si = 1:nsli
             % Take slice of interest
             sloi = data(:,:,si);
-            % Remove NAN
-            sloi = sloi(~isnan(sloi));
+            % Remove header-rows
+            ind_header = ind{1}(ind{3} == si);
+            sloi(ind_header,:) = [];  
             sloi = reshape(sloi,[nrow*extr, ncol]);
             % Loop each extra-dim
             for xi = 1:extr
                 outp(:,:,si,xi) = sloi( ((xi-1)*nrow)+1:xi*nrow,:);        
             end
         end
-
+        
         data2exp = data; data = outp; ind = [];
         
     case 'Save selected'
@@ -8126,7 +8149,50 @@ switch fparent
         for kk = 1:size(ind,1)
             data2exp(kk,1) = data(ind(kk,1),ind(kk,2));
         end
+    case 'Copy to Clipboard' 
+        saveToFile = 0;
+
+        % Tab index
+        tab_title = tgui.tabgp.SelectedTab.Title;
+        tab_title_space = strfind(tab_title,' ');
+        tab_ind = str2double(tab_title(tab_title_space+1:end));
+
+        % Get selected indexes
+        ind = tgui.selectedCells;
+
+        % Get data
+        data = cellfun(@str2double, tgui.tab{tab_ind}.table.Data);
+
+        % Get array-config of selected data
+        sz_sel_mx = max(ind); sz_sel_mn = min(ind);
+        sz_sel_mx = sz_sel_mx - (sz_sel_mn - 1);
+        ind_aim = ind - (sz_sel_mn-1);
+
+        % This could be a checksum: but user may select different shapes
+        % size(ind,1) == prod(sz_sel_mx);
+
+        data2exp = NaN(sz_sel_mx);
+        for kk = 1:size(ind,1)
+            data2exp(ind_aim(kk,1), ind_aim(kk,2)) = ...
+                data(ind(kk,1), ind(kk,2));
+        end
+
+        % Copy it as text - under construction
+        % data2exp = string(data2exp) % Creates string array
+        % Copy clipboard requires string-vector!
+
+        clipboard("copy", data2exp)
 end
+
+if saveToFile
+
+% Get file destination from user.
+[fn, fp, fi] = ...
+    uiputfile({'*.txt', 'Text Files (*.txt)';...
+               '*.mat', 'MATLAB File (*.mat)'},...
+               'Save table data...');
+if fi == 0, return; end
+ext = fn(end-3:end);
 
 % Save to file.
 switch lower(ext)
@@ -8137,7 +8203,7 @@ switch lower(ext)
         csi_writeText(data2exp,[fp fn]);
 end
 
-
+end
 
 
 % --- Executed by data visualization with seperate figures functions
@@ -9063,10 +9129,14 @@ end
 % TWIX-INFO  (dat-file)
 if isfield(csi,'twix')
     
+    % Image orientation
+    if csi.twix.Meas.VoiNormalSag,     ori.image_orientation = 'Sag';
+    elseif csi.twix.Meas.VoiNormalCor, ori.image_orientation = 'Cor';
+    elseif csi.twix.Meas.VoiNormalTra, ori.image_orientation = 'Tra';
+    end
+
     % Offcentre
-    % Also located in Meas.VoI_Position_Cor, VoI_Position_Sag and 
-    % VoI_Position_Tra
-    
+    % Also located in Config.VoI_Position_Cor/Sag/Tra
     % Sagital means slices in LR dir
     if isempty(csi.twix.Meas.VoiPositionSag), ori.offcenter(2) = 0;
     else, ori.offcenter(2) = csi.twix.Meas.VoiPositionSag;
@@ -9097,10 +9167,7 @@ if isfield(csi,'twix')
     ori.dim(2) = csi.twix.Meas.PhaseEncodingLines;
     ori.dim(3) = csi.twix.Meas.SliceResolution;
 
-    % Res
-    % ori.res = ori.fov ./ ori.dim;
-
-    % RES  [AP LR FH]
+    % RES:  [AP LR FH] - [Y X Z]
     ori.res(2)= ori.fov(1)./csi.data.dim(space_dim(1)); % LR = x
     ori.res(1)= ori.fov(2)./csi.data.dim(space_dim(2)); % AP = y
     ori.res(3)= ori.fov(3)./csi.data.dim(space_dim(3)); % FH = z
@@ -9109,10 +9176,12 @@ if isfield(csi,'twix')
     % hdr.Meas.Matrix Meas.PatientPosition
     % twix.Meas.VoiNormalTra or Cor/Sag
 
+    % After multi-file analysis: Data needs flip in YZ direction
     if ~isfield(ori, 'flipCorrection')
         ori.flipCorrection = 1;
     end
 
+    % After multi-file analysis: Data needs voxel shift correction
     if ~isfield(ori, 'voxShiftCorrection')
         % If READ i.e. LR-dimension is ODD...
         if mod(csi.twix.Meas.ReadResolution,2) ~= 0 %  ODD
@@ -9148,7 +9217,7 @@ end
 
 % Voxel flip correction for dat-file
 if isfield(ori, 'voxShiftCorrection'), dans{5} = ori.voxShiftCorrection;
-else, dans{4} = 0;
+else, dans{5} = 0;
 end
 
 
@@ -9215,6 +9284,8 @@ if ori.flipCorrection == 1
 
     CSI_Log({'Applied CSI-volume orientation-correction for dat-file: '},...
         { sprintf('%s | ', csi.data.labels{ind_to_flip}) });
+else
+   csi.ori.flipCorrections = -1;
 end
 
 % DAT-file Voxel Shift corrections % ----------------------------------- %
@@ -9232,6 +9303,8 @@ if ori.voxShiftCorrection == 1
 
     CSI_Log({'Applied voxel shift correction for dat-file: '},...
         { sprintf('%s | ', csi.data.labels{ind_to_shift}) });
+else
+   csi.ori.voxShiftCorrection = 0;
 end
 % ---------------------------------------------------------------------- %
 
@@ -10916,7 +10989,7 @@ function CSI_2D_grid(target, target_sz, dim, range, grid_clr)
 % Get figure size for normalization of grid thickness
 w = target_sz(1); h = target_sz(2);
 % Define using vertical line the thickness of horizontal ones 
-wv = 3; wh = wv; wv = wv./w; wh = wh./h; 
+wv = 1; wh = wv; wv = wv./w; wh = wh./h; 
 % Line height or width for both vertical and horizontal grid lines;
 h = 1; 
 
@@ -11514,7 +11587,7 @@ if isfield(csi, 'xaxis') % If already present, copy some data.
     end
 end
 
-% READ SPAR-header % ------------------------------------------ %
+% READ SPAR-header (Philips) % ------------------------------- %
 if strcmp(csi.ext ,'spar') || strcmp(csi.ext ,'sdat') 
     
     % Get from header file: BW, nucleus, transmit freq
@@ -11536,8 +11609,8 @@ if strcmp(csi.ext ,'spar') || strcmp(csi.ext ,'sdat')
     xaxis.tesla = xaxis.trans./xaxis.gyro;
 end
 
-% READ DAT-Header (Siemens) ----------------------------------- %
-if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
+% READ DAT-Header (Siemens/TWIX) -------------------------------- %
+if isfield(csi, 'twix') && ~isfield(csi, 'xaxis')
     % Nucleus
     xaxis.nucleus = csi.twix.Config.Nucleus;
     
@@ -11552,15 +11625,29 @@ if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
         end
     end
     
-    
     % Bandwidth (Receiver)
-    dwelltime = csi.twix.Config.DwellTime;
-    % nanosecond and OS correction
-    OSvectorsz = csi.twix.Config.VectorSize*csi.twix.Config.ReadOSFactor;
-    if  OSvectorsz == size(csi.data.raw,1)
-        xaxis.BW = (((1/dwelltime)) * 10^9); 
+    if isfield(csi.twix.Config, 'DwellTime')
+        dwelltime = csi.twix.Config.DwellTime * 1e-9;
+    else       
+        vals = getFieldValues(csi.twix, 'dwelltime');
+        ind = ~cellfun(@ischar, vals); vals = cell2mat(vals(ind));
+        vals = unique(vals);
+        if numel(vals) > 1, vals = mode(vals); end
+        dwelltime = vals * 1e-9;
+    end
+    xaxis.BW = 1/dwelltime;
+    
+    % Oversampling Correction    
+    if isfield(csi.twix.Config, 'ReadOSFactor')
+        OSfactor = csi.twix.Config.ReadOSFactor;
+    elseif isfield(csi.twix.Config,'ReadoutOSFactor')
+        OSfactor = csi.twix.Config.ReadoutOSFactor;
     else
-        xaxis.BW = (((1/dwelltime) / csi.twix.Config.ReadOSFactor) * 10^9); 
+        OSfactor = 1;
+    end
+    OSvectorsz = csi.twix.Config.VectorSize*OSfactor;           
+    if OSvectorsz ~= size(csi.data.raw,1)
+        xaxis.BW = xaxis.BW ./ OSfactor;
     end
     
     switch xaxis.nucleus 
@@ -11571,25 +11658,28 @@ if strcmp(csi.ext, 'dat') && ~isfield(csi, 'xaxis')
         case '19F', xaxis.gryo = 40.052*10^6;
         otherwise,  xaxis.gyro = 42.57747892*10^6;
     end 
-    xaxis.trans = xaxis.tesla * xaxis.gyro;    
-end
 
-% % Parameters of interest.
-% csi.twix.Dicom.flMagneticFieldStrength % Field-strength
-% csi.twix.Dicom.flReadoutOSFactor % Oversampling
-% hdr.Meas.flNominalB0
-% hdr.Meas.flMagneticFieldStrength
-% hdr.Meas.flReadoutOSFactor
+    % Get imaging frequency
+    vals = getFieldValues(csi.twix, 'Frequency', 0);
+    ind = ~cellfun(@ischar, vals); vals = cell2mat(vals(ind));
+    vals = unique(vals);
+    if numel(vals) > 1, vals = mode(vals); end
+    if vals ~= 0
+        xaxis.trans = vals;
+    else
+        xaxis.trans = xaxis.tesla * xaxis.gyro;    
+    end
+end
 
 % USER INPUT % ------------------------------------------ %
 % If auto == 1, this is skipped
 
 if auto == 0
     % Request required values
-    qry = { 'Nucleus (1H): ', 'Magnet strength(T): ', 'Bandwidth (Hz): ',...
-            'PPM Shift (Num): '} ;
+    qry = { 'Nucleus (1H): ', 'Magnet strength(T): ', ...
+            'Bandwidth (Hz): ', 'PPM Shift (Num): '} ;
 
-    % Create possible answers if exist: previous input or header file.
+    % Create possible answers if exist: previous input or from header file.
     if isfield(xaxis,'nucleus'),an{1} = xaxis.nucleus; 
     else, an{1}= '31P';  
     end    
@@ -11615,7 +11705,7 @@ if auto == 0
     xaxis.BW      = str2double(inp{3});
     xaxis.shift   = str2double(inp{4});
 
-    switch inp{1} % Gyromagnetic constant in MHz
+    switch inp{1} % Gyromagnetic constants in Hz
         case '1H',  xaxis.gyro = 42.57747892*10^6;
         case '2H',  xaxis.gyro = 6.536*10^6;
         case '31P', xaxis.gyro = 17.235*10^6;
@@ -11640,12 +11730,9 @@ end
 %%% Calculate axis-parameters
 
 % Find dimension with FID/Spectrum
-fid_dim_label = {'sec','fid', 'spec'}; ind = [];
-for lbi = 1:size(fid_dim_label,2)
-    if isempty(ind)
-        ind = find(strcmp(csi.data.labels,fid_dim_label(lbi)) == 1);
-    end
-end
+fid_dim_label = {'sec','fid', 'spec', 't'}; 
+ind = csi_findDimLabel(csi.data.labels,fid_dim_label);
+ind(isnan(ind)) = [];
 
 % Set length of spectro-data
 if ~isempty(ind), xaxis.N = csi.data.dim(ind);
@@ -11682,11 +11769,6 @@ else
     if ~isfield(xaxis,'xlimit') || (xaxis.xlimit(2) ~= csi.data.dim(1)-1)
         xaxis.xlimit = [xaxis.none(1) xaxis.none(end)];
     end
-end
-
-% If PPM available, set new limit
-if isfield(xaxis,'ppm')
-    xaxis.xlimit = [xaxis.ppm(1) xaxis.ppm(end)];
 end
 
 % CLEAN UP % -------------------------------------------- %
@@ -14580,13 +14662,17 @@ if isappdata(gui.CSIgui_main,'csi')
         fp = varargin{1}; fn = varargin{2}; ext = varargin{3};
     end
     
-    % Reduce file size?
-    reduce_size = getUserInput_Popup(...
-        {'Reduce file size by converting to single?'},...
-        {{'Yes','No'}}, [], 'Save Data');
+    % Reduce file size? Save Backup?
+    uans = getUserInput_Popup(...
+        {'Reduce file size by converting to single?',...
+         'Include backup-data?'},...
+        {{'Yes','No'},{'No', 'Yes'}}, [], 'Save Data');
     
-    if strcmpi(reduce_size{1},'yes')
+    if strcmpi(uans{1},'yes')
         csi.data.raw = single(csi.data.raw);
+    end
+    if strcmpi(uans{2},'No') && isfield(csi,'backup')
+        csi = rmfield(csi,'backup');
     end
     
     % Add log
@@ -14651,17 +14737,6 @@ function CSI_saveFig(hObject, ~, ~)
 % Save the 2D CSIgui plot to file supporting multiple formats;
 % jpg, png, eps, tiff, fig.
 
-
-%%%%% SOME INFO %%%%%
-% Okay how to do it for now:
-% 1. Export options --> resolution (in dpi or screen size) 
-        % (redun for eps) use painters inst opengl
-% 2. Export spectra only or merged w image
-        % Uhm.. how? Get rid of that object in figure . print
-% 3. Export image seperatly at MRI > Export > Images
-        % Mat + PNG etc. ---> Save current displayed slice or all images as
-        % PNG :)
-% export_fig([fp fn], '-transparent','-png','-nocrop','-m8', fig_obj);
 
 
 % Get guidata
@@ -16978,8 +17053,16 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % User Input % ------------------------------------------------- %
 
-% Get stored TR, if available.
-if isfield(csi.xaxis,'TR'), TR = csi.xaxis.TR; 
+% Read TR from file, Get stored TR, if available.
+if isfield(csi.xaxis,'TR'), TR = csi.xaxis.TR;
+elseif strcmp(csi.ext, 'dat') || isfield(csi,'twix')
+    fn = strtrim(strsplit(csi.filename, '|'));
+    TR = NaN(1,numel(fn));
+    for kk = 1:numel(fn)
+        twix = mapVBVD([csi.filepath fn{kk}]);
+        TR(kk) = twix.hdr.Config.TR./(1e6);        
+    end
+    clear('twix'); 
 else, TR = [0.3 0.5 0.65 0.8 1 1.2 1.5 2 4 6 8 10 12 14]; 
 end
 
