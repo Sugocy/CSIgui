@@ -10,7 +10,7 @@ function outp = csi_fit_FASeries(xdata, ydata, fit_method, phase_data, ...
 %
 % Input:
 %
-%       1. FA           = flip angles (x-axis)
+%       1. FA           = flip angles // voltage // etc (x-axis)
 %       2. data         = spectrum for each FA
 %       3. phase_data   = 0, 1 or 2; 
 %                    |1: phase all data prior to processing
@@ -25,6 +25,7 @@ function outp = csi_fit_FASeries(xdata, ydata, fit_method, phase_data, ...
 %       8. counter      = Number for data-iteration
 %       9. dirstr       = directory to save data
 %      10. variables    = TR and T1, required for fit-method 1
+%                       = ppm-axis
 %
 % NFO Phasing:
 % If the zero-crossing is present in the data, it needs to be phased
@@ -50,7 +51,17 @@ function outp = csi_fit_FASeries(xdata, ydata, fit_method, phase_data, ...
 % INPUT/SETUP % -------------------------------------------------------- %
 
 % Process variable input arguments.
-if (nargin >= 10), TR = varargin{1}; T1 = varargin{2}; end
+if (nargin >= 10)
+    if numel(varargin) == 2
+        TR = varargin{1}; T1 = varargin{2}; 
+    elseif numel(varargin) == 1
+        ppm = varargin{1};
+    elseif numel(varargin) == 3
+        TR = varargin{1}; T1 = varargin{2}; ppm = varargin{3};
+    end
+end
+
+
 
 % Create output variable
 outp = struct; 
@@ -226,23 +237,24 @@ for kk = 1:size(outpstr,2)
 end
 
 
-% --- % Plot
+% --- % Plot % --------------------------------------------------------- %
 if plot_data
 
     try
     fh = figure(); 
     
-    % Plot raw and phased spectra
-    subplot(2,1,1); orange = [0.9290 0.6940 0.1250];
-    plot(cat(1, zeros(size(doi_main,1),1), real(doi_main(:))),...
-        'color', orange); hold on;
-    plot(cat(1,zeros(size(doi,1),1),real(doi(:))),'--r');     
-    lg = legend('Phased', 'Original');
-    lg.FontSize =  6; lg.Location = 'northwest';
-    ylabel('Amplitude [a.u.]'); xlabel('Dynamic Range');
+    % Graph limits.
+    ylim_val(1) = min(real(cat(1, doi(:), doi_main(:))));
+    ylim_val(2) = max(real(cat(1, doi(:), doi_main(:))))*1.05;
+    
+    % ------------------------------------------ %
+    % Bottom Row Plot 
+
+    % The color orange predefined.
+    orange = [0.9290 0.6940 0.1250];
 
     % Plot fit-values, fit-result and zero-crossings
-    subplot(2,1,2);
+    ax_bottom = subplot(2,1,2); 
     % Plot original fit-values
     plot(xdata, vals,'--ob','LineWidth', 1.25); hold on;     
     % Plot extended fit
@@ -264,17 +276,85 @@ if plot_data
     % Zero-line
     plot([xdata(1) xdat_HR_ext(end)],[0 0], '--k','Linewidth', 1.5);
 
+    % Legend
     lg = legend('Data','Fit', 'Zero-crossing'); 
-    lg.FontSize =  6; lg.Location = 'southwest';
+    lg.FontSize =  6; lg.Location = 'southwest';        
+
+    % Fontsizes
+    ax_bottom.FontSize = 7;
+    ax_bottom.YLabel.FontSize = 9; ax_bottom.XLabel.FontSize = 9;
+
+    % ------------------------------------------ %
+    % Top Row Plot 
+
+    % Plot the top-spectra / phased and raw
+    % Manual subplots of top-row
+    nsubs = size(doi_main,2); sbplot_n = nsubs; sbplot_m = 2;
+
+    % Create x-position for each axis its normalized location using the 
+    % positon info from the bottom plot to keep it aligned.
+    ax_pos_bottom = ax_bottom.Position;
+    ax_dx = ax_bottom.Position(3) ./ nsubs; 
+    ax_x_end = (ax_bottom.Position(3) + ax_bottom.Position(1)) - ax_dx; 
+    ax_x_vec = linspace(ax_pos_bottom(1), ax_x_end, nsubs);
+    
+    % Y-location of subplots
+    ax_tmp = subplot(sbplot_m, sbplot_n, 1); ax_tmp_pos = ax_tmp.Position;
+    delete(ax_tmp); ax_y = ax_tmp_pos(2);
+    
+    % Size of sub-plots
+    ax_sz = [ax_dx ax_pos_bottom(4)];
+
+    % Create ppm-axis if it does not exist.
+    if exist('ppm', 'var') ~= 1, ppm = linspace(-4,4,size(ydata,1)); end
+    xlim_val = [min(ppm) max(ppm)];
+
+    % Prepare x-tick values
+    center = ppm(round(size(ppm,2)./2));
+    rb = round( ppm( round(size(ppm,2).*(5/24)) ),1);
+    lb = round( ppm( round(size(ppm,2).*(19/24))+1),1);
+    xtcks = sort([lb center rb]);
+    
+
+    ax = gobjects(1,nsubs);
+    for kk = 1:nsubs
+        ax(kk) = axes('Position', [ax_x_vec(kk) ax_y ax_sz]);
+        plot(ax(kk), ppm, real(doi_main(:,kk)), 'color', orange);
+        hold on;
+        plot(ax(kk), ppm, real(doi(:,kk)), '--r')
+        xlabel(sprintf('%i', xdata(kk))); ylim(ylim_val); xlim(xlim_val);
         
+
+        % Remove x-limit xticks values.
+        ax(kk).XTick = xtcks; xtickangle(0);
+        ax(kk).FontSize = 7; ax(kk).XDir = 'Reverse';
+        ax(kk).XLabel.FontSize = 8;
+
+        % Cosmetics
+        if kk == 1
+            ax(kk).YLabel.String = 'Amplitude [a.u.]'; 
+            ax(kk).YLabel.FontSize = 9;
+        end
+        if kk ~= 1, ax(kk).YTick = []; end
+        if kk == nsubs
+            lg = legend('Phased', 'Original');
+            lg.FontSize = 6; lg.Location = 'northeast';
+            lg.Position = [ax_x_vec(1) (ax_y + ax_sz(2)) - lg.Position(4) ...
+                lg.Position(3) lg.Position(4)];
+        end
+    end
+
     % Write to file.
     if save_plot
         figname = strjoin([dirstr '\' strfn '.png'],'');
         export_fig(figname{1}, '-transparent','-nocrop','-m1', fh);
     end
 
-    catch err, warning(err.message);
+    catch err
+        warning(err.message);
     end
+% ---------------------------------------------------------------------- %
+
 end
 
 function doi_phased = phaseCorrection(doi)

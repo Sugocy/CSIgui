@@ -15,8 +15,16 @@ while rnd ~= aim
     if n > lim, break; end
 end
 
-% #decimals
-N = lim - n + 1;
 
-% Correction for 0.5-cutoff
-if (val*10^N) <= 1, N = N + 1; end
+if n > lim
+    val_str = num2str(val);
+    ind = strfind(val_str,'.');
+    N = numel(val_str) - ind;
+else
+    % #decimals
+    N = lim - n + 1;
+    
+    % Correction for 0.5-cutoff
+    if (val*10^N) <= 1, N = N + 1; end
+end
+

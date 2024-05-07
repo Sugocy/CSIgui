@@ -23,7 +23,6 @@ stats = struct;
 data(filter < filter_val) = NaN;
 
 % Mean +/- std
-
 stats.mean = mean(data(:), 'omitnan'); 
 stats.std = std(data(:), 'omitnan');
 

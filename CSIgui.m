@@ -3,7 +3,7 @@ function varargout = CSIgui(varargin)
 % See Zonedo.org or github for latest releases. Help file is present in the
 % "files" directory or via help in the GUI.
 %
-% Possible labels arguments:
+% Possible labels for input arguments:
 %            'data','list','csi','spec','image', 'mrs', 'labels'
 %            {filepath}, {filepathi}
 % Input:
@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 23-Jan-2024 11:44:08
+% Last Modified by GUIDE v2.5 02-May-2024 14:31:12
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -75,7 +75,7 @@ loadBar(0.1, 'Creating menubar...');
 gui = CSIgui_menubar_Set(gui);
 
 loadBar(0.3, 'Executing JavaScript...');
-gui = CSIgui_manubar_javaScript(gui);
+gui = CSIgui_menubar_javaScript(gui);
 
 % Update gui structure
 guidata(hObject, gui);
@@ -370,7 +370,7 @@ gui.menubar.About.github = ...
 end
 
 % --- Executes at launch
-function gui = CSIgui_manubar_javaScript(gui)
+function gui = CSIgui_menubar_javaScript(gui)
 % Sets tooltips to menu-bar entries.
 
 % ----------- %%% Some Jave Menu ToolTip String Magic %%% -------------- %
@@ -410,7 +410,7 @@ try
       'DEV: Enable/disable slider-window to snap to the CSI-2D plot-window.'};
         
         nMenus = size(fieldnames(gui.menubar.MRSI),1)-1; % Remove main CSI
-        for kk = 0:nMenus-1 % Start indexin @ zero - Matlab vs Java.
+        for kk = 0:nMenus-1 % Start indexing @ zero - Matlab vs Java.
             jtmp = jMRSI.getMenuComponent(kk);
             jtmp_str = jtmp.toString;
             dot_loc = strfind(jtmp_str, '.');
@@ -440,8 +440,6 @@ end
 % --- Outputs from this function are returned to the command line.
 function varargout = CSIgui_OutputFcn(~, ~, gui)
 % varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
 % gui    structure with gui and user data (see GUIDATA)
 
 % Get default command line output from gui structure
@@ -460,151 +458,9 @@ if isfield(gui,'inp')
     gui = rmfield(gui, 'inp'); guidata(hObj,gui); 
 end
 
-% --- Open multiple files
-function success = parse_multifile(fp, fn, ext, gui)
-% Open up multiple files to be loaded into memory. 
-%
-% Expects the same file extensions and resulting data requires the same
-% dimensions. The header of the first file will be used.
 
-% First we need to correct the order as Matlab does not save the order of
-% the files as clicked... 
-order = 0;
-while size(unique(order),2) ~= size(fn,2)
-
-    numbers = cell(1,size(fn,2));
-    for nf = 1:size(fn,2)
-        if nf == 1
-            tmp = nf:size(fn,2);
-        else
-            tmp = [nf:size(fn,2) 1:nf-1];
-        end
-        numbers{nf} = strsplit(num2str(tmp));
-    end
-    uans = getUserInput_Popup(fn, numbers,...
-           [gui.colors.main; gui.colors.text_main], 'Set load order.');
-    if isempty(uans), order = 1:size(fn,2); break; end
-    order = str2double(uans);
-    
-end
-[~, sort_index] = sort(order);
-fn = fn(sort_index);
-
-switch ext
-    case '.dat' % Spectroscopy - Siemens
-
-        % Loop all files
-        for kk = 1:size(fn,2)
-            
-            % Twix-loading
-            twix = mapVBVD([fp '\' fn{kk} '.dat']);
-            
-            % Header
-            if kk == 1
-                csi.twix = twix.hdr;
-            end
-
-            % Read data dimension and labels
-            dims = num2cell(twix.image.dataSize);
-            dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
-            
-            % Dimension labels from header
-            dims_txt = twix.image.dataDims;
-            dims_txt = dims_txt(twix.image.dataSize>1);
-            
-            % Correct data labels from twix-file.
-            % Labels in dat-file
-            labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
-            % Library for other name
-            labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
-            dims_txt_corrected = cell(1,size(dims_txt,2));
-            for ti = 1:size(dims_txt,2)        
-                ind = strcmpi(labels_dat_file, dims_txt{ti});
-                if sum(ind) > 0
-                    dims_txt_corrected{ti} = labels_match_library{ind};
-                end
-            end
-            
-            % Store labels, only first iteration
-            if kk == 1, csi.data.labels = [dims_txt_corrected 'file']; end
-            
-            % MRS-data
-            tmp = squeeze(twix.image(dims_rng{:}));
-            
-            % Free up memory
-            clear('twix')
-
-            % Data sizes.
-            nfo = whos('tmp'); 
-            matlab_nfo = memory;
-            
-            if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
-                % Array is too large for matlab-array-memory
-                CSI_Log({'CSIgui: data requires much memory.'},...
-                        {'Loading as single.'});
-                tmp = single(tmp);
-            else
-                % Array will fit matlab-max-array-memory
-                tmp = double(tmp);    
-            end
-        
-            if kk == 1
-                data = tmp; data_sz = size(data);
-                file_dim = numel(size(tmp))+1;                
-            else
-                if (data_sz == size(tmp))
-                    data = cat(file_dim,data,tmp);
-                else
-                    CSI_Log({'Aborting, data dimensions between'},...
-                            {'files did no agree. Aborted loading.'});
-                    success = 0;
-                    return;
-                end
-            end
-            clear('tmp');
-
-            % Close file ID
-            fclose('all');
-        end
-
-        % Store to CSI memory
-        csi.data.raw = data;
-        clear('data');
-
-        % Data dimensions
-        csi.data.dim = size(csi.data.raw);
-                
-        success = 0;
-        if csi.data.dim(1) > 0, success = 1; end
-        
-        % Meta-data
-        csi.ext = 'dat'; csi.filename = strjoin(fn, ' | '); % Save filename
-        
-        % Filename
-        csi.filepath = fp;
-
-        % Save CSI data in app-data
-        setappdata(gui.CSIgui_main,'csi',csi);  
-
-
-    case '.ima' % Image - DICOM - Siemens
-    CSI_Log({'Loading multiple files for file type not implemented!'},...
-            {''});
-    case '.dcm' % Image - DICOM - Other
-    CSI_Log({'Loading multiple files for file type not implemented!'},...
-            {''});
-    case '.data' % Spectroscopy - Philips
-    CSI_Log({'Loading multiple files for file type not implemented!'},...
-            {''});        
-    case 'spar' % Spectroscopy - Philips
-    CSI_Log({'Loading multiple files for file type not implemented!'},...
-            {''});
-    case 'par' % Image - Philips
-    CSI_Log({'Loading multiple files for file type not implemented!'},...
-            {''});
-end
-
-
+% Open and Parse files % ---------------------------------------------- %
+% --------------------------------------------------------------------- %
 
 % --- Open file or process input.
 function openFile(hObj, ~, ~)
@@ -873,7 +729,6 @@ if isappdata(gui.CSIgui_main,'mri')
         
     end
 end
-
 
 % --- Parse DAT file
 function success = parse_datfile(fp, fn, gui)
@@ -1359,7 +1214,360 @@ if isfield(gui.inp, 'twix')
      succes = 1;
 end
 
+% --- Open multiple files
+function success = parse_multifile(fp, fn, ext, gui)
+% Open up multiple files to be loaded into memory. 
+%
+% Expects the same file extensions and resulting data requires the same
+% dimensions. The header of the first file will be used.
 
+% First we need to correct the order as Matlab does not save the order of
+% the files as clicked... 
+order = 0;
+while size(unique(order),2) ~= size(fn,2)
+
+    numbers = cell(1,size(fn,2));
+    for nf = 1:size(fn,2)
+        if nf == 1
+            tmp = nf:size(fn,2);
+        else
+            tmp = [nf:size(fn,2) 1:nf-1];
+        end
+        numbers{nf} = strsplit(num2str(tmp));
+    end
+    uans = getUserInput_Popup(fn, numbers,...
+           [gui.colors.main; gui.colors.text_main], 'Set load order.');
+    if isempty(uans), order = 1:size(fn,2); break; end
+    order = str2double(uans);
+    
+end
+[~, sort_index] = sort(order);
+fn = fn(sort_index);
+
+switch ext
+    case '.dat' % Spectroscopy - Siemens
+
+        % Loop all files
+        for kk = 1:size(fn,2)
+            
+            % Twix-loading
+            twix = mapVBVD([fp '\' fn{kk} '.dat']);
+            
+            % Header
+            if kk == 1
+                csi.twix = twix.hdr;
+            end
+
+            % Read data dimension and labels
+            dims = num2cell(twix.image.dataSize);
+            dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
+            
+            % Dimension labels from header
+            dims_txt = twix.image.dataDims;
+            dims_txt = dims_txt(twix.image.dataSize>1);
+            
+            % Correct data labels from twix-file.
+            % Labels in dat-file
+            labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
+            % Library for other name
+            labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
+            dims_txt_corrected = cell(1,size(dims_txt,2));
+            for ti = 1:size(dims_txt,2)        
+                ind = strcmpi(labels_dat_file, dims_txt{ti});
+                if sum(ind) > 0
+                    dims_txt_corrected{ti} = labels_match_library{ind};
+                end
+            end
+            
+            % Store labels, only first iteration
+            if kk == 1, csi.data.labels = [dims_txt_corrected 'file']; end
+            
+            % MRS-data
+            tmp = squeeze(twix.image(dims_rng{:}));
+            
+            % Free up memory
+            clear('twix')
+
+            % Data sizes.
+            nfo = whos('tmp'); 
+            matlab_nfo = memory;
+            
+            if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
+                % Array is too large for matlab-array-memory
+                CSI_Log({'CSIgui: data requires much memory.'},...
+                        {'Loading as single.'});
+                tmp = single(tmp);
+            else
+                % Array will fit matlab-max-array-memory
+                tmp = double(tmp);    
+            end
+        
+            if kk == 1
+                data = tmp; data_sz = size(data);
+                file_dim = numel(size(tmp))+1;                
+            else
+                if (data_sz == size(tmp))
+                    data = cat(file_dim,data,tmp);
+                else
+                    CSI_Log({'Aborting, data dimensions between'},...
+                            {'files did no agree. Aborted loading.'});
+                    success = 0;
+                    return;
+                end
+            end
+            clear('tmp');
+
+            % Close file ID
+            fclose('all');
+        end
+
+        % Store to CSI memory
+        csi.data.raw = data;
+        clear('data');
+
+        % Data dimensions
+        csi.data.dim = size(csi.data.raw);
+                
+        success = 0;
+        if csi.data.dim(1) > 0, success = 1; end
+        
+        % Meta-data
+        csi.ext = 'dat'; csi.filename = strjoin(fn, ' | '); % Save filename
+        
+        % Filename
+        csi.filepath = fp;
+
+        % Save CSI data in app-data
+        setappdata(gui.CSIgui_main,'csi',csi);  
+
+
+    case '.ima' % Image - DICOM - Siemens
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case '.dcm' % Image - DICOM - Other
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case '.data' % Spectroscopy - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});        
+    case 'spar' % Spectroscopy - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    case 'par' % Image - Philips
+    CSI_Log({'Loading multiple files for file type not implemented!'},...
+            {''});
+    
+    case '.mat' % Spectroscopy - CSIgui
+    CSI_Log({'Reading all mat-files.'},...
+            {'Please be patient, load-time dependent on file-sizes.'});
+        
+        % Load in every mat-file
+        % Get data.raw catenate - if sizes are equal!
+        % Save one file its conv/mri/csi-structs 
+
+        % Loop all files
+        mri = cell(1,numel(fn)); conv = cell(1,numel(fn));
+        csi_dump = cell(1,numel(fn));
+        for kk = 1:size(fn,2)
+
+            % Check mat-file integrity   
+            mat_cont = whos('-file',[fp '\' fn{kk} '.mat']); 
+            old_format = 0; new_format = 0;
+            if strcmp(mat_cont(1).name,'csigui'),  old_format = 1;
+            elseif strcmp(mat_cont(1).name,'csi'), new_format = 1;
+            end
+            
+            if (old_format + new_format) == 0
+                success = 0;
+                CSI_Log(...
+                {'Incorrect mat-file. Use by CSIgui generated mat-file.',...
+                 'Expected fields:'},...
+                {'Required structure: csigui (old) or csi (new).',...
+                 'raw, dim, filepath and name, noise, split, conv, mri,'}); 
+                return;
+            else, success = 1; 
+            end
+            
+            % Integrity verified, read matfile
+            if old_format
+                inp = load([fp '\' fn{kk} '.mat'], 'csigui');
+                csigui = inp.csigui; clear inp;
+            elseif new_format
+                inp = load([fp '\' fn{kk} '.mat'], 'csi');
+                csi = inp.csi; clear inp;
+            end            
+                                      
+            if old_format            
+                
+                % ------- % Process MRI struct % ------- %  
+                % Find MRI struct and store             
+                if isfield(csigui,'mri')
+                    mri{kk} = csigui.mri; csigui = rmfield(csigui,'mri');
+                end
+
+                % ------- % Process CONV struct % ------- %               
+                % Find conv struct and store
+                if isfield(csigui,'conv')
+                    conv{kk} = csigui.conv; csigui = rmfield(csigui,'conv');
+                end
+                
+                % ------- % Process CSI HDRNFO % ------- %
+                if isfield(csigui,'twix')
+                    if kk == 1, twix = cell(1,numel(fn)); end
+                    twix{kk} = csigui.twix; csigui = rmfield(csigui,'twix');
+                end
+                if isfield(csigui,'list')
+                    if kk == 1, list = cell(1,numel(fn)); end
+                    list{kk} = csigui.list; csigui = rmfield(csigui,'list');
+                end
+                
+                % ------- % Process CSI VOXMASK % ------- %        
+                if isfield(csigui,'voxelmask')
+                    csi.voxelmask = csigui.voxelmask;
+                end
+                
+                % ------- % Process CSI struct % ------- %                
+                % Set remaining CSI input to structure;
+                csi.data = csigui;
+                
+                % Set extensions
+                csi.ext = 'mat';
+                
+                % Set mat-filename
+                csi.data.filename = fn; csi.data.filepath = fp;
+                csi.filename = fn; csi.filepath = fp;
+                
+                % Find xaxis stuct and store
+                if isfield(csigui, 'xaxis')
+                    csi.xaxis = csigui.xaxis; 
+                    csi.data = rmfield(csi.data,'xaxis');
+                end
+                
+                if isfield(csigui, 'ori')
+                    csi.ori = csigui.ori; 
+                    csi.data = rmfield(csi.data,'ori');
+                end
+
+                % ------- % Process LOG % ------- %                
+                % Resubmit log if available
+                if isfield(csigui,'log')
+                    if kk == 1, log_data = cell(1, numel(fn)); end
+                    log_data_tmp = cellstr(csigui.log);
+                    % Exclude first two lines
+                    log_data{kk} = log_data_tmp(3:end);                                       
+                
+                    % Remove log-field
+                    csi.data = rmfield(csi.data,'log');
+                end
+            
+            elseif new_format
+                
+                if isfield(csi, 'conv')
+                    conv{kk} = csi.conv; csi = rmfield(csi,'conv');
+                end
+            
+                if isfield(csi, 'mri')
+                    mri{kk} = csi.mri; csi = rmfield(csi,'mri');
+                end
+            
+                if isfield(csi, 'log')
+                    if kk == 1, log_data = cell(1, numel(fn)); end
+                    log_data_tmp = cellstr(csi.log);
+                    % Exclude first two lines
+                    log_data{kk} = log_data_tmp(3:end);   
+                
+                    % Remove log-field
+                    csi = rmfield(csi,'log');
+                end
+            
+                % Set extensions
+                csi.ext = 'mat';    
+            end
+            
+            % Store app-data csi-struct of this file
+            csi_dump{kk} = csi;
+
+        end
+
+        % Ask the user which file to use for default header info.
+        % Save only data.raw from other files
+        qry = {'Which file-nfo and header should be stored and used?'};
+        uans_foi = getUserInput_Popup(qry ,{fn});
+        if isempty(uans_foi)
+            CSI_Log({'Loading canceled.'},{''}); return; 
+        end
+        foi_ind = contains(fn, uans_foi);
+
+        % Check size-compatibility
+        data_sz = cellfun(...
+            @size, extractField(csi_dump, 'data.raw'), 'uniform', 0);
+        data_sz_check = cellfun(...
+            @isequal, data_sz, repmat(data_sz(foi_ind),size(data_sz)));
+        if sum(data_sz_check) ~= numel(fn)
+            % File of doom - wrong size
+            fod_ind = find(data_sz_check == 0);
+            
+            % Remove FODs from memory
+            csi_dump(fod_ind) = []; mri(fod_ind) = [];
+            conv(fod_ind) = []; log_data(fod_ind) = [];
+            
+            % Show user which files are removed
+            tmp = repmat({'Removed:'}, 1, numel(fod_ind));
+            qry = ...
+            [{'The files below have incompatible data-dimensions.'},...
+            tmp(:)'];
+            CSI_Log({'% -------------------------------------- %'}, {''});
+            CSI_Log(qry, {'', fn{fod_ind}});
+            CSI_Log({'% -------------------------------------- %'}, {''});
+
+            fn(fod_ind) = [];
+            foi_ind = contains(fn, uans_foi);
+        end
+
+        % Concatenate data and add to struct of interest
+        CSI_Log({'Combining mat-files and storing it into app-data.'},{''});
+        csi = csi_dump{foi_ind};
+        nDim = numel(csi.data.labels);
+        data = extractField(csi_dump, 'data.raw');                     
+        csi.data.raw = cat(nDim + 1, data{:});
+        label_name = 'file';
+        if sum(contains(csi.data.labels, 'file')) >= 1, label_name = 'inp';
+        end
+        csi.data.labels{end+1} = label_name;
+        csi.data.dim = size(csi.data.raw);
+        csi.filepath = fp;
+        csi.filename = strjoin(fn, ' | ');
+        clear csi_dump;
+
+        % Save CSI data in app-data
+        setappdata(gui.CSIgui_main,'csi',csi); 
+
+        % Save Conv data in app-data
+        if ~isempty(conv{foi_ind})
+            setappdata(gui.CSIgui_main,'conv', conv{foi_ind});
+            clear conv;
+        end
+
+        % Save MRI data in app-data
+        if ~isempty(mri{foi_ind})
+            setappdata(gui.CSIgui_main,'mri', mri{foi_ind}); 
+            clear mri;
+        end
+
+        CSI_Log({'Copying logs from mat-files.'},{'See below.'})
+        % Add to logs listbox
+        log = cell(1,numel(fn)*2);
+        for kk = 1:numel(fn)
+            ind = (kk*2) - 1;
+            log{ind+1} = log_data{kk};
+            log{ind} = {'', '% -------------------------------- %',...
+                        fn{kk},...
+                            '% -------------------------------- %', ''}';                     
+        end
+
+        gui.listbox_CSIinfo.String = ...
+                cat(1, gui.listbox_CSIinfo.String,{''} ,cat(1, log{:}));
+end % End of switch-case loop
 
 % --- Parse DICOM file
 function success = parse_dicom(fp, fn, gui)
@@ -1872,7 +2080,11 @@ subdat.ans = val; guidata(subobj,subdat);
 % Close figure - getUserInput script resumes
 uiresume(subobj);
 
-% GetUserInput TICKS GUI % --------------------------------------------- %
+
+% GetUserInput: TICKS GUI % -------------------------------------------- %
+% ---------------------------------------------------------------------- %
+
+% -. Opens UI to get user input via tick-boxes
 function userInput = getUserInput_Tick(tick_title, tick_input, fig_title, tick_def, clrs)
 % Create a simple gui with dropdown e.g. tick marks to quickly choose
 % between two options
@@ -1993,6 +2205,7 @@ else
     userInput = [];
 end
 
+% -. Exected by ticking a box - allows toggle.
 function getUserInput_Tick_setToggle(hobj,~,~)
 % Toggle the ticks of the query of interest. Only one can be ticked per
 % title. 
@@ -2871,7 +3084,6 @@ switch uanstype{1}
             uopts = getUserInput(...
             {'Standard deviation e.g. half length at FWHM: (Samples)'},...
             {(csi.xaxis.N/4)});
-
         end
         
     case 'Exponential'
@@ -3099,7 +3311,7 @@ if size(opts,2) > 2
     end
 end
 
-% Rearrange data to cell 
+% Rearrange data to cell: every FID in a cell
 sz = size(data); 
 cell_layout = ...
     arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'UniformOutput',0);
@@ -3493,11 +3705,11 @@ kspc_dim(isnan(kspc_dim)) = [];
 % 2.If kspace dims are not found...
 if isempty(kspc_dim)
     % Create a new dim order from max to min dim-sizes
-    sz = csi.data.dim;
+    sz = size(csi.data.raw);
     [~, sort_ind] = sort(sz(2:end), 'descend');
     new_order = [1 sort_ind+1];
 else
-   dim_order = 1:numel(csi.data.dim);
+   dim_order = 1:numel(size(csi.data.raw));
    % Set the new order with kspace dimensions first
    new_order = [1 kspc_dim];
    % Find excluded dimensions
@@ -3570,8 +3782,10 @@ for bi = 1:size(bin_vec,2)-1
      % Index to correct arrays
      dim_vec_temp = dim_vec; 
      dim_vec_temp{dim} = bin_vec(bi):bin_vec(bi+1)-1;
+     
      % Data
      tmp_bin = tmp(dim_vec_temp{:});
+     
      % Store
      dim_vec_temp = dim_vec; dim_vec_temp{dim} = 1:stepsz;
      dim_vec_temp{end+1} = bi;
@@ -4820,8 +5034,6 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % Output
 CSI_Log({'PCA: Clean up successful.'},{'Finished.'});
 
-
-
 % --- Executes by CSI_PCA_Denoising
 function [data, permv] = CSI_PCA_Denoising_Reshape(data, labels, chan_ind)
 % Reshape data for PCA denoising such that dimensions represent:
@@ -4841,7 +5053,7 @@ spat_dim(isnan(spat_dim)) = [];
 
 dim_order = 1:numel(sz);
 % Set the new order with kspace dimensions first
-permv = [1 spat_dim chan_ind]; chan_ind = 5;
+permv = [1 spat_dim chan_ind];
 % Find excluded dimensions
 excl_dim_order = ismember(dim_order, permv);
 % Append new_order.
@@ -4863,7 +5075,6 @@ else
 end
 % Array 2 Cell: {nS x Kx x Ky x Kz x nChan} x Other
 data = mat2cell(data, cell_layout{:}); 
-
 
 % --- Executes on button press in button_CSI_Fieldmap.
 function button_CSI_Fieldmap_Callback(~, ~, gui)
@@ -4943,7 +5154,6 @@ if strcmp(uans{3}, 'Yes')
     save([fp '\' fn ext], 'sens_maps');
 end
 
-
 % --- Opens on button press of [i]nformation app-data
 function CSI_openDataDirectory(gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -4952,7 +5162,6 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 if isfield(csi,'filepath')
     winopen(csi.filepath)
 end
-
 
 % --- Executes on button press in button_CSI_Single.
 function button_CSI_Single_Callback(~, ~, gui)
@@ -4971,7 +5180,6 @@ CSI_Log({['CSI data converted to ' msgA '-precision.']},...
         {['Press again to set to ' msgB '-precision.']});
 
 setappdata(gui.CSIgui_main, 'csi', csi);
-
 
 % --- Executes on button press in button_CSI_FlipOrientation.
 function button_CSI_FlipOrientation_Callback(hobj, ~, gui)
@@ -5071,14 +5279,7 @@ if doMRI
     conv.mesh = mesh; clear('mesh');
 
 
-    mri = getappdata(gui.CSIgui_main, 'mri')
-
-
-
-
-
-
-
+    % mri = getappdata(gui.CSIgui_main, 'mri')
 
 
 % % Converted resolution equals original MR image resolution. (3D)
@@ -5156,7 +5357,6 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 % Show nfo
 CSI_Log({'Changed orientation of data.'},{msg});
 
-
 % --- Executes on button press in button_MRI_Interpolate.
 function button_MRI_Interpolate_Callback(~, ~, gui)
 %  Interpolate the slice direction of the converted data set.
@@ -5190,8 +5390,6 @@ setappdata(gui.CSIgui_main,'conv', conv);
 
 % Show nfo
 CSI_Log({'Interpolated the converted MRI-data. Resolution:'},{res});
-
-
 
 % --- Executes on button press in button_CSI_FlipSpace.
 function button_CSI_FlipSpace_Callback(~, ~, gui)
@@ -5348,11 +5546,8 @@ CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
 
 
 
-
-
-% --------------------------------------------- %
 % Coil Combination Methods % ---------------------------------------- %
-% --------------------------------------------- %
+% ------------------------------------------------------------------- %
 
 
 % --- Executes on button press in button_CSI_Combine.
@@ -5369,7 +5564,8 @@ function button_CSI_Combine_Callback(hobj, ~, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 
 % Get user input for coil-combination method.
-methods = {'WSVD', 'Roemer', 'SNR Weighted', 'Manual', 'WSVD - Static'};
+methods = {'WSVD', 'Roemer', 'SNR Weighted', 'Manual', 'WSVD - Static',...
+           'Sum-of-Squares'};
 uans = getUserInput_Popup({'Coil weighting method:'},{methods},...
                           [], 'Coil Weighting');
 if isempty(uans), return; end
@@ -5387,6 +5583,8 @@ switch uans{1}
         CSI_Combine_Manual(hobj)
     case 'WSVD - Static'
         CSI_Combine_WSVD_StaticWeights(hobj)
+    case 'Sum-of-Squares'
+        CSI_Combine_SumOfSquares(hobj)
 end
 
 % --- Executeds on Roemer-method selection via CSI_Combine
@@ -5422,13 +5620,13 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % User Input % ------------------------------------------------------- %
 
 % Define questions and options
-psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
 qry = {'Apply noise decorrelation: ', ...
-       'Calculate noise-covariance matrix for decorrelation using:', ...
-       'Apply PCA denoising:', 'PCA patch-size:', ...
-       'PCA/Roemer noise covariance matrix:', 'PCA SVD-method:'};
-opt = {{'Yes','No'},  {'Measurement', 'Data'}, {'Yes','No'}, {psz_def},...
-       {'Default', 'Identity-matrix', 'Decorrelated'}, {'Fast', 'Default'}};
+       'Calculate noise-covariance matrix using:', ...
+       'Apply PCA denoising:',...
+       'Noise-covariance for Roemer:'};
+opt = {{'Yes','No'},  {'Measurement', 'Data'}, {'Yes','No'},...
+       {'Default','Cholesky', 'Identity-matrix'}};
+
 % Ask user
 uans = getUserInput_Popup(qry,opt, [], 'Roemer');
 if isempty(uans), CSI_Log({'Roemer:'},{'Aborted.'}); return; end
@@ -5446,23 +5644,17 @@ else, do_NoiseData = 0; end
 % uans{3} - PCA denoising
 if strcmp(uans{3},'Yes'), do_PCA = 1; else, do_PCA = 0; end
 
-% uans{4} - Patch size
-patch_size = str2double(uans{4});
-
-% uans{5} - Noise Covariance Matrix
-if strcmpi(uans{5},'Default')
+% uans{4} - Noise Covariance Matrix
+if strcmpi(uans{4},'Default')
     do_nCovDef = 1; 
-elseif strcmpi(uans{5}, 'Decorrelated')
+elseif strcmpi(uans{4}, 'Cholesky')
     do_nCovDef = 2; 
     do_NoiseDecorrelation = 1;
     CSI_Log({'Roemer: Using decorrelated noise-cov for coil combinations'},...
         {'enabled noise decorrelation by default.'});
-elseif strcmpi(uans{5}, 'Identity-matrix')
+elseif strcmpi(uans{4}, 'Identity-matrix')
     do_nCovDef = 0;
 end
-
-% uans{6} - SVD method for PCA denoising
-if strcmp(uans{6},'Default'), do_svd = 0; else, do_svd = 1; end 
 
 
 % -------------------------------------------------------------------- %
@@ -6398,6 +6590,115 @@ CSI_Log({'WSVD Quality statistics: --------------------------- %',...
 CSI_Log({'WSVD; Channels are combined.','WSVD; Included channels:'},...
         {'',ch_incl});   
  
+% --- Executes if Sum-of-Squares coil combination is selected
+function CSI_Combine_SumOfSquares(hobj, ~)
+% Combine the coils using the square root sum of squares method.
+%
+% combine image data from array coils is a pixel-by-pixel sum of coil
+% signals, with each signal weighted by the individual coil sensi-
+% tivity at the location of the pixel. A pragmatic alternative com-
+% bines the images from the coils as the square root of the sum of
+% squares (SOS), which can reduce the signal-to-noise ratio (SNR)
+% and introduce bias.
+
+% GUI prepwork % ------------------------------------------- %
+ 
+% Get GUI and object: CSIgui_main
+gui = guidata(hobj);
+
+% Create a backup of the current data set.
+backup = gui.checkbox_backup.Value; 
+if backup, CSI_backupSet(gui, 'Before combining channels (SOS).'); end
+gui = guidata(hobj);
+
+% Return if no CSI data present.
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Data preperations % -------------------------------------------------- %
+
+% Is there channel/coil data
+ind_cha = csi_findDimLabel(csi.data.labels, {'chan', 'cha'});
+ind_cha(isnan(ind_cha)) = [];
+if isempty(ind_cha)
+    CSI_Log({'SOS: Aborted.'},{'No "chan" or "cha" dimension found.'})
+    return; 
+end
+
+% N-Channels.
+nchan = size(csi.data.raw,ind_cha);
+
+% Are there averages available:
+ind_avg = csi_findDimLabel(csi.data.labels, {'aver', 'avg', 'nsa'});
+ind_avg(isnan(ind_avg)) = [];
+if isempty(ind_avg), avg_opt = {'No'}; else, avg_opt = {'Yes','No'}; end
+
+% Exclusion of channels % ------------------------------------------- %
+
+% Convert user input.
+do_excl = 1;
+if do_excl
+    % Get channels to exclude from user
+    uans = getUserInput({'Exclude channels:'}, {''},[], 'SOS');
+    if isempty(uans), CSI_Log({'SOS: Aborted.'},{''}); end
+
+    % Channels to exclude as double
+    ch_excl = str2double(strsplit(uans{1},' ')); 
+    if isnan(ch_excl), ch_excl = []; end
+
+    % Create included channels array
+    ch_incl = 1:size(csi.data.raw, ind_cha); ch_incl(ch_excl) = [];
+else
+    ch_incl = 1:nchan;
+end
+
+
+% Reshaping (1/2) % -------------------------------------------------- %
+
+% Reorder data setting the channel data to the second dimension index.
+% Data format: [dt x channels x rest ... ]
+
+% Reshape data to {nDim x nChan} x nVox
+[tmp_cell, permv, szr] = csi_combine_reshape(csi.data.raw, ind_cha);
+
+
+% SOS % --------------------------------------------------------------- %
+nvox = size(tmp_cell,1);
+
+% tmp_cell = ...
+% cellfun(@rssq, tmp_cell, repmat({2},size(tmp_cell)), 'UniformOutput', 0);
+
+% Do some magic here...
+for vi = 1:nvox
+   vdata = tmp_cell{vi}(:,ch_incl);
+
+   % Including the noise-cov matrix would make this Roemers method.
+   % tmp_cell{vi} = sqrt(sum(vdata' * Noise-Cov * conj(vdata),2));
+   tmp_cell{vi} = sqrt(sum(vdata .* conj(vdata),2));
+
+end
+
+% Reshaping (2/2) % ------------------------------------------------- %
+% Reshape the cell array back to the array: dt x chan x residual.
+% Reorder to original order as before reshape (1/2).
+szc = size(tmp_cell); szs = size(tmp_cell{1});
+csi.data.raw = csi_combine_reshape_revert(...
+    reshape(cell2mat(tmp_cell), szs(1), szc(1)), permv, szr);
+
+% Update csi.data.dim data.
+csi.data.dim = size(csi.data.raw); 
+
+
+% Save data % ------------------------------------------------------- %
+
+% Set CSI app data
+setappdata(gui.CSIgui_main, 'csi', csi);
+
+% Recalculate xaxis properties
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+
+% Update user
+CSI_Log({'SOS:'},{'Finished.'});
 
 
 % ------------------------------------------------------------------ %
@@ -6598,7 +6899,7 @@ for ri = 1:size(rem_index,1)
     % Plot scatter
     tmp(tmp == 0) = eps; tmp(~isfinite(tmp)) = eps;tmp(isnan(tmp)) = eps;
    % tmp = tmp + abs(min(tmp(:))).*1.01;
-    sc = scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
+    scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
 %     sc.MarkerFaceAlpha =  0.2;
     
     % Axes cosmetics
@@ -6717,23 +7018,41 @@ assignin('base', 'appdat', appdat);
 % --- Executes on button press in button_Info.
 function button_Info_Callback(~, ~, gui)
 
-% Get CSI data-structure
+% ---- % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
 % Update LOG
 log = get(gui.listbox_CSIinfo,'String');
-csi.data.log = char(log);
+csi.log = char(log);
 
 % Send to workspace
-assignin('base', 'csi', csi.data);
+assignin('base', 'csi', csi);
 fprintf('Variable "csi" accessible from workspace.\n');
 
-% Open viewer
-NFOviewer(csi);
+% ---- % Get MRI data-structure
+if isappdata(gui.CSIgui_main,'mri') 
+    mri = getappdata(gui.CSIgui_main,'mri');
+    % Send to workspace
+    assignin('base', 'mri', mri);
+    fprintf('Variable "mri" accessible from workspace.\n');
+end
+
+% ---- % Get CONV data-structure
+if isappdata(gui.CSIgui_main,'conv') 
+    conv = getappdata(gui.CSIgui_main,'conv');
+    % Send to workspace
+    assignin('base', 'conv', conv);
+    fprintf('Variable "conv" accessible from workspace.\n');
+end
 
 % Open data-directory
 CSI_openDataDirectory(gui)
+
+% Open viewer
+fprintf('Opening csi-struct in NFO-viewer.\n'); NFOviewer(csi);
+
+
 
 % --- Executes on button press in button_CSI_Peak_Map.
 function button_CSI_Peak_Map_Callback(~, ~, gui)
@@ -7255,26 +7574,34 @@ if doMask
         button_CSI_VoxelMask_Callback([], [], gui)
     end
     csi = getappdata(gui.CSIgui_main, 'csi');
-    mask = csi.voxelmask;  
-
-    % Data-size - is expected to have spatial dimensions on ind(2:4);
-    dsz = size(data); msz = size(mask);     
-
-    % Retrieve mask for current size: if non-spatial dimensions are used to
-    % calculate a parameter, that index is not present in the data-volume.
-    if numel(msz) ~= numel(dsz)
-        dim = size(data);
-        cell_ind = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);  
-        mask = mask(cell_ind{:});
+    % User can quit/cancel voxel-mask creation - this catches that error
+    % and continues without creating masked-data
+    if isfield(csi, 'voxelmask')
+        mask = csi.voxelmask;  
+    
+        % Data-size - is expected to have spatial dimensions on ind(2:4);
+        dsz = size(data); msz = size(mask);     
+    
+        % Retrieve mask for current size: if non-spatial dimensions are 
+        % used to calculate a parameter, that index is not present in the 
+        % data-volume.
+        if numel(msz) ~= numel(dsz)
+            dim = size(data);
+            cell_ind = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);  
+            mask = mask(cell_ind{:});
+        end
+    
+        % Apply mask to data
+        data(mask) = NaN;
+    else
+        CSI_Log({'Voxel-Mask was not loaded into memory.'}, ...
+                {'Continuing with full data-volume without masking.'})
     end
-
-    % Apply mask to data
-    data(mask) = NaN;
 end
 
 % Show statistics nfo
 stats = csi_statistics_of_volume(data);
-CSI_Log({[ data_tag ' statistics (Volume) ---------------------- %'],...
+CSI_Log({[ data_tag ' statistics (VOI) ---------------------- %'],...
          'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: ', 'Applied mask:'},...
      {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
           sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
@@ -7315,7 +7642,7 @@ switch dataDisp
         % Show statistics nfo
         stats = csi_statistics_of_volume(data);
         % Show statistics nfo
-        CSI_Log({[ data_tag ' statistics (VOI) ----------------------- %'],...
+        CSI_Log({[ data_tag ' statistics (Plotted) ------------------- %'],...
          'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: ', 'Applied mask:'},...
          {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
           sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
@@ -8272,7 +8599,7 @@ tt_alphaD.TooltipString = ...
 
 
 % Restore transparency button for toolbar
-tt_alpha = uipushtool(tb); % Push button - save data
+tt_alpha = uipushtool(tb); % Push button - change alpha
 tt_alpha_icon = imread('Images\fix_transparency6.png');
 tt_alpha_icon = imresize(tt_alpha_icon,[20,20]);
 tt_alpha_icon(tt_alpha_icon ==  max(tt_alpha_icon(:))) = ...
@@ -8282,16 +8609,27 @@ tt_alpha.ClickedCallback = @toolbar_fixTransparency;
 tt_alpha.TooltipString = ...
     'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
 
-% Save data
-tt_save_data = uipushtool(tb); % Push button - change alpha
-tt_save_data_icon = imread('Images\table3.png');
-tt_save_data_icon = imresize(tt_save_data_icon,[20,20]);
-tt_save_data_icon(tt_save_data_icon ==  max(tt_save_data_icon(:))) = ...
-    round(max(tt_save_data_icon(:))*0.94);
-tt_save_data.CData = tt_save_data_icon;
-tt_save_data.ClickedCallback = @toolbar_MapToTable;
-tt_save_data.TooltipString = ...
+% Data2Table
+tt_data2table = uipushtool(tb); % Push button - data 2 table
+tt_data2table_icon = imread('Images\table3.png');
+tt_data2table_icon = imresize(tt_data2table_icon,[20,20]);
+tt_data2table_icon(tt_data2table_icon ==  max(tt_data2table_icon(:))) = ...
+    round(max(tt_data2table_icon(:))*0.94);
+tt_data2table.CData = tt_data2table_icon;
+tt_data2table.ClickedCallback = @toolbar_MapToTable;
+tt_data2table.TooltipString = ...
     'Show data in a table. Also allows saving data to file.';
+
+% Current-plot Statistics
+tt_statistics = uipushtool(tb);
+tt_statistics_icon = imread('Images\statistics_icon.png');
+tt_statistics_icon = imresize(tt_statistics_icon,[20,20]);
+tt_statistics_icon(tt_statistics_icon ==  max(tt_statistics_icon(:))) = ...
+    round(max(tt_statistics_icon(:))*0.94);
+tt_statistics.CData = tt_statistics_icon;
+tt_statistics.ClickedCallback = @toolbar_Statistics;
+tt_statistics.TooltipString = ...
+    'Calculate statistics of plotted data.';
 
 % --- Executes on press of toolbar's save Figure button
 function toolbar_saveFigure(src, ~)
@@ -8507,6 +8845,44 @@ sz = size(data);
 data = permute(data, [numel(sz)+1 1:numel(sz)]);
 
 CSI_dataAsTable(data,tgui.fig.Name);
+
+function toolbar_Statistics(src,~)
+% do something
+% \\ GET: object handles for figure and tab-group
+figobj = src.Parent.Parent;
+tgui = guidata(figobj);
+
+% Which data to visualize
+uans = getUserInput_Popup({'Calculate stastics for:'},...
+                         {{'Current', 'All'}});
+if isempty(uans), return; end
+
+
+% Get data
+ax = tgui.plot_par.ax(:);
+data = NaN(size(ax));
+for axi = 1:size(ax,1)
+    if ~isempty(ax{axi})
+        data(axi) = ax{axi}.Children.YData;
+    end    
+end
+data = reshape(data, size(tgui.plot_par.ax));
+sz = size(data);
+data = permute(data, [numel(sz)+1 1:numel(sz)]);
+
+% Tab of interest
+if strcmp(uans{1}, 'Current')
+    toi = cell2mat(cellfun(@isequal,tgui.tabh, ...
+        repmat({tgui.tabg.SelectedTab}, size(tgui.tabh)), 'uniform', 0));
+    toi = tgui.tabh{toi == 1};
+    tab_dims = strsplit(toi.Title, ' ');
+    tab_dims = num2cell(str2double(tab_dims));
+    data = squeeze(data(:,:,:,tab_dims{:}));
+end
+
+% Calculate and show results.
+stats = csi_statistics_of_volume(data);
+Statistics_Viewer(stats);
 
 
 
@@ -9207,7 +9583,7 @@ if isfield(ori,'offcenter'), dans{2} = ori.offcenter;
 else, dans{2} = '0 0 0';
 end
 if isfield(ori,'shift'), dans{3} = ori.shift;
-else, dans{3} = '0 0.5 0.5';
+else, dans{3} = '0.5 0.5 0.5';
 end
 
 % Flip correction for dat-file
@@ -9293,8 +9669,6 @@ if ori.voxShiftCorrection == 1
     
     % This should shift according to the readout-dimension. Which could be
     % either X or Y... 
-    % The other issue is that when 
-
 
     ind_to_shift = csi_findDimLabel(csi.data.labels,{'kx', 'x'});
     ind_to_shift(isnan(ind_to_shift)) = [];
@@ -9934,7 +10308,7 @@ conv.res = mri.ori.res; % Initial... May change!!
 % Calculate a resolution fitting the CSI space such that there is a integer
 % amount of image pixels fitted in each CSI direction of space.
 res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
-res_rem = res_fit - floor(res_fit);     % Pixel change
+% res_rem = res_fit - floor(res_fit);     % Pixel change
 res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
 
 % New resolution for each direction
@@ -10118,7 +10492,8 @@ nSlices = size(csi.data.raw,4);
 
 % GUI Colors
 clr_bg = gui.colors.main;
-clr_tx = gui.colors.text_main; clr_tb = gui.colors.text_title;
+% clr_tx = gui.colors.text_main; 
+clr_tb = gui.colors.text_title;
 
 % PLOT_PAR: STRUCT WITH ALLL 2D PLOT OPTIONS
 plot_par.colors = gui.colors;
@@ -10130,7 +10505,7 @@ fh = figure('Tag', tag ,'Name', 'CSIgui - Tabs',...
             'NumberTitle', 'Off');                   
 
 % Create tab group
-tabg = uitabgroup(fh); tabh = cell(1,nSlices);
+tabg = uitabgroup(fh); % tabh = cell(1,nSlices);
 
 % 1. Default figure size and screen pixel size
 def_sz = 720; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
@@ -10480,11 +10855,11 @@ end
 % Used to get all data including all slices.
 
 % Create cell for indexing outside the spatial-dimensions 
-if numel(plot_par.dim) > 3, nDimC = num2cell(plot_par.dim(4:end));
-else, nDimC = {1};
-end
-% To linear vector per cell.
-nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
+% if numel(plot_par.dim) > 3, nDimC = num2cell(plot_par.dim(4:end));
+% else, nDimC = {1};
+% end
+% % To linear vector per cell.
+% nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
 
 % Store all other indexes..
 if numel(plot_par.dim) > 2, nDimCtmp = num2cell(plot_par.dim(3:end));
@@ -10513,7 +10888,6 @@ function plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume)
 
 
 % Scaling: Plot Color % ------------- %
-
 csiobj = findobj('Tag','CSIgui_main'); gui = guidata(csiobj);
 
 % Returns colors gradient and related data-values, a range set within the
@@ -10521,23 +10895,24 @@ csiobj = findobj('Tag','CSIgui_main'); gui = guidata(csiobj);
 % displayed CSI slice relative to the limits of the slice.
 % E.g. visualise data amplitude using colors allowing individual voxel
 % y-axis scaling!
-
-
 if strcmp(gui.menubar.MRSI.ColorScale.ScalebyWindow.Checked,'on')
-    plot_par.scale_by_window_color = 1;
+    plot_par.scale_by_window_color = 1;    
 else
     plot_par.scale_by_window_color = 0;
+    plot_par.scale_range_color = [1 size(data_volume,1)];
 end
 
 
 % Color scaling by SLICE, VOLUME or STATIC.
 vol_data = CSI_getUnit(data_volume, plot_par.data_unit);
-full_scale_range =  plot_par.scale_range(1):plot_par.scale_range(2);
+full_scale_range =  ...
+    plot_par.scale_range_color(1):plot_par.scale_range_color(2);
 
 % Correct volume data used to calculate specific bins for different colors
 % scaled by minimum and maximum values: In x-axis window or from full
 % spectral field of view.
 if plot_par.scale_by_window_color
+    % #N, X, Y, Slice (Z), non-spatial dimensions.
     vol_data = vol_data(full_scale_range,:,:,plot_par.select_all_dim{:}); 
 end
 
@@ -10632,19 +11007,20 @@ if diff(scale_range) > size(data_volume,1)
     scale_range = [1 size(data_volume,1)];
 end
 
+% Save scale range - for color window of spectra.
+plot_par.scale_range_color = scale_range;
+
 % If user request Y-axis scaling by full spectrum - set full index as new
 % scaling range.
 if strcmp(gui.menubar.MRSI.AxisScale.ScalebyWindow.Checked,'off')
-    scale_range = [1 size(data_volume,1)];
+    plot_par.scale_range_axis = [1 size(data_volume,1)];
     plot_par.scale_by_window_axis = 0;
 else
+    plot_par.scale_range_axis = scale_range;
     plot_par.scale_by_window_axis = 1;
 end
 
-% Save scale range.
-plot_par.scale_range = scale_range;
 
-    
 % Scaling: Axis Y Limit % ------------------- %
             
 % Get data-unit to plot and extract data from array.
@@ -10658,7 +11034,7 @@ scaleby = CSI_2D_Scaling_Axis_Get(gui);
 
 % If voxel, set scale to zero, slice to one and volume to two. For slice
 % and volume, already calculate the limits. 
-
+scale_range = plot_par.scale_range_axis;
 switch scaleby 
     case 'vox', plot_par.scale = 0; 
     case 'sli', plot_par.scale = 1; 
@@ -10801,7 +11177,9 @@ axlw_pt = 1;
 % Replot the entire figure or use open figure.
 if isfield(plot_par, 'ax'), createFig = 0; else, createFig = 1; end
 
-full_scale_range =  plot_par.scale_range(1):plot_par.scale_range(2);
+% Scale range window of x-axis
+full_scale_range =  ...
+    plot_par.scale_range_axis(1):plot_par.scale_range_axis(2);
 
 % Plot csi voxel per axis in plot_par.grid
 for ci = 1:plot_par.dim(1)                  % Col loop.
@@ -12755,7 +13133,8 @@ bw = w-20; bh = 20; % Normalised w and h of button
 
 % Buttons, handles and their info description.
 bName = {'Phasing','FFT','iFFT','Apodization', 'Zero Fill', 'SNR',...
-         'Linewidth','Baseline','Shift', 'Smoothing','Data Display','Replace Voxel', 'Export'};
+         'Linewidth','Baseline','Shift', 'Smoothing','Data Display',...
+         'Replace Voxel', 'Export'};
 bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_FFT, ...
          @panel_1D_iFFT, ...
@@ -16264,30 +16643,30 @@ end
 
                                            
 % --- Executes on selection change in listbox_CSIinfo.
-function listbox_CSIinfo_Callback(hObject, eventdata, gui)
+function listbox_CSIinfo_Callback(~, ~, ~)
 % --- Executes during object creation, after setting all properties.
-function listbox_CSIinfo_CreateFcn(hObject, eventdata, gui)
+function listbox_CSIinfo_CreateFcn(hObject, ~, ~)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 % --- Executes on selection change in listbox_MRIinfo.
-function listbox_MRIinfo_Callback(hObject, eventdata, gui)
+function listbox_MRIinfo_Callback(~, ~, ~)
 % --- Executes during object creation, after setting all properties.
-function listbox_MRIinfo_CreateFcn(hObject, eventdata, gui)
+function listbox_MRIinfo_CreateFcn(hObject, ~, ~)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 % --- Executes on selection change in popup_plotUnit.
-function popup_plotUnit_Callback(hObject, eventdata, gui)
+function popup_plotUnit_Callback(~, ~, ~)
 % --- Executes during object creation, after setting all properties.
-function popup_plotUnit_CreateFcn(hObject, eventdata, gui)
+function popup_plotUnit_CreateFcn(hObject, ~, ~)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 % --- Executes on selection change in popup_plotIMG.
-function popup_plotIMG_Callback(hObject, eventdata, gui)
+function popup_plotIMG_Callback(~, ~, ~)
 % --- Executes during object creation, after setting all properties.
-function popup_plotIMG_CreateFcn(hObject, eventdata, gui)
+function popup_plotIMG_CreateFcn(hObject, ~, ~)
 % hObject    handle to popup_plotIMG (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
@@ -16301,25 +16680,20 @@ end
 
 % ------------------------------------------------------------------- %
             %   Everything below here is new OR beta!  %
-                        % Probably not finished %
+                      % Possibly not finished %
 % ------------------------------------------------------------------- %
 
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, evt, gui)
 
-% warndlg('Watch out! Developer testing button. Panic!');
-
+warndlg('Watch out! Developer testing button. Panic!');
 
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 csi.data.raw = single(csi.data.raw);
-
 setappdata(gui.CSIgui_main, 'csi', csi);
 
-% if isfield(csi,'filepath')
-%     winopen(csi.filepath)
-% end
 
 % --- Simple sinc function
 function an = sincQ(x)
@@ -16712,7 +17086,7 @@ data = csi.data.raw;
 % Settings and data-variables
 
 % Get peak of interest - (data of interest; doi)
-doi = CSI_getDataAtPeak(data, csi.xaxis);
+[doi, doi_axis] = CSI_getDataAtPeak(data, csi.xaxis);
 if isnan(doi), CSI_Log({'Aborted FA dynamic.'},{''}); return; end
 
 % ----------------------------- %
@@ -16874,6 +17248,7 @@ outp = cellfun( @csi_fit_FASeries, ...
     repmat({dirstr}, size(doi_cell)),...      % Directory for output
     repmat({TR},size(doi_cell)),...           % TR
     repmat({T1},size(doi_cell)),...           % T1
+    repmat({doi_axis},size(doi_cell)),...     % ppm
     'UniformOutput', 0);      
 
 % PROCESS OUTPUT % ---------------------------------------------------- %
@@ -16906,7 +17281,6 @@ CSI_Log({'Zero-crossing statistics ---------- %',...
           sprintf('%.2f', stats.median), ...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 end
-
 
 % --- Executes on button press in button_CSI_RemoveOS.
 function button_CSI_RemoveOS_Callback(~, ~, gui, backup)
@@ -17573,3 +17947,115 @@ setappdata(gui.CSIgui_main, 'csi', csi);
 % Message user
 CSI_Log({'Exclusion voxel mask created.'},...
         {'Applicable to data visualization'});  
+
+% --- Executes on button press in button_CSI_Statistics.
+function button_CSI_Statistics_Callback(~, ~, gui)
+% Calculate statistics over the volume or current slice. Includes location
+% of max and min signal voxel.
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Ask user data-range of interest
+qry = {'Calculate statistics over slice(s):', ...
+       'Apply exclusion voxel-mask:', 'Select peak/frequency range:'};
+def = {{'All', 'Current','Displayed'},{'Yes','No'},{'No','Yes'}};
+uans = getUserInput_Popup(qry, def);
+if isempty(uans), return; end
+
+% Analyse user input
+if strcmp(uans{2}, 'Yes'), doMask = 1; else, doMask = 0; end
+if strcmp(uans{3}, 'Yes'), doPeak = 1; else, doPeak = 0; end
+
+% Set data
+doi = csi.data.raw;
+
+% Select peak % ------------------------------------------------------- %
+if doPeak
+    poi = CSI_getPeakOfInterest(csi.xaxis,'Calculate statistics');
+    doi = CSI_getDataAtPeak(doi, csi.xaxis, poi);
+    if isempty(poi), return; end
+end
+
+% Get data of interest % ----------------------------------------------- %
+dim = size(doi);
+doi_cell_layout = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);
+switch uans{1}
+    case 'All', msg = 'Full volume.';
+    case 'Current'
+        % Get the panel-slider object and 2d-plot object
+        [~, gui2D] = CSI_2D_getDataSliders(gui);
+    
+        % Plotted slice index of interest
+        sloi = gui2D.plotindex(1);
+    
+        % Get data of interest.            
+        doi_cell_layout{4} = sloi{:};       
+
+        % Log message        
+        msg = sprintf(...
+        'Current slice (%i) including all non-spatial dimensions.',sloi{:});
+
+    case 'Displayed'
+        % Get the panel-slider object and 2d-plot object
+        [~, gui2D] = CSI_2D_getDataSliders(gui);    
+        % Plotted slice index of interest
+        sloi = gui2D.plotindex;
+            
+        % Get data of interest.    
+        doi_cell_layout(4:4+numel(sloi)-1) = sloi; 
+
+        % Log message
+        addStr = repmat(' %i |', 1, numel(sloi));
+        msg = sprintf(['Displayed slice only: ' addStr], sloi{:});
+
+end
+% Data of interest
+doi = doi(doi_cell_layout{:});
+
+% Voxel mask % --------------------------------------------------------- %
+if doMask
+    % Apply voxel-mask
+    if ~isfield(csi, 'voxelmask')
+        button_CSI_VoxelMask_Callback([], [], gui)
+    end
+    csi = getappdata(gui.CSIgui_main, 'csi');
+    % User can quit/cancel voxel-mask creation - this catches that error
+    % and continues without creating masked-data
+    if isfield(csi, 'voxelmask')
+        mask = csi.voxelmask;  
+    
+        % Data-size - is expected to have spatial dimensions on ind(2:4);
+        dsz = size(doi); msz = size(mask);     
+    
+        % Retrieve mask for current size: if non-spatial dimensions are 
+        % used to calculate a parameter, that index is not present in the 
+        % data-volume.
+        if numel(msz) ~= numel(dsz)
+            cell_ind = arrayfun(@(x) 1:x, dsz, 'UniformOutput', false);
+            % First dimension of mask is only single value
+            cell_ind{1} = 1;
+            % Set specific slice of interest (see % get DOI % --- %)
+            if exist('sloi','var'), cell_ind(4:4+numel(sloi)-1) = sloi; end
+            % Cut mask
+            mask = mask(cell_ind{:});
+        end
+    
+        % Apply mask to data
+        doi(mask) = NaN;
+    else
+        CSI_Log({'Voxel-Mask was not loaded into memory.'}, ...
+                {'Continuing with full data-volume without masking.'})
+    end
+end
+
+
+
+% Calculate statistics % ----------------------------------------------- %
+stats = csi_statistics_of_volume(doi);
+Statistics_Viewer(stats);
+
+% Log to user
+CSI_Log({'Statistics calculated over:',msg}, {' ',' '});
+
