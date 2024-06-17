@@ -13,6 +13,9 @@ function [data, permv, szr] = csi_combine_reshape(data, channel_index)
 %   data  = {nDim x nChan} x nVoxels
 %   permv = permute vector, used to revert this operation.
 %   szr   = size of reshaped matrix
+%
+% Quincy van Houtum, PhD; 07/2023
+% quincyvanhoutum@gmail.com
     
 % Permute vector - channel index on index 2.
 sz = size(data);                                      

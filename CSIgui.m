@@ -7,7 +7,7 @@ function varargout = CSIgui(varargin)
 %            'data','list','csi','spec','image', 'mrs', 'labels'
 %            {filepath}, {filepathi}
 % Input:
-% CSIgui(datafield, label);
+% CSIgui(data, label);
 %
 % ------------------------------------------------------------------------
 % 2023/08 - CSIgui v2.2 ELH.
@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 02-May-2024 14:31:12
+% Last Modified by GUIDE v2.5 13-May-2024 15:45:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -51,7 +51,8 @@ fpn_csigui = mfilename('fullpath'); froot = fileparts([fpn_csigui '.m']);
 
 % Add CSIgui path to Matlab path-root.
 if exist([froot '\Files'],'dir') == 7
-    addpath(froot); addpath([froot '\Files']); savepath;
+    addpath(froot); addpath([froot '\Files']); addpath([froot '\Images']);
+    savepath;
 else
     % Disable this when compiling to executable. 
     warndlg('Missing directory "File" in CSIgui root.', 'CSIgui - error');
@@ -66,7 +67,7 @@ gui.output = hObject;
 id = strrep(strjoin(string(datevec(datetime("now"))),''),'.','');
 gui.ID = sprintf('%s', id);
 % Define CSIgui version here.
-gui.version = '2.0';
+gui.version = '2.2';
 
 
 %% Add menu-bar
@@ -94,7 +95,7 @@ loadBar(0.6, 'Processing input...');
 % 
 % Example: CSIgui(data, 'csi');
 % Supported: 'csi', 'mri', 'spec', 'data', 'list', 
-%            'filepath', 'filepathi','labels', 'fp', 'fpi'
+%            'filepath', 'filepathi','labels', 'fp', 'fpi', 'twix'
 % The filepathi is meant for images. Other for CSI data.
 
 % Struct for input.
@@ -587,8 +588,11 @@ end
 
                        % --- % Parse the input % --- %
 
+if strcmp(ext,'.dcm') || strcmp(ext,'.ima'), clear_log = 0; end
+
+% Clear info in listbox.    
 if clear_log
-    set(gui.listbox_CSIinfo, 'String', {''}, 'value', 1); % Clear info in listbox.    
+    set(gui.listbox_CSIinfo, 'String', {''}, 'value', 1);
 end
 
 % Update LOG
@@ -1031,6 +1035,9 @@ if old_format
         csi.data = rmfield(csi.data,'log');
     end
 
+    % Clear memory
+    clear csigui
+    
 elseif new_format
     
     if isfield(csi, 'conv')
@@ -1064,8 +1071,7 @@ end
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi); 
 
-% Clear memory
-clear csigui
+
       
 % --- Parse USERINPUT
 function succes = parse_userinput(gui)
@@ -1496,7 +1502,7 @@ switch ext
         if isempty(uans_foi)
             CSI_Log({'Loading canceled.'},{''}); return; 
         end
-        foi_ind = contains(fn, uans_foi);
+        foi_ind = ismember(fn, uans_foi);
 
         % Check size-compatibility
         data_sz = cellfun(...
@@ -3481,6 +3487,8 @@ elseif strcmp('Intersect', lwmeth)  % Intersect method
     % Run script for intersect fwhm
     linewidth = cellfun(@csi_linewidth_intersect,...
         data, inp_xaxis, inp_range, 'Uniform',0);
+
+
     
 end
 
@@ -4902,23 +4910,22 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % User Input % ------------------------------------------------------- %
 psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
-qry = {'Apply noise decorrelation: ', ...
-       'Calculate noise-covariance matrix for decorrelation using:', ...
+qry = {'Noise decorrelation: ', ...
+       'Calculate noise-covariance matrix using:', ...
        'PCA patch-size:', 'PCA SVD-method:'};
-opt = {{'Yes','No'},  {'Measurement', 'Data'}, {psz_def},...
-       {'Fast', 'Default'}};
+opt = {{'Whitening', 'Cholesky','ZCA', 'None'}, ...
+       {'Measurement', 'Data', 'ID-Matrix'},...
+       {psz_def}, {'Fast', 'Default'}};
 uans = getUserInput_Popup(qry, opt, [], 'PCA-Denoising');
 if isempty(uans), CSI_Log({'PCA Denoising cancelled'},{''}); return; end
 
 % //Process user input % 
     
-% uans{1} - Noise decorrelation
-if strcmp(uans{1},'Yes'), do_NoiseDecorrelation = 1; 
-else, do_NoiseDecorrelation = 0; end
+% uans{1} - Noise decorrelation method
+noiseMethod = uans{1};
 
-% uans{2} - nCov using noise measurement or data
-if strcmp(uans{2},'Measurement'), do_NoiseData = 1; 
-else, do_NoiseData = 0; end 
+% uans{2} - Source for noise-covariance matrix
+nCovSource =  uans{2};
 
 % uans{3} - Patch size
 patch_size = str2double(uans{3});
@@ -4926,68 +4933,17 @@ patch_size = str2double(uans{3});
 % uans{4} - SVD method for PCA denoising
 if strcmp(uans{4},'Default'), do_svd = 0; else, do_svd = 1; end 
 
-
 % Channel Index
 chan_ind = csi_findDimLabel(csi.data.labels,{'chan'});
 
-% Dimensions
-sz = size(csi.data.raw); 
-
-% Prepare Noise Data % ----------------------------------------------- %
-if do_NoiseData
-    if isfield(csi.data,'noise')
-        % Run noise-prepare fcn
-        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
-        if ~isstruct(csi), CSI_Log({'PCA:'}, {'Aborted.'}); return; end
-
-        % Message to user
-        CSI_Log({'PCA:'},{'Noise-data processed and stored.'});  
-    else
-        do_NoiseData = 0; 
-        CSI_Log({'PCA: No noise-data present,'},...
-                {'using a noise-mask per voxel instead.'});
-    end
+% Noise Decorrelation % --------------------------------------------- %
+if ~strcmp(noiseMethod,'None')
+    button_CSI_NoiseDecorrelation_Callback(hobj, [], gui, ...
+        noiseMethod, nCovSource, chan_ind);
+    csi = getappdata(gui.CSIgui_main, 'csi');
 end
-
-% Decorrelate Noise % ------------------------------------------------ %
-if do_NoiseDecorrelation 
-    if isfield(csi.data, 'noise') && do_NoiseData
-        
-        % Get noise-cov using noise data
-        noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
-                                              csi.data.noise.labels);
-
-        % Copy it for nVoxels
-        non_spat_ind = ...
-            csi_findDimLabel(csi.data.labels,...
-            {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
-        non_spat_ind(isnan(non_spat_ind)) = []; 
-        non_spat_ind(non_spat_ind > numel(sz)) = [];
-        sz(non_spat_ind) = [];
-
-        % Covariance matrix
-        noise_cov = repmat({noise_cov}, sz);
-    
-        % NFO Update
-        CSI_Log({'PCA: Noise-data used to calculate'},...
-                    {'noise-covariance matrix for noise decorrelation.'});
-    else
-        % Noise covariance matrix required for noise-decorrelation
-        % calculated using noise in data itself.
-        noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
-        CSI_Log({'PCA: Voxel-data used to calculate'},...
-                {'noise-covariance matrices for noise decorrelation.'});
-    end
-
-    % Decorrelate signal (Cholensky)
-    [csi.data.raw, ~] = ...
-        csi_decorrelate_noise(csi.data.raw, chan_ind, noise_cov);
-    CSI_Log({'PCA:'},{'Decorrelated noise via Cholesky-decomposition'});
-end
-
 
 % Reshape data % ---------------------------------------------------- %
-
 
 % Cell-ify to: {nS x Kx x Ky x Kz x nChan} x Other
 [csi.data.raw, permv] = ...
@@ -5000,7 +4956,7 @@ csi.data.raw = reshape(csi.data.raw,[],1);
 % Number of volumes to PCA-denoise
 nVolumes = size(csi.data.raw,1);
 
-% PCA Denoising % ---------------------------------------------------- %
+% PCA Denoising % --------------------------------------------------- %
 
 % NFO update for user
 CSI_Log({'PCA: Applying PCA-denoising. Patch size:'},{patch_size});
@@ -5197,165 +5153,95 @@ gui = guidata(hobj);
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
-
+% Check for image-data
+doMRI = 0; if isappdata(gui.CSIgui_main, 'conv'), doMRI = 1; end
 
 % --------------------------------------------------------- %
+% Update orientation of CSI-data % ------------------------ %
 
-% Check for image-data
-doMRI = 0;
-if isappdata(gui.CSIgui_main, 'conv'), doMRI = 1; end
+% Sagittal: Z x Y - SLX --> rot = [3 2 1]
+% Coronal:  X x Z - SLY --> rot = [1 3 2]
 
+rot = [2 3 1]; % Creating Y x Z x X
 
-% Rotate z-slices into plane, with y-slices as result
-% x = 1 y = 2 z = 3
-rot = [3 2 1]; fldim = 3;
-
-rotimg = [3 2 1];
-
-% Spatial dimensions
+% Find patial dimensions indexes
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
 spat_dim(isnan(spat_dim)) = [];
 if isempty(spat_dim), spat_dim = [2 3 4]; end
 
+% Permute vector
 permv = 1:numel(size(csi.data.raw));
-permv(spat_dim) =  spat_dim(rot);
-
-% \\ CSI-data % --------------------- %
+permv(spat_dim) =  spat_dim(rot); 
 
 % Permute CSI-data
 csi.data.raw = permute(csi.data.raw, permv);
-if fldim > 0, csi.data.raw = flip(csi.data.raw, fldim); end
 
 % Permute resolution
 csi.ori.res = csi.ori.res(rot);
 
-% Permute labels
-% csi.data.labels(spat_dim) = csi.data.labels(spat_dim(rot));
+% Permute dimensions
 csi.data.dim = size(csi.data.raw);
 
+% Permute labels
+csi.data.labels = csi.data.labels(permv);
 
-% Permute mesh-matrix AND x/y/z swapped according to rot.
-x = csi.ori.mesh.x;
-csi.ori.mesh.x = csi.ori.mesh.y; csi.ori.mesh.y = x;
-
-mesh_str = fieldnames(csi.ori.mesh); mesh_str_rot = mesh_str(rot);
-mesh = struct; 
-for mi = 1:size(mesh_str,1)
-    mesh.(mesh_str_rot{mi}) = permute(csi.ori.mesh.(mesh_str{mi}), rot);
-end
-csi.ori.mesh = mesh; clear('mesh');
-
-
-% \\ MRI-data % --------------------- %
-
-if doMRI
-
-    
-    % Interpolate    
-    % button_MRI_Interpolate_Callback([], [], gui);
-    
-    gui = guidata(gui.CSIgui_main);
-
-    % Retrieve data
-    conv = getappdata(gui.CSIgui_main, 'conv');
-    
-       
-    % Permute image-data
-    conv.data = permute(conv.data, rotimg);
-    conv.data = flip(conv.data, fldim);
-
-    % Permute resolution
-    conv.res = conv.res(rotimg);
-    
-
-    % Permute mesh-matrix AND x/y/z swapped according to rot.
-    % 
-    % Or recalculate mesh-matrix from volume vectors..?
-    mesh_str = fieldnames(conv.mesh); mesh_str_rot = mesh_str(rotimg);
-    mesh = struct;
-    for mi = 1:size(mesh_str,1)
-        mesh.(mesh_str_rot{mi}) = permute(conv.mesh.(mesh_str{mi}), rotimg);
-    end
-    conv.mesh = mesh; clear('mesh');
-
-
-    % mri = getappdata(gui.CSIgui_main, 'mri')
-
-
-% % Converted resolution equals original MR image resolution. (3D)
-% % However, to fit correctly in csi grid, the resolution is changed (below).
-% conv.res = mri.ori.res; % Initial... May change!!
+% Permute vectors ------ This is a brainteaser
+% bc or row/col and AP/RL positions in Matlab/Data, 2 = x, 1 = y, 3 = z
+% If z switched x - vector 2 switches with vector 3, not 1 and 3.
+% Calculate NEW volume grid % ----------- %
+% NOT DYNAMIC AS RL == 2 NOT 1; thus for rot = [3 2 1]; z-vec must shift to
+csi.ori.vector([3 2]) = csi.ori.vector([2 3]);
+[csi.ori.mesh.x, csi.ori.mesh.y, csi.ori.mesh.z] = ...
+    meshgrid(csi.ori.vector{1} , csi.ori.vector{2}, csi.ori.vector{3});
 % 
-% % Calculate a resolution fitting the CSI space such that there is a integer
-% % amount of image pixels fitted in each CSI direction of space.
-% res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
-% res_rem = res_fit - floor(res_fit);     % Pixel change
-% res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
+% %  Check what is done before and what happens after
+% % the z-limits will change to the x-limits
+% % both unique z in CSI and CONV need to be the X-vector in the end.
+% % I think!! you dont need mesh at all for this to work - we would need to
+% % use the vector - but MRI-matchslices looks in mesh instead of the vector.
 % 
-% % New resolution for each direction
-% conv.res = res_new;
+% % Rotate image with it
+% if doMRI
 % 
-% % Volume limits of CSI but with half a voxel distance for voxel limits e.g.
-% % a total voxel (MRI res) vs the volume.
-% conv.fov       = csi.ori.fov;     % Does not change regards to CSI
-% conv.lim_vol   = csi.ori.lim_vol; % Volume of MRSI grid
-% conv.lim(:,1)  = conv.lim_vol(:,1) + (0.5.*conv.res)'; % Voxel limits
-% conv.lim(:,2)  = conv.lim_vol(:,2) - (0.5.*conv.res)'; % Used for coords
+%     % Get converted data
+%     conv = getappdata(gui.CSIgui_main, 'conv');
 % 
-% % Range of volume/grid of MRSI for MRI
-% for kk = 1:size(conv.lim,1)    
-%     % Number of pixels in kk-direction
-%     N = (conv.fov(kk)./conv.res(kk));
+%     % Permute images
+%     conv.data = permute(conv.data, rot);
 % 
-%     % Grid vector defining volume
-%     conv.vec{kk} = linspace(conv.lim(kk,1), conv.lim(kk,2), N);
+%     % Permute orientation data
+%     conv.res = conv.res(rot);
+% 
+%     % % Permute limites
+%     % conv.lim_vol = conv.lim_vol(rot,:);
+%     % conv.lim = conv.lim(rot);
+% 
+%     % Recalculate mesh similar to CSI data
+%     % Permute vectors ------ This is a brainteaser
+%     % bc or row/col and AP/RL positions in Matlab/Data, 2 = x, 1 = y, 3 = z
+%     % If z switched x - vector 2 switches with vector 3, not 1 and 3.
+%     % Calculate NEW volume grid % ----------- %
+%     % NOT DYNAMIC AS RL == 2 NOT 1; thus for rot = [3 2 1]; z-vec must shift to
+%     conv.vec([3 2]) = conv.vec([2 3]);
+%     [conv.mesh.x, conv.mesh.y, conv.mesh.z] = ...
+%         meshgrid(conv.vec{1} , conv.vec{2}, conv.vec{3});
+% 
 % end
-% 
-% % Image grid in MRSI space 
-% % This grid lays in the CSI-space e.g. within limits of CSI FOV but is
-% % sampled in x, y and z as close to the resolution of the image as possible
-% [x,y,z] = meshgrid(conv.vec{2} ,conv.vec{1}, conv.vec{3});
-% conv.mesh.x = x; conv.mesh.y = y; conv.mesh.z = z; 
-% 
-% % Interp values @ CSI space % --------------------------------- %
-% % Interp3 is used to convert images to csi-grid in conv-struct.
-% 
-% % Check for stack availability - these images need seperate inclusion!
-% if isfield(mri.ori,'stack_of_interest')
-%     stack_ind = mri.ori.stack_of_interest;
-% else
-%     stack_ind = 1; 
-% end
-% 
-% if strcmp(mri.ext ,'par') || strcmp(mri.ext ,'ima')   
-%     image_convert_data = mri.data.(imtoi)(:,:,:);
-% else
-%     image_convert_data = mri.data.(imtoi)(:,:,stack_ind,:);
-% end
-% 
-% % Interp
-% conv.data = interp3(mri.ori.mesh.x, mri.ori.mesh.y, mri.ori.mesh.z,...      % Original MRI coordinates
-%                     squeeze(image_convert_data),...                         % Original MRI values
-%                     conv.mesh.x, conv.mesh.y, conv.mesh.z,'Linear',0);      % Requested coordinates
-% conv.dim  = size(conv.data);
 
 
-    msg = 'MRI-data included in transformation.';
-else
-    msg = 'MRI-data not available.';
-end
-
-% --------------------------------------------------------- %
 
 % Store data %
 setappdata(gui.CSIgui_main,'csi', csi);
-if doMRI, setappdata(gui.CSIgui_main,'conv', conv); end
+% if doMRI, setappdata(gui.CSIgui_main,'conv', conv); end
 
 % Update x-axis data
 CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
+msg = 'BETA TESTING';
 CSI_Log({'Changed orientation of data.'},{msg});
+
+
 
 % --- Executes on button press in button_MRI_Interpolate.
 function button_MRI_Interpolate_Callback(~, ~, gui)
@@ -5483,6 +5369,110 @@ setappdata(gui.CSIgui_main,'csi', csi);
 CSI_Log({'Applied interpolation over all spatial dimensions: '},...
         {strjoin(csi.data.labels(kspace),' | ')});
 
+% --- Executes on button press in button_CSI_RemoveOS.
+function button_CSI_RemoveOS_Callback(~, ~, gui, backup)
+% A very crude way of removing oversamling from the data:
+% Given a new value for dimension of interest doi, cut the data from start
+% to the new value and store it.
+%
+% Possible upgrade: allow removing/cutting of a range.
+% Example: column of size 11 requires OS removal of first data point and
+% last two data points to end up with column size 8.
+
+if nargin < 4, backup = gui.checkbox_backup.Value; end
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Check data domain
+domain = CSI_getDomain(gui); doFFT = 0;
+if ~strcmp(domain, 'time')
+    CSI_Log({'MRS data is possibly in frequency domain;'},...
+            {'Removing oversampling requires time domain data.'});
+    qry = {'MRS-data is possibly in frequency domain:'};
+    def = {{'Convert', 'Ignore', 'Abort'}};
+    uans = getUserInput_Popup(qry,def,[],'Remove OS');
+    if isempty(uans) || strcmp(uans, 'Abort'); return; end
+    if strcmp(uans{1}, 'Convert'), doFFT = 1; end
+end 
+
+% Create backup
+if backup, CSI_backupSet(gui, 'Before removing oversampling.'); end
+
+% ------------------------------------------------- %
+
+% Get dimensions to remove OS: ind
+uans = getUserInput_Popup({'Index:'}, {csi.data.labels}, [], 'Remove OS');
+if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
+ind = find(strcmp(uans{1},csi.data.labels)); ind_lab = uans{1};
+
+% Get method of removal
+qry = {'Split data by:'};
+def = {{'Split','Odd values','Even values'}};
+uans = getUserInput_Popup(qry, def, [], 'Remove OS');
+if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
+switch uans{1}
+    case 'Split',       method = 'Split';
+    case 'Odd values',  method = 'Odd';
+    case 'Even values', method = 'Even';
+end
+
+% Get value of OS to remove: osval
+uans = getUserInput({'New size of dimension:'},...
+                    {round(csi.data.dim(ind)./2)});
+if isempty(uans),CSI_Log({'Aborted OS removal.'},{''}); return; end
+osval = str2double(uans{1});
+
+% Apply on given dim: csi.data.raw @ ind = 1:osval
+sz = csi.data.dim;
+if ~strcmp(method, 'Split')
+    % Bandwidth changes if you take odd or even values from data.
+    csi.xaxis.BW = csi.xaxis.BW / (sz(1) / osval);
+end
+% Index vector for selected method
+switch method
+    case 'Split'        
+        sz(ind) = osval;
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+    case 'Odd'               
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+        rng{1} = 1:2:osval*2;
+    case 'Even'        
+        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
+        rng{1} = 2:2:osval*2;
+end
+
+% Possible iFFT
+if doFFT, csi.data.raw = csi_ifft(csi.data.raw); end
+
+% Cut the data with the new value
+csi.data.raw = csi.data.raw(rng{:});
+
+% Update csi.data.dim size 
+csi.data.dim = size(csi.data.raw);
+
+% Possible FFT
+if doFFT, csi.data.raw = csi_fft(csi.data.raw); end
+
+% ------------------------------------------------- %
+
+% If a peak was selected - this needs to be removed as its point changed.
+if isappdata(gui.CSIgui_main,'CSIpar')
+    rmappdata(gui.CSIgui_main,'CSIpar');
+end
+
+% Store data %
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Update X-axis data
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+
+% Show nfo
+CSI_Log({'Removed oversampling (dimension | size | Method): '}, ...
+        {[ind_lab, ' | ', num2str(osval) ' | ' method]});
+
+
 % --- Executes on button press in button_CSI_Maps.
 function button_CSI_Maps_Callback(~, ~, gui)
 % Calculate specific maps to visualize data
@@ -5575,7 +5565,7 @@ switch uans{1}
     case 'Roemer'
         CSI_Combine_Roemer(hobj)
     case 'WSVD'
-        CSI_Log({'WSVD Source:'},{'http://dx.doi.org/10.1002/mrm.22230'});
+        
         CSI_Combine_WSVD(hobj);
     case 'SNR Weighted'
         CSI_Combine_SNRweighted(hobj)
@@ -5805,7 +5795,7 @@ end
 CSI_Log({'Roemer:'},{'Combined all channels using calculated weights.'});
 
 % Reshape to original and store data
-fid = csi_combine_reshape_revert(cell2mat(fid'), permv, szr);
+fid = csi_combine_reshape_revert(fid', permv, szr);
 CSI_Log({'Roemer:'},{'Converting data to frequency-domain (FFT).'});
 csi.data.raw = csi_fft(fid);
 csi.data.dim = size(csi.data.raw);
@@ -5919,7 +5909,7 @@ function noise_cov = CSI_NoiseCov_usingData(spec, chan_ind, noise_mask)
 dim = size(spec);
 if nargin < 3
     nS = dim(1); half_nm_size = round(nS./6);
-    noise_mask = [1:half_nm_size nS - half_nm_size];
+    noise_mask = [1:half_nm_size (nS - half_nm_size + 1):nS];
 end
 
 % Index for cutting data
@@ -5939,7 +5929,7 @@ noise_cov = cellfun(@diag, noise_cov,'UniformOutput',0);
 noise_cov = cellfun(@diag, noise_cov,'UniformOutput',0);
 
 % Reshape to {noise_cov} x Spatial Dimensions
-if numel(szr) >= 3 && (numel(dim)-2 > 2)
+if numel(szr) > 2 && (numel(dim)-2 > 2)
     noise_cov = reshape(noise_cov, szr(3:end)); 
 end
 
@@ -6384,10 +6374,12 @@ if isempty(ind_avg), avg_opt = {'No'}; else, avg_opt = {'Yes','No'}; end
 % User Input % ------------------------------------------------------- %
 
 % Define questions and options
-qry = {'Calculate noise-covariance matrix using:', ...
-       'Apply PCA denoising:','Average data:', 'Exclude channels:'};
-opt = {{'Measurement', 'Data', 'ID-Matrix'}, {'Yes','No'}, avg_opt, ...
-       {'No', 'Yes'}};
+qry = {'Noise decorrelation method:', ...
+       'Calculate noise-covariance using:', 'Apply PCA denoising:',...
+       'Average data:', 'Exclude channels:'};
+opt = {{'Whitening', 'Cholesky', 'ZCA', 'None'},...
+       {'Measurement', 'Data', 'ID-Matrix', 'In-Memory'},...
+       {'Yes','No'}, avg_opt, {'No', 'Yes'}};
 
 % Ask user
 uans = getUserInput_Popup(qry, opt, [], 'WSVD');
@@ -6395,20 +6387,29 @@ if isempty(uans), CSI_Log({'WSVD:'},{'Aborted.'}); return; end
 
 % Process user input % 
 
-% uans{1} - nCov using noise measurement or data or ID-mat
-if strcmp(uans{1},'Measurement'),       do_NoiseData = 1; 
-elseif strcmp(uans{1}, 'ID-Matrix'),    do_NoiseData = 2; 
+% uans{1} - Decorrelation method
+do_NoiseDecorrelation = 0; ndmsg = 'None'; % None
+switch uans{1}
+    case 'Whitening', do_NoiseDecorrelation = 1; ndmsg = 'WSVD';
+    case 'Cholesky',  do_NoiseDecorrelation = 2; ndmsg = 'Cholesky';
+    case 'ZCA',       do_NoiseDecorrelation = 3; ndmsg = 'ZCA';
+end
+
+% uans{2} - nCov using noise measurement or data or ID-mat
+if strcmp(uans{2},'Measurement'),       do_NoiseData = 1; 
+elseif strcmp(uans{2}, 'ID-Matrix'),    do_NoiseData = 2; 
+elseif strcmp(uans{2}, 'In-Memory'),    do_NoiseData = 3;
 else,                                   do_NoiseData = 0; 
 end 
 
-% uans{2} - PCA denoising
-if strcmp(uans{2},'Yes'), do_PCA = 1; else, do_PCA = 0; end
+% uans{3} - PCA denoising
+if strcmp(uans{3},'Yes'), do_PCA = 1; else, do_PCA = 0; end
 
-% uans{3} - Average data
-if strcmp(uans{3},'No'), do_avg = 0; else, do_avg = 1; end 
+% uans{4} - Average data
+if strcmp(uans{4},'No'), do_avg = 0; else, do_avg = 1; end 
 
-% uans{4} - Exclude channels
-if strcmp(uans{4},'No'), do_excl = 0; else, do_excl = 1; end 
+% uans{5} - Exclude channels
+if strcmp(uans{5},'No'), do_excl = 0; else, do_excl = 1; end 
               
 % Get user input for displaying results
 qry = {'Quality maps: ', 'Amplitudes table: ', 'Weights table: '};
@@ -6417,6 +6418,11 @@ dans = ones(1,size(qry,2));
 uans_disp = getUserInput_Tick(qry,opt,dans); 
 if isempty(uans_disp), CSI_Log({'WSVD:'},{'Aborted.'}) ; return; end
 
+% Some CSI Log cosmetics and WSVD source.
+CSI_Log({''},{''});
+CSI_Log({'% ---------------------------------------------------- %'},...
+        {''});
+CSI_Log({'WSVD Source:'},{'http://dx.doi.org/10.1002/mrm.22230'});
 
 % Exclusion of channels % ------------------------------------------- %
 
@@ -6453,7 +6459,6 @@ if do_NoiseData == 1
 end
 
 
-
 % Averaging % ------------------------------------------------------ %
 
 % If data not averaged - ask user if to do so.
@@ -6467,7 +6472,7 @@ end
 if do_PCA    
     % Run PCA
     button_CSI_PCA_Denoising_Callback(hobj, [], gui, 0);
-    gui = guidata(hobj);
+    gui = guidata(hobj); csi = getappdata(gui.CSIgui_main, 'csi');
     CSI_Log({'WSVD:'},{'PCA Denoising applied, continuing.'});
 end
 
@@ -6488,12 +6493,24 @@ elseif do_NoiseData == 2 % Use identity matrix
     noise_cov = repmat({noise_cov},size(csi.data.raw)); 
     msg = 'Used identity matrix as a substitute for the noise-cov matrix.';
 
+elseif do_NoiseData == 3 % Use stored ncov- / scale- matrix 
+
+    if isfield(csi.data,'scaleMatrix')
+            noise_cov = csi.data.scaleMatrix; % 
+            msg = 'Used stored scale matrix.';
+    elseif isfield(csi.data, 'noise_cov')
+            noise_cov = csi.data.noise_cov;
+            msg = 'Used stored noise-cov matrix.';
+    else
+        CSI_Log({'No stored noise-cov matrix present, aborting.'});
+        return;
+    end
+
 else % Use voxel-data
     noise_cov = CSI_NoiseCov_usingData(csi.data.raw, ind_cha);
     msg = 'Used voxel-data to calculate the noise-cov matrix.';
 end
-% Update LOG
-CSI_Log({'WSVD:'},{msg});
+CSI_Log({'WSVD:'},{msg}); % Update LOG
 
 % Reshaping (1/2) % -------------------------------------------------- %
 
@@ -6521,12 +6538,15 @@ comb.A = zeros(nvox, size(ch_incl,2));
 % Apply for every indices excluding the channel index: e.g. every voxel.
 for vi = 1:nvox
           
-    % Noise covariance matrix
+    % Noise covariance matrix / or scaleMatrix
     N = noise_cov{vi};
-
+ 
     % WSVD algorithm
+    % 0 = none, 1 = WSVD, 2 = Cholesky, 3 = ZCA
     [comb.data(:,vi), comb.Q(vi),comb.W(:,vi),comb.A(vi,:)] = ...
-        WSVD2(tmp_cell{vi}(:,ch_incl), N);
+            WSVD3(tmp_cell{vi}(:,ch_incl), N, do_NoiseDecorrelation);
+
+   
 end
 
 
@@ -6579,7 +6599,7 @@ CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
 % Show statistics nfo
 stats = csi_statistics_of_volume(comb.Q);
-CSI_Log({'WSVD Quality statistics: --------------------------- %',...
+CSI_Log({'WSVD Quality statistics: ------------------------- %',...
          'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
      {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
           sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
@@ -6587,8 +6607,10 @@ CSI_Log({'WSVD Quality statistics: --------------------------- %',...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 
 % Display info to user
-CSI_Log({'WSVD; Channels are combined.','WSVD; Included channels:'},...
-        {'',ch_incl});   
+CSI_Log({'WSVD; Channels are combined:','WSVD; Included channels:'},...
+        {ndmsg, ch_incl});  
+CSI_Log({'% WSDV ------------------------------------------- %'},...
+        {''});
  
 % --- Executes if Sum-of-Squares coil combination is selected
 function CSI_Combine_SumOfSquares(hobj, ~)
@@ -6681,9 +6703,7 @@ end
 % Reshaping (2/2) % ------------------------------------------------- %
 % Reshape the cell array back to the array: dt x chan x residual.
 % Reorder to original order as before reshape (1/2).
-szc = size(tmp_cell); szs = size(tmp_cell{1});
-csi.data.raw = csi_combine_reshape_revert(...
-    reshape(cell2mat(tmp_cell), szs(1), szc(1)), permv, szr);
+csi.data.raw = csi_combine_reshape_revert(tmp_cell, permv, szr);
 
 % Update csi.data.dim data.
 csi.data.dim = size(csi.data.raw); 
@@ -6865,7 +6885,7 @@ data = permute(data,[2:numel(size(data)) 1]);
 data = data./max(data(:));
 
 % SNR Filter
-data(SNR < 10) = 0;
+data(SNR < 50) = 0;
 
 % Spatial dimensions are index(1:3);
 dim = size(data);
@@ -6898,9 +6918,10 @@ for ri = 1:size(rem_index,1)
     
     % Plot scatter
     tmp(tmp == 0) = eps; tmp(~isfinite(tmp)) = eps;tmp(isnan(tmp)) = eps;
-   % tmp = tmp + abs(min(tmp(:))).*1.01;
-    scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
-%     sc.MarkerFaceAlpha =  0.2;
+    % tmp = tmp + abs(min(tmp(:))).*1.01;
+    sc = scatter3(axh{ri}, x(:), y(:),z(:),abs(tmp(:)),(tmp(:)), 'filled');
+    sc.AlphaData =  repmat(0.3,size(x(:)));
+    sc.MarkerFaceAlpha =  'flat';
     
     % Axes cosmetics
     lim_sz = size(tmp); lim_sz = lim_sz+1;
@@ -10305,8 +10326,8 @@ end
 % However, to fit correctly in csi grid, the resolution is changed (below).
 conv.res = mri.ori.res; % Initial... May change!!
 
-% Calculate a resolution fitting the CSI space such that there is a integer
-% amount of image pixels fitted in each CSI direction of space.
+% Calculate a resolution fitting the CSI space such that there is an integer
+% amount of image pixels fitted in each CSI dimension
 res_fit = csi.ori.res ./ conv.res;      % #MRpix / CSIpix
 % res_rem = res_fit - floor(res_fit);     % Pixel change
 res_new = csi.ori.res ./ floor(res_fit);% New MRpix resolution 
@@ -14578,7 +14599,8 @@ end
 
 % 3. CREATE NEW
 % str_new = cat(1, stand_info, new_info, str_save);
-str_new = {stand_info{:} new_info{:} str_save{:}};
+str_new = [stand_info(:)' new_info(:)' str_save(:)'];
+% str_new = {stand_info{:} new_info{:} str_save{:}};
 
 try 
     % Print to info-box.
@@ -14697,9 +14719,11 @@ if isfield(csi.data, 'noise')
     CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
 
     %Show user.
-    CSI_Log({'% ------------------------------------------------ %'},{''}); 
+    CSI_Log({'% ---------------------------------------------------- %'},...
+        {''}); 
     CSI_Log({msg},{''}); 
-    CSI_Log({'% ------------------------------------------------ %'},{''});
+    CSI_Log({'% ---------------------------------------------------- %'},...
+        {''});
 else
     CSI_Log({'No noise data present.'},{''}); return;
 end
@@ -16686,13 +16710,21 @@ end
 % --- Executes on button press in button_TestSomething.
 function button_TestSomething_Callback(hObj, evt, gui)
 
-warndlg('Watch out! Developer testing button. Panic!');
+% warndlg('Watch out! Developer testing button. Panic!');
+% 
+% if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+% csi = getappdata(gui.CSIgui_main, 'csi');
+% 
+% csi.data.raw = single(csi.data.raw);
+% setappdata(gui.CSIgui_main, 'csi', csi);
 
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
 
-csi.data.raw = single(csi.data.raw);
-setappdata(gui.CSIgui_main, 'csi', csi);
+CSI_Log({'% ---------------------------------------------------- %'},...
+        {''});
+CSI_Log({'WSVD Quality statistics: ------------------------- %'},...
+    {''})
+CSI_Log({'% WSDV ------------------------------------------- %'},...
+        {''});
 
 
 % --- Simple sinc function
@@ -17282,108 +17314,6 @@ CSI_Log({'Zero-crossing statistics ---------- %',...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 end
 
-% --- Executes on button press in button_CSI_RemoveOS.
-function button_CSI_RemoveOS_Callback(~, ~, gui, backup)
-% A very crude way of removing oversamling from the data:
-% Given a new value for dimension of interest doi, cut the data from start
-% to the new value and store it.
-%
-% Possible upgrade: allow removing/cutting of a range.
-% Example: column of size 11 requires OS removal of first data point and
-% last two data points to end up with column size 8.
-
-if nargin < 4, backup = gui.checkbox_backup.Value; end
-
-% Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-% Check data domain
-domain = CSI_getDomain(gui); doFFT = 0;
-if ~strcmp(domain, 'time')
-    CSI_Log({'MRS data is possibly in frequency domain;'},...
-            {'Removing oversampling requires time domain data.'});
-    qry = {'MRS-data is possibly in frequency domain:'};
-    def = {{'Convert', 'Ignore', 'Abort'}};
-    uans = getUserInput_Popup(qry,def,[],'Remove OS');
-    if isempty(uans) || strcmp(uans, 'Abort'); return; end
-    if strcmp(uans{1}, 'Convert'), doFFT = 1; end
-end 
-
-% Create backup
-if backup, CSI_backupSet(gui, 'Before removing oversampling.'); end
-
-% ------------------------------------------------- %
-
-% Get dimensions to remove OS: ind
-uans = getUserInput_Popup({'Index:'}, {csi.data.labels}, [], 'Remove OS');
-if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
-ind = find(strcmp(uans{1},csi.data.labels)); ind_lab = uans{1};
-
-% Get method of removal
-qry = {'Split data by:'};
-def = {{'Split','Odd values','Even values'}};
-uans = getUserInput_Popup(qry, def, [], 'Remove OS');
-if isempty(uans), CSI_Log({'Aborted OS removal.'},{''}); return; end
-switch uans{1}
-    case 'Split',       method = 'Split';
-    case 'Odd values',  method = 'Odd';
-    case 'Even values', method = 'Even';
-end
-
-% Get value of OS to remove: osval
-uans = getUserInput({'New size of dimension:'},...
-                    {round(csi.data.dim(ind)./2)});
-if isempty(uans),CSI_Log({'Aborted OS removal.'},{''}); return; end
-osval = str2double(uans{1});
-
-% Apply on given dim: csi.data.raw @ ind = 1:osval
-sz = csi.data.dim;
-if ~strcmp(method, 'Split')
-    % Bandwidth changes if you take odd or even values from data.
-    csi.xaxis.BW = csi.xaxis.BW / (sz(1) / osval);
-end
-% Index vector for selected method
-switch method
-    case 'Split'        
-        sz(ind) = osval;
-        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
-    case 'Odd'               
-        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
-        rng{1} = 1:2:osval*2;
-    case 'Even'        
-        rng = cellfun(@(x) 1:x, num2cell(sz), 'uniform', 0);
-        rng{1} = 2:2:osval*2;
-end
-
-% Possible iFFT
-if doFFT, csi.data.raw = csi_ifft(csi.data.raw); end
-
-% Cut the data with the new value
-csi.data.raw = csi.data.raw(rng{:});
-
-% Update csi.data.dim size 
-csi.data.dim = size(csi.data.raw);
-
-% Possible FFT
-if doFFT, csi.data.raw = csi_fft(csi.data.raw); end
-
-% ------------------------------------------------- %
-
-% If a peak was selected - this needs to be removed as its point changed.
-if isappdata(gui.CSIgui_main,'CSIpar')
-    rmappdata(gui.CSIgui_main,'CSIpar');
-end
-
-% Store data %
-setappdata(gui.CSIgui_main,'csi', csi);
-
-% Update X-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
-
-% Show nfo
-CSI_Log({'Removed oversampling (dimension | size | Method): '}, ...
-        {[ind_lab, ' | ', num2str(osval) ' | ' method]});
 
 % --- Executes on button press in button_CSI_MapB1.
 function button_CSI_MapB1_Callback(~, ~, gui)
@@ -17959,8 +17889,10 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % Ask user data-range of interest
 qry = {'Calculate statistics over slice(s):', ...
-       'Apply exclusion voxel-mask:', 'Select peak/frequency range:'};
-def = {{'All', 'Current','Displayed'},{'Yes','No'},{'No','Yes'}};
+       'Apply exclusion voxel-mask:', 'Select peak/frequency range:',...
+       'Measure of interest:'};
+def = {{'All', 'Current','Displayed'},{'Yes','No'},{'No','Yes'},...
+       {'Signal', 'SNR', 'Linewidth'}};
 uans = getUserInput_Popup(qry, def);
 if isempty(uans), return; end
 
@@ -17972,7 +17904,10 @@ if strcmp(uans{3}, 'Yes'), doPeak = 1; else, doPeak = 0; end
 doi = csi.data.raw;
 
 % Select peak % ------------------------------------------------------- %
-if doPeak
+% LW requires full-spectrum and a peak will be selected during 
+% LW-calculations, therefor, if user wants to select peak - itll be done
+% later. Same goes for SNR.
+if doPeak && strcmp(uans{4}, 'Signal')    
     poi = CSI_getPeakOfInterest(csi.xaxis,'Calculate statistics');
     doi = CSI_getDataAtPeak(doi, csi.xaxis, poi);
     if isempty(poi), return; end
@@ -18041,9 +17976,10 @@ if doMask
             % Cut mask
             mask = mask(cell_ind{:});
         end
-    
+  
         % Apply mask to data
-        doi(mask) = NaN;
+        msktmp = repmat(mask,size(doi,1), 1, 1) == 1;
+        doi(msktmp) = (NaN +1i*NaN);
     else
         CSI_Log({'Voxel-Mask was not loaded into memory.'}, ...
                 {'Continuing with full data-volume without masking.'})
@@ -18051,11 +17987,198 @@ if doMask
 end
 
 
+% Measure of interest  % ----------------------------------------------- %
+switch uans{4}
+    case 'Signal'
+        % Do nothing
+    case 'SNR'
+        sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./12)});
+        if isempty(sans), return; end
+        masksz = str2double(sans);
+        doi = csi_SNR(doi, masksz,1);        
+    case 'Linewidth'
+
+        % Prep data
+        ax = csi.xaxis.none;
+        if isfield(csi.xaxis,'ppm'), ax = csi.xaxis.ppm; end 
+        if ~exist('poi', 'var')
+            poi = CSI_getPeakOfInterest(csi.xaxis,'Calculate statistics');
+            [~, ~, poi] = ...
+                CSI_getDataAtPeak(doi, ax, poi);
+        end
+
+        % DOI to Cell
+        sz = size(doi); 
+        cell_layout = arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),...
+                        'UniformOutput',0);
+        doi = mat2cell(doi, sz(1), cell_layout{:}); 
+
+        % Calc LW
+        doi = cellfun(@csi_linewidth_intersect, ...
+            doi, repmat({ax},size(doi)), repmat({poi},size(doi)),...
+            'UniformOutput', 0);
+        doi = cellfun(@double, doi); doi(isnan(doi)) = 0; 
+        if doMask, doi(mask) = NaN; end
+
+end
+
 
 % Calculate statistics % ----------------------------------------------- %
-stats = csi_statistics_of_volume(doi);
+stats = csi_statistics_of_volume(doi); stats.measure = uans{4};
 Statistics_Viewer(stats);
 
 % Log to user
 CSI_Log({'Statistics calculated over:',msg}, {' ',' '});
+
+% --- Executes on button press in button_CSI_NoiseDecorrelation.
+function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind)
+% Apply either Cholesky or zero-phase component whitening transformations
+% to the multi-channel csi data i.e. noise decomposition, noise
+% decorrelation.
+%
+% If method, source and chan_ind arent given, userinput is required.
+
+functag = 'Decorrelation:'; % Ease of CSI_Log
+
+% Create backup
+backup = gui.checkbox_backup.Value; 
+if backup, CSI_backupSet(gui, 'Before noise decorrelation.'); end
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% User Input % ------------------------------------------------------- %
+if nargin < 4
+    chan_ind = csi_findDimLabel(csi.data.labels,{'chan','cha'});
+    chan_ind(isnan(chan_ind)) = []; chan_ind_def = 1:numel(csi.data.labels);
+    if ~isempty(chan_ind)
+        chan_ind_def([1 chan_ind]) = chan_ind_def([chan_ind 1]);   
+    end
+    chan_ind_def = csi.data.labels(chan_ind_def);
+    
+    qry = {'Noise decorrelation method:', ...
+           'Calculate noise covariance matrix using:', 'Coil index:'};
+    def = {{'Whitening', 'Cholesky', 'ZCA'}, ...
+           {'Measurement', 'Data', 'ID-Matrix'}, chan_ind_def};
+    uans = getUserInput_Popup(qry,def);
+    if isempty(uans), return; end
+
+
+    % --- % Analyse user input
+
+    % Decorrelation method
+    method = uans{1}; 
+    
+    % Noise-cov source.
+    src = uans{2};
+
+    % Coil/Channel index
+    chan_ind = find(strcmp(uans{3}, csi.data.labels) == 1);
+
+end
+
+
+% Noise-covariance source
+switch src
+    case 'Data',        do_NoiseData = 0;
+    case 'Measurement', do_NoiseData = 1;    
+    case 'ID-Matrix',   do_NoiseData = 2;
+end
+
+
+% Prepare Noise Data % ----------------------------------------------- %
+
+if do_NoiseData == 1
+    if isfield(csi.data,'noise')
+        % Run noise-prepare fcn
+        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
+        if ~isstruct(csi)
+            CSI_Log({'Decorrelation:'}, {'Aborted.'});
+            return; 
+        end
+
+        % Message to user
+        CSI_Log({functag},...
+                {'Noise-data processed and stored.'});  
+    else
+        do_NoiseData = 0; 
+        CSI_Log({functag},...
+                {'No noise-data present, using voxel-noise instead.'});
+    end
+end
+
+% Noise Covariance Matrix % -------------------------------------------- %
+if isfield(csi.data, 'noise') && do_NoiseData == 1
+    
+    % Get noise-cov using noise data
+    noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
+                                              csi.data.noise.labels);
+        
+    % Copy it for nVoxels
+    sz = size(csi.data.raw); % Data size
+    non_spat_ind = ...
+        csi_findDimLabel(csi.data.labels,...
+        {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
+    non_spat_ind(isnan(non_spat_ind)) = []; 
+    non_spat_ind(non_spat_ind > numel(sz)) = [];
+    sz(non_spat_ind) = [];
+
+    % Covariance matrix
+    noise_cov = repmat({noise_cov}, sz);
+
+    % NFO Update
+    CSI_Log({functag},...
+            {'Noise-data used to calculate noise-covariance matrix.'});
+
+elseif do_NoiseData == 0
+    % Noise covariance matrix required for noise-decorrelation
+    % calculated using noise in data itself.
+    noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
+    CSI_Log({functag },...
+            {'Voxel-data used to calculate noise-covariance matrices.'});
+
+elseif do_NoiseData == 2
+    % Calculate the ID-matrix for use as noise-cov matrix
+    nVox = prod(csi.data.dim(2:end));
+    noise_cov = ...
+        repmat({diag(ones(csi.data.dim(chan_ind),1))},nVox,1); 
+    CSI_Log({functag},...
+            {'Using the ID-matrix as the noise-covariance matrix.'});
+
+end
+
+% Store noise-covariance matrix
+csi.data.noise_cov = noise_cov;
+
+switch method
+    case 'Whitening'
+        % Decorrelate signal (Whitening as done via WSVD)
+        [csi.data.raw, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_whitening(csi.data.raw, chan_ind, noise_cov);
+
+    case 'Cholesky'
+
+        % Decorrelate signal (Cholensky)
+        [csi.data.raw, csi.data.noise_cov_chol, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_chol(csi.data.raw, chan_ind, noise_cov);
+
+    case 'ZCA'
+        
+        % Decorrelate signal (ZCA)
+        [csi.data.raw, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_zca(csi.data.raw, chan_ind, noise_cov);
+end
+
+% --------------------------------------------------------------------- %
+
+% Store data %
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Update x-axis data
+CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+
+% Show nfo
+CSI_Log({functag},{['Applied ' method]});
+
 

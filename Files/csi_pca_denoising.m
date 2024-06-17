@@ -44,7 +44,10 @@ if nargin < 3, patch_size = 5; svd_method = 0; end
 if nargin < 4, svd_method = 1; end
 
 % Data dimensions
-dim = size(spec,1,2,3,4,5,6,7,8,9,10); 
+% dim = size(spec,1,2,3,4,5,6,7,8,9,10); 
+dim = NaN(1,10); % This makes it compatible with Matlab <R2021
+for kk = 1:10, dim(kk) = size(spec,kk); end
+
 dim_spat = dim; dim_spat(chan_ind) = []; dim_spat(1) = [];
 
 % Reshape data nS x nVox x nCh % --------------------------------------- %
@@ -68,10 +71,13 @@ psz = patch_size;
 
 % Parallel Pool % ------------------------------------------------------ %
 
+mlyear = version('-release'); mlyear = str2double(mlyear(1:end-1));
+parpoolName = 'Processes'; if mlyear <2023, parpoolName = 'local'; end
+
 p = gcp('nocreate'); 
 if isempty(p)
     nCores = feature('numcores');
-    parpool('Processes', nCores);
+    parpool(parpoolName, nCores);
 end
 
 tic
@@ -172,8 +178,8 @@ for vi = 1:N
     sub_nbh = sub2neighbourhood(sub, psz, dim_spat)';
 
     % Step 3 - Convert to linear index for data-handling;
-    sub_nbh = num2cell(sub_nbh);  lin_nbh = NaN(psz.^3,1);
-    for ni = 1:psz^3
+    sub_nbh = num2cell(sub_nbh);  lin_nbh = NaN(psz^3,1);
+    for ni = 1:(psz^3)
         lin_nbh(ni) = sub2ind(dim_spat,sub_nbh{ni,:});
     end
 

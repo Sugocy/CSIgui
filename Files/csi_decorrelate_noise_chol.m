@@ -1,4 +1,4 @@
-function [spec, nCov_Chol] = csi_decorrelate_noise(spec, chan_ind, nCov)
+function [spec, nCov_Chol, scaleMatrix] = csi_decorrelate_noise_chol(spec, chan_ind, nCov)
 % Decorrelate signal according to Cholesky decomposition for decorrelation
 % CG-SENSE, Pruessman et al MRM 2001.
 %
@@ -14,23 +14,23 @@ function [spec, nCov_Chol] = csi_decorrelate_noise(spec, chan_ind, nCov)
 if nargin < 2, nCov = csi_noisecov_usingdata(spec, chan_ind); end
 dim = size(spec);
 
+
 % Generate virtual coils using Chlesky-Decomp, resulting in unit-noise.
-[nCov_Chol, flag] = cellfun(@chol, nCov, 'UniformOutput', 0);
+nCov_Chol = cellfun(@chol, nCov, 'UniformOutput', 0);
 
 % Reshape to {nS x nChan} x nVoxels
 [spec, permv, szr] = csi_combine_reshape(spec, chan_ind);
-nCov_Chol = reshape(nCov_Chol,[numel(nCov_Chol) 1]);
+nCov_Chol = reshape(nCov_Chol, [numel(nCov_Chol) 1]);
 
 % Decompose signal
-spec = cellfun(@decorrelate_noise_equation, spec, nCov_Chol, ...
-    'UniformOutput', false);
+[spec, scaleMatrix] = cellfun(@decorrelate_noise_equation, ...
+                              spec, nCov_Chol, 'UniformOutput', false);
 
 % Reshape back to matrix with same dimensions
-if numel(szr) >= 3 && (numel(dim)-2 > 2)
+if numel(szr) > 2 && (numel(dim)-2 > 2)
     spec = reshape(spec, szr(3:end)); vec_sz = size(szr(3:end),2);
-    spec = permute(spec,[vec_sz+1 vec_sz+2 1:vec_sz]);
+    spec = permute(spec,[vec_sz + [1 2] 1:vec_sz]);
     spec = cell2mat(spec);
-% end
 else
     spec = cat(numel(size(spec))+1, spec{:});
 end
@@ -46,11 +46,11 @@ if numel(szr) >= 3 && (numel(dim)-2 > 2)
 end
 
 % --- Decorrelate noise equation
-function dSignal = decorrelate_noise_equation(signal, nCov_Chol)
+function [dSignal, scaleMatrix] = decorrelate_noise_equation(signal, nCov_Chol)
 % Decorrelated-signal = pinv(Cholesky-decomposed Cov-Matrix) * Signal;
 % i.e., Pseudo-inverse of cholesky decomposed nCov matrix-times the 
 % signal.
-dSignal = (pinv(nCov_Chol') * signal')';
+scaleMatrix = pinv(nCov_Chol'); dSignal = ( scaleMatrix * signal')';
 
 % --- Noise Covariance matrix using data
 function noise_cov = csi_noisecov_usingdata(spec, chan_ind, noise_mask)
@@ -66,7 +66,7 @@ function noise_cov = csi_noisecov_usingdata(spec, chan_ind, noise_mask)
 dim = size(spec);
 if nargin < 3
     nS = dim(1); half_nm_size = round(nS./6);
-    noise_mask = [1:half_nm_size nS - half_nm_size];
+    noise_mask = [1:half_nm_size (nS - half_nm_size + 1):nS];
 end
 
 % Index for cutting data
@@ -78,7 +78,7 @@ noise_data = spec(cut_ind{:});
 if isempty(chan_ind), chan_ind = numel(dim)+1; end
 
 % Cell-ify and reshape data to {nS x nChan} x nVox
-[noise_data, ~, szr] = CSI_Combine_WSVD_reshape(noise_data, chan_ind);
+[noise_data, ~, szr] = csi_combine_reshape(noise_data, chan_ind);
 
 % Noise covariance Matrix
 noise_cov = cellfun(@cov, noise_data,'UniformOutput',0);

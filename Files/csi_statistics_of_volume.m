@@ -49,5 +49,14 @@ stats.min_index = (tmp_ind);
 [tmp_ind{:}] = ind2sub(size(data),indMx);
 stats.max_index = (tmp_ind);
 
+% Volume size
+stats.size = size(data);
+
+% Number of elements
+stats.num_elements = numel(data);
+
+% Number nans
+stats.num_nan = sum(isnan(data(:)));
+
 % Number of decimals
 stats.num_decimals = findDecimals(stats.median);

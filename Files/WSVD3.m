@@ -1,13 +1,22 @@
-function [spec, Q, W, A] = WSVD2(spec, noiseCov)
+function [spec, Q, W, A] = WSVD3(spec, noiseCov, method)
 % Whitened singular value decomposition to calculate weights for combining
-% multiple coil/channels in MR-data.
+% multiple coil-channels in MR-data.
 %
 % This algorithm is based on the WSVD algorithm described in:
 % Rodgers et al., http://dx.doi.org/10.1002/mrm.22230
 %
 % Expected input data format: 
-%           spec     = [ nSamples  x nChannels ] x 1
+%           spec     = [ nSamples  x nChannels ] x 1, minimum required
+%                      input argument.
 %           noiseCov = [ nChannels x nChannels ] x 1
+%                      or set to Nan to calculate it using the data itself
+%                      and still allow setting whitening method.
+%           method   = ZCA (1, default), Cholesky (2), 
+%                      None (0, no whitening). 
+%                      The noiseCov variable is still require @ none:
+%                           If ZCA;         expect scaleMatrix,
+%                           If Cholesky;    expect noiseCov.
+%                       
 %
 % Output:
 %           spec = combined spectra
@@ -17,23 +26,47 @@ function [spec, Q, W, A] = WSVD2(spec, noiseCov)
 %
 % Q. van Houtum, PhD.
 % quincyvanhoutum@gmail.com
+%
+
+if nargin < 3, method = 1; end
 
 % calculate noise-covariance matrix using data
-if nargin < 2, noiseCov = csi_noisecov_usingdata(spec,2); end
+if nargin < 2 || sum(isnan(noiseCov(:))) == 1
+    noiseCov = csi_noisecov_usingdata(spec,2);
+end
 
 % Preperation % -------------------------------------------------------- %
 nCoils = size(spec,2);
 refChannel = 1; % Used for scaling, could be any of the channels.
 
+
 % Whitening % ---------------------------------------------------------- %
+if method == 1 % Whitening
 
-% [V,D] = eig(A) returns diagonal matrix D of eigenvalues and matrix V 
-% whose columns are the corresponding right eigenvectors, so that A*V = V*D.
-[noiseVec, noiseVal] = eig(noiseCov);
+    % [V,D] = eig(A) returns diagonal matrix D of eigenvalues and matrix V 
+    % whose columns are the corresponding right eigenvectors, 
+    % so that A*V = V*D.
+    [noiseVec, noiseVal] = eig(noiseCov);
+    
+    % Scale spectra using eigen-values
+    scaleMatrix = noiseVec * diag(sqrt(0.5)./sqrt(diag(noiseVal)));
+    
+    % Scale spectra
+    spec = spec * scaleMatrix;
 
-% Scale spectra using eigen-values
-scaleMatrix = noiseVec * diag(sqrt(0.5)./sqrt(diag(noiseVal)));
-spec = spec*scaleMatrix; 
+elseif method == 0 % none
+    scaleMatrix = noiseCov; % User already applied nois decorrelation.
+
+elseif method == 2 % Cholesky
+    [spec, ~, scaleMatrix] = ...
+        csi_decorrelate_noise_chol(spec, 2, {noiseCov});    
+    scaleMatrix = scaleMatrix{1};
+
+elseif method == 3 % ZCA
+    [spec, scaleMatrix] = csi_decorrelate_noise_zca(spec, 2, {noiseCov});    
+    scaleMatrix = scaleMatrix{1};
+
+end
 
 
 % SVD % ---------------------------------------------------------------- %
@@ -43,8 +76,7 @@ spec = spec*scaleMatrix;
 Q(1) = ((s(1,1)/norm(diag(s)))*sqrt(nCoils)-1)/(sqrt(nCoils)-1);
 
 % Coil amplitudes
-A = v(:,1)'/scaleMatrix; % (updated code)
-
+A = v(:,1)'/scaleMatrix;
 
 % Arbitrary scaling such that the first coil weight is real and positive
 svdRescale = norm(A) * normalise(A(refChannel));
@@ -52,11 +84,12 @@ svdRescale = norm(A) * normalise(A(refChannel));
 % Correct for scaling
 A = A / svdRescale;
 
-% Calculate applied weights.
-W = 0.5 * (noiseCov \ A') * conj(svdRescale) * svdRescale; % (updated code)
+% Calculate separate weights.
+W = 0.5 * (noiseCov \ A') * conj(svdRescale) * svdRescale;
 
 % Calulate combination % ----------------------------------------------- %
 spec = u(:,1) * s(1,1) * svdRescale;
+
 
 
 
@@ -71,7 +104,7 @@ function noise_cov = csi_noisecov_usingdata(spec, chan_ind, noise_mask)
 %
 % output noise_cov = {nChan x nChan} x Spatial Dimensions ...
 %
-% !! If no noise_mask given - it will be calculated as 2x(1/6)% of the
+% !! If no noise_mask given - it will be calculated as 2x(1/6) of the
 %                              start and end of the spectrum.
 
 dim = size(spec);

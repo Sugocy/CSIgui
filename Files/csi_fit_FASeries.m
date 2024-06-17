@@ -322,7 +322,10 @@ if plot_data
         plot(ax(kk), ppm, real(doi_main(:,kk)), 'color', orange);
         hold on;
         plot(ax(kk), ppm, real(doi(:,kk)), '--r')
-        xlabel(sprintf('%i', xdata(kk))); ylim(ylim_val); xlim(xlim_val);
+
+        cf = 0; if add_zero, cf = 1; end
+        xlabel(sprintf('%i', xdata(kk+cf))); 
+        ylim(ylim_val); xlim(xlim_val);
         
 
         % Remove x-limit xticks values.

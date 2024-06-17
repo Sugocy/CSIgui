@@ -118,7 +118,7 @@ wsvdCoilAmplitudes=v(:,1)'*invScaleMatrixFft;
 
 svdRescale = norm(wsvdCoilAmplitudes)*normalise(wsvdCoilAmplitudes(options.phaseRefChannel));
 
-wsvdCoilAmplitudes=wsvdCoilAmplitudes / svdRescale;
+wsvdCoilAmplitudes = wsvdCoilAmplitudes / svdRescale;
 
 if options.debug
     fprintf('DEBUG: SVD quality indicator = %g\n',wsvdQuality);

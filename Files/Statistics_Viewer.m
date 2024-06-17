@@ -6,10 +6,13 @@ function Statistics_Viewer(stats)
 % Version 1.0 - 04/2024
 
 % Figure
+% fh = uifigure('MenuBar','none', 'ToolBar','none',...
+%               'Name', 'Statistics Viewer',...
+%               'Color','k', 'NumberTitle','off',...
+%               'WindowKeyPressFcn', @keyPressFcn);
 fh = uifigure('MenuBar','none', 'ToolBar','none',...
               'Name', 'Statistics Viewer',...
-              'Color','k', 'NumberTitle','off',...
-              'WindowKeyPressFcn', @keyPressFcn);
+              'Color','k', 'NumberTitle','off');
 fh.Position(3:4) = round(fh.Position(3:4) ./ [2 1.5]);
 
 dxy = 5;
@@ -36,12 +39,18 @@ for kk = 1:numel(flds)
     val = stats.(flds{kk});
     if iscell(val), val = cell2mat(val); end
     
-    if numel(val) > 1
-        nvals = numel(val);
-        str = repmat('%g | ', 1, nvals);
-        vals{kk} = sprintf( str, val(:));
+    if ischar(val)
+        vals{kk} = val;
     else
-        vals{kk} = sprintf( '%f', val);    
+
+        if numel(val) > 1
+            nvals = numel(val);
+            str = repmat('%g | ', 1, nvals);
+            vals{kk} = sprintf( str, val(:));
+        else
+            vals{kk} = sprintf( '%10.10f', val);    
+        end
+        
     end
     flds{kk} = sprintf('%s:', flds{kk});
 end

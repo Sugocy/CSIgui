@@ -54,9 +54,10 @@ matrix_size = getMatrixSize(fp,fn{1});
 if isnan(matrix_size)
     warning('dicomreadSiemens | No col/row nfo in dicom header: \n%s',...
     fn{1});
-    img = nan; nfo = {nan}; return; 
+    img = nan; nfo = {nan};  
+else
+    img = NaN(matrix_size(2),matrix_size(1),size(fn,2));
 end
-img = NaN(matrix_size(2),matrix_size(1),size(fn,2));
 
 % Loop files; we assume all are MR-image dicoms.
 nfo = cell(1,size(fn,2));
@@ -65,7 +66,9 @@ for fni = 1:size(fn,2)
     nfo{fni} = dicominfo([fp fnt],'UseDictionaryVR', true);
 
     % Read dicom file
-    img(:,:,fni) = single(dicomread([fp fnt]));
+    if numel(img) ~= 1
+        img(:,:,fni) = single(dicomread([fp fnt]));
+    end
     
 end % End of file(s) for-loop.
 
@@ -84,7 +87,7 @@ function [type, sopclass] = checkDicomModality(fp, fn)
         type = 'mri_enhanced';
     elseif strcmpi(sopclass,'1.2.840.10008.5.1.4.1.1.4.2') % MRS   
         type = 'mri';
-    elseif strcmpi(sopclass,'1.3.12.2.1107.5.9.1 ')
+    elseif strcmpi(sopclass,'1.3.12.2.1107.5.9.1')
         type = 'CSA Non-Image'; 
     else
         type = 'nan';

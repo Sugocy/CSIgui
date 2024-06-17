@@ -2,6 +2,7 @@ function [linewidth, xest, yest] = csi_linewidth_intersect(data, ax, peak_range)
 %%% Calculate linewidth of a peak at a given frequency peak_range using an
 %%% intersect FWHM method.
 
+try
 
 % Baseline | Samples
 N = size(data,1); 
@@ -34,4 +35,9 @@ if size(xest,1) == 1 || size(xest,1) == 0 % The peak is not within the peak_rang
 else
     xest = [xest(1) xest(end)]; % yest = [yest(1) yest(end)];
     linewidth = diff(xest); 
+end
+
+catch % catches errors - mostly due to full nan-values
+    linewidth = NaN;
+    xest = NaN; yest = NaN;
 end
