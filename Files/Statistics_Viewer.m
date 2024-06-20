@@ -3,20 +3,27 @@ function Statistics_Viewer(stats)
 % option to copy using ctrl + c.
 %
 % Dr. Q. van Houtum, quincyvanhoutum@gmail.com
-% Version 1.0 - 04/2024
+% Version 2.0 - 06/2024
+
+% Matlab year/version
+ver = version('-release'); ver = str2double(ver(1:end-1));
+
 
 % Figure
-% fh = uifigure('MenuBar','none', 'ToolBar','none',...
-%               'Name', 'Statistics Viewer',...
-%               'Color','k', 'NumberTitle','off',...
-%               'WindowKeyPressFcn', @keyPressFcn);
-fh = uifigure('MenuBar','none', 'ToolBar','none',...
-              'Name', 'Statistics Viewer',...
-              'Color','k', 'NumberTitle','off');
-fh.Position(3:4) = round(fh.Position(3:4) ./ [2 1.5]);
+if ver > 2018
+    fh = uifigure('MenuBar','none', 'ToolBar','none',...
+                  'Name', 'Statistics Viewer',...
+                  'Color','k', 'NumberTitle','off',...
+                  'WindowKeyPressFcn', @keyPressFcn);
+else
+    fh = uifigure('MenuBar','none', 'ToolBar','none',...
+                  'Name', 'Statistics Viewer',...
+                  'Color','k', 'NumberTitle','off');
+end
+fh.Position(3:4) = round(fh.Position(3:4) ./ [1.9 1.5]);
 
 dxy = 5;
-lb_sz = fh.Position(3:4)-(dxy*2); lb_sz(1) = lb_sz(1)./2.75;
+lb_sz = fh.Position(3:4)-(dxy*2); lb_sz(1) = lb_sz(1)./2.5;
 lbv_sz = lb_sz; lbv_sz(1) = fh.Position(3) - lb_sz(1) - (dxy*2);
 
 % Listbox fieldname
@@ -33,6 +40,7 @@ gui.lbv.Position = [lb_sz(1)+dxy dxy lbv_sz];
 gui.lbv.BackgroundColor = [0 0 0]; gui.lbv.FontColor = [0.94 0.94 0.94];
 gui.lbv.Tag = 'values'; 
 
+
 flds = fieldnames(stats);
 vals = cell(1,numel(flds)); 
 for kk = 1:numel(flds)
@@ -45,10 +53,19 @@ for kk = 1:numel(flds)
 
         if numel(val) > 1
             nvals = numel(val);
-            str = repmat('%g | ', 1, nvals);
+            str = repmat('[%g] ', 1, nvals);
             vals{kk} = sprintf( str, val(:));
         else
-            vals{kk} = sprintf( '%10.10f', val);    
+            
+            [nZeros, acc] = numzeros(val);
+            if nZeros <= 0 || nZeros == acc
+                vals{kk} = strip(sprintf('%6.2f', val));    
+            else
+                prefix = '0'; if nZeros >= 10, prefix = ''; end
+                vals{kk} = sprintf('%3.3fe-%s%i', ...
+                                   val*10.^(nZeros+1), prefix, nZeros+1);
+            end
+
         end
         
     end

@@ -10,7 +10,7 @@ function stats = csi_statistics_of_volume(data, filter, filter_val)
 %%%
 %%% Will ingore NaN values.
 %%%
-%%% Dr. Quincy van Houtum, ELH-Institute Essen, 2023/04.
+%%% Dr. Quincy van Houtum, ELH-Institute Essen, v2 - 2024/06.
 %%% quincyvanhoutum@gmail.com
 
 % Process input
@@ -59,4 +59,5 @@ stats.num_elements = numel(data);
 stats.num_nan = sum(isnan(data(:)));
 
 % Number of decimals
-stats.num_decimals = findDecimals(stats.median);
+stats.num_dec_zeros = numzeros(stats.median);
+

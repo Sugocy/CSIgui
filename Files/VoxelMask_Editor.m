@@ -20,6 +20,12 @@ function [varargout] = VoxelMask_Editor(plot_par)
 %
 % 
 
+if ~isfield(plot_par, 'colors')
+    plot_par.colors.main         = [0.1 0.1 0.1];
+    plot_par.colors.text_title   = [0.502 0.502 0.502];
+    plot_par.colors.hilight1     = [0.8 0 0];
+end
+
 % --- % Create Figure for plotting 2D
 plot_par.fh = VoxelMask_createFigure(...
               'Voxel Mask', plot_par.colors.main);
@@ -364,6 +370,10 @@ tgui.mb.selection.copy.all =  uimenu(tgui.mb.selection.copy.main,...
     'Label', 'Replace','Callback', @VoxelMask_MB_copy);            
 tgui.mb.selection.copy.slice =  uimenu(tgui.mb.selection.copy.main,...
     'Label', 'Add', 'Callback', @VoxelMask_MB_copy);                    
+tgui.mb.selection.copy.memory =  uimenu(tgui.mb.selection.copy.main,...
+    'Label', 'Memory', 'Callback', @VoxelMask_MB_copy);   
+tgui.mb.selection.copy.paste =  uimenu(tgui.mb.selection.copy.main,...
+    'Label', 'Paste', 'Callback', @VoxelMask_MB_copy); 
 
 % Selection > Clear ...                 
 tgui.mb.selection.clear.main = uimenu(tgui.mb.selection.main, ...
@@ -528,28 +538,53 @@ function VoxelMask_Selection_Copy(hobj)
 tgui = guidata(hobj); plot_par = tgui.plot_par;
 
 % Use object text to replace or add "copy"-selection.
+setMemory = 0; useMemory = 0; doReplace = 0;
 switch hobj.Text
-    case 'Replace', doReplace = 1;
-    case 'Add',     doReplace = 0;
+    case 'Replace', doReplace = 1; 
+    case 'Add',     doReplace = 0; 
+    case 'Memory',  setMemory = 1; 
+    case 'Paste',   useMemory = 1;
 end
 
 % Find current tab-obj
 inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
 % Tab of interest
-toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;        
-% Get selected of current slice
-sel = cellfun(@(x) get(x, 'color'), plot_par.ax(:,:,toi), 'uniform', 0);
-sel = ~cellfun(@isequal, sel, repmat({'none'}, size(sel)));
-sel2copy = repmat(sel, [1 1 plot_par.tabs_total]);
+toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;     
 
-% Copy selection to other tabs
-inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(sel2copy(:)) 1]);
-cellfun(@(x,y) set(x, 'color', y), plot_par.ax(sel2copy), inp_color);
+if ~useMemory
+    % Get selected of current slice
+    sel = cellfun(@(x) get(x, 'color'), plot_par.ax(:,:,toi), 'uniform', 0);
+    sel = ~cellfun(@isequal, sel, repmat({'none'}, size(sel)));
+    sel2copy = repmat(sel, [1 1 plot_par.tabs_total]);
+end
 
-% If replace, remove selection everywhere else
-if doReplace
-    inp_none = repmat({'none'}, [sum(~sel2copy(:)) 1]);
-    cellfun(@(x,y) set(x, 'Color', y), plot_par.ax(~sel2copy), inp_none); 
+% Store selection if copy-to-memory
+if setMemory, tgui.copied = sel; guidata(hobj, tgui); return; end
+
+% Copy to all slices 
+if ~setMemory && ~useMemory
+    % Copy selection to other tabs
+    inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(sel2copy(:)) 1]);
+    cellfun(@(x,y) set(x, 'color', y), plot_par.ax(sel2copy), inp_color);
+
+    if doReplace
+        % If replace, remove selection everywhere else
+        inp_none = repmat({'none'}, [sum(~sel2copy(:)) 1]);
+        cellfun(@(x,y) set(x, 'Color', y), plot_par.ax(~sel2copy), inp_none); 
+    end
+
+% Copy from memory
+else
+    % Use copy from memory
+    sel2copy = tgui.copied;
+
+    % Voxels to clear (set to All)
+    inp_all = repmat({'none'}, size(plot_par.ax(:,:,toi)));
+    % Set voxels-to-highlight
+    inp_all(sel2copy) = {[plot_par.colors.hilight1 0.3]};   
+    % Paste selection from memory
+    cellfun(@(x,y) set(x, 'Color', y), plot_par.ax(:,:,toi), inp_all); 
+
 end
 
 function VoxelMask_Selection_Clear(hobj)

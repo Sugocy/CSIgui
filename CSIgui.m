@@ -8875,7 +8875,7 @@ tgui = guidata(figobj);
 
 % Which data to visualize
 uans = getUserInput_Popup({'Calculate stastics for:'},...
-                         {{'Current', 'All'}});
+                         {{'Current', 'All', 'All/Slice'}});
 if isempty(uans), return; end
 
 
@@ -8899,11 +8899,28 @@ if strcmp(uans{1}, 'Current')
     tab_dims = strsplit(toi.Title, ' ');
     tab_dims = num2cell(str2double(tab_dims));
     data = squeeze(data(:,:,:,tab_dims{:}));
+
+    % Calculate and show results.
+    stats = csi_statistics_of_volume(data);
+    Statistics_Viewer(stats);
+
+elseif strcmp(uans{1}, 'All')
+    % Calculate and show results.
+    stats = csi_statistics_of_volume(data);
+    Statistics_Viewer(stats);
+
+elseif strcmp(uans{1}, 'All/Slice')
+    for kk = 1:numel(tgui.tabh)
+        toi = tgui.tabh{kk};
+        tab_dims = strsplit(toi.Title, ' ');
+        tab_dims = num2cell(str2double(tab_dims));
+        stats = csi_statistics_of_volume(squeeze(data(:,:,:,tab_dims{:})));
+        stats.Tab = kk;
+        Statistics_Viewer(stats);
+    end
 end
 
-% Calculate and show results.
-stats = csi_statistics_of_volume(data);
-Statistics_Viewer(stats);
+
 
 
 
@@ -17439,6 +17456,11 @@ lab_spat = {'kx','ky','kz', 'x', 'y', 'z'};
 ind_spat = csi_findDimLabel(csi.data.labels,lab_spat);
 ind_spat(isnan(ind_spat)) = [];        
 
+% k-space order as is.
+ind_spat = sort(ind_spat);
+
+% KEEP THE ORDER OF KXKYKZ HERE!
+
 % Permute: #S x Spatial Dimensions x TR-dimensions x Rest
 permv = [1 ind_spat ind_TR];
 add_ind = find(~ismember(1:numel(csi.data.dim), permv) == 1);
@@ -17476,7 +17498,7 @@ for di = 1:double_iter
     % @Second iteration: Set new boundaries, get fitted FA/T1.
     if doDouble && di == 2 
         FA = fit_par(:,:,:,1); T1 = fit_par(:,:,:,2); 
-        T1init = mean(T1(:)); T1std = std(T1(:)); fac = 0.001;
+        T1init = mean(T1(:)); T1std = std(T1(:)); fac = 0.01;
         T1bound = T1init + [-fac*T1std +fac*T1std];
     end
     
@@ -17508,7 +17530,7 @@ for di = 1:double_iter
 
         % Use index-lookup to get voxel-data
         voitmp = num2cell(voi(:,kk)); ind_full(ind_spat) = voitmp;
-
+        
         % Convert data to double
         spoi = squeeze(double(csi.data.raw(ind_full{:})));
         
@@ -17802,7 +17824,7 @@ end
 
 % Ask user to load or use editor
 uans = getUserInput_Popup({'Create voxel-mask:'}, {{'Editor', 'Import'}});
-if isempty(uans{1}), return; end
+if isempty(uans), return; end
 
 switch uans{1}
     case 'Editor'
@@ -17990,7 +18012,10 @@ end
 % Measure of interest  % ----------------------------------------------- %
 switch uans{4}
     case 'Signal'
-        % Do nothing
+        % Get correct signal-unit
+        data_unit = get(gui.popup_plotUnit,'String');
+        data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
+        doi = CSI_getUnit(doi, data_unit);
     case 'SNR'
         sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./12)});
         if isempty(sans), return; end
@@ -18028,7 +18053,7 @@ stats = csi_statistics_of_volume(doi); stats.measure = uans{4};
 Statistics_Viewer(stats);
 
 % Log to user
-CSI_Log({'Statistics calculated over:',msg}, {' ',' '});
+CSI_Log({'Statistics calculated over:'}, {msg});
 
 % --- Executes on button press in button_CSI_NoiseDecorrelation.
 function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind)

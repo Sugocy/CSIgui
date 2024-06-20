@@ -120,13 +120,22 @@ if add_zero, weights = [max(snrw) snrw]; else, weights = snrw; end
 if fit_method == 0
     % --- % FIT SINE
 
-    % Initial parameters
-    [init_amp, init_amp_ind] = max(vals); 
+    % // Initial parameters
+
+    % Where values increase and decrease again
+    dy = diff(vals); grad_decr = find(dy < 0); 
+    if numel(grad_decr) > 1
+        [init_amp, init_amp_ind] = max(vals(1:grad_decr(1)));
+    else
+        [init_amp, init_amp_ind] = max(vals); 
+    end
+    
+    % [init_amp, init_amp_ind] = max(vals); 
     init_fre = 1./(4*xdata(init_amp_ind)); init_shift = 0;
     init_par = [init_amp, init_fre, init_shift];
 
     % Sine function: radians with frequency
-    func = @(par,x) par(1) .* sin( 2*pi*par(2).*x + par(3) ) ;
+    func = @(par,x) (par(1) .* sin( 2*pi*par(2).*x + par(3) )) ;
     
     % FIT    
     beta = nlinfit(xdata, vals, func, init_par, 'Weights', weights);
@@ -390,7 +399,7 @@ indmin = find(mxmn==1); indmax = find(mxmn==0);
 mnph = max(real(doi)); [~, lowest_max_signal_ind] = min(mnph);
 indminPh = lowest_max_signal_ind+1:size(mnph,2);
 indmaxPh = 1:size(mnph,2); indmaxPh(indminPh) = [];
-if size(indmin,2) > size(indminPh,2)
+if numel(indmin) > numel(indminPh) || isempty(indmin)
     indmin = indminPh; indmax = indmaxPh;
 end   
 
