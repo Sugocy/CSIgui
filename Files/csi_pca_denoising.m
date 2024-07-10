@@ -44,7 +44,6 @@ if nargin < 3, patch_size = 5; svd_method = 0; end
 if nargin < 4, svd_method = 1; end
 
 % Data dimensions
-% dim = size(spec,1,2,3,4,5,6,7,8,9,10); 
 dim = NaN(1,10); % This makes it compatible with Matlab <R2021
 for kk = 1:10, dim(kk) = size(spec,kk); end
 
@@ -83,6 +82,7 @@ end
 tic
 % Loop over each channel (chi) % --------------------------------------- %
 nS = dim(1);
+
 parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
 % for chi = 1:dim(chan_ind)
     data_single_chan = spec(:,:,chi);
@@ -130,6 +130,9 @@ parfor chi = 1:dim(chan_ind)                % PARALLEL LOOP %
     
     % Average and store denoised-data for this channel.
     spec(:,:,chi) = (data_single_chan_denoised ./ (psz.^3));
+
+    
+
 end
 dt = toc; fprintf('PCA duration without parallel pool startup: %fs\n', dt);
 

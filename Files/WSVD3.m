@@ -11,9 +11,9 @@ function [spec, Q, W, A] = WSVD3(spec, noiseCov, method)
 %           noiseCov = [ nChannels x nChannels ] x 1
 %                      or set to Nan to calculate it using the data itself
 %                      and still allow setting whitening method.
-%           method   = ZCA (1, default), Cholesky (2), 
+%           method   = Whitening (1, default), Cholesky (2), ZCA (3)
 %                      None (0, no whitening). 
-%                      The noiseCov variable is still require @ none:
+%                      The noiseCov variable is still required @ none:
 %                           If ZCA;         expect scaleMatrix,
 %                           If Cholesky;    expect noiseCov.
 %                       
@@ -43,19 +43,22 @@ refChannel = 1; % Used for scaling, could be any of the channels.
 % Whitening % ---------------------------------------------------------- %
 if method == 1 % Whitening
 
-    % [V,D] = eig(A) returns diagonal matrix D of eigenvalues and matrix V 
-    % whose columns are the corresponding right eigenvectors, 
-    % so that A*V = V*D.
-    [noiseVec, noiseVal] = eig(noiseCov);
-    
-    % Scale spectra using eigen-values
-    scaleMatrix = noiseVec * diag(sqrt(0.5)./sqrt(diag(noiseVal)));
-    
-    % Scale spectra
-    spec = spec * scaleMatrix;
+    % % [V,D] = eig(A) returns diagonal matrix D of eigenvalues and matrix V 
+    % % whose columns are the corresponding right eigenvectors, 
+    % % so that A*V = V*D.
+    % [noiseVec, noiseVal] = eig(noiseCov);
+    % 
+    % % Scale spectra using eigen-values
+    % scaleMatrix = noiseVec * diag(sqrt(0.5)./sqrt(diag(noiseVal)));
+    % 
+    % % Scale spectra
+    % spec = spec * scaleMatrix;
 
+[spec, scaleMatrix] = csi_decorrelate_noise_whitening(spec, 2, {noiseCov});
+    scaleMatrix = scaleMatrix{1};
+    
 elseif method == 0 % none
-    scaleMatrix = noiseCov; % User already applied nois decorrelation.
+    scaleMatrix = noiseCov; % User already applied noise decorrelation.
 
 elseif method == 2 % Cholesky
     [spec, ~, scaleMatrix] = ...

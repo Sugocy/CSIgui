@@ -28,7 +28,7 @@ function varargout = csi_PhaseCorrectionGUI(varargin)
 % 1. Process input - Check (19/12/17)
 % 2. Show degrees of phase change in GUI somewhere.
 % 3. Show pivot peak ppm location in GUI somewhere.
-% 4. Get phase corrections as seperate output.
+% 4. Get phase corrections as seperate output. - Check (08/2023)
 
 % INPUT analysis ======================================================== %             
 % ======================================================================= %

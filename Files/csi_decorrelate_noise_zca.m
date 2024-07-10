@@ -21,6 +21,9 @@ if nargin < 3, nCov = csi_noisecov_usingdata(data, chan_ind); end
 % e.g. nCov * nVec = nVec * nVal
 [nVec, nVal]= cellfun(@eig, nCov, 'UniformOutput', 0);
 
+% Maximum before decorrelation
+mxb = cellfun(@(x) max(real(x(:))), data); mxb = max(mxb);
+
 % Scale matrix
 zcaMatrix = cellfun(@csi_combine_ZCA_matrix, nVec, nVal,...
     'UniformOutput',0);
@@ -29,6 +32,12 @@ zcaMatrix = cellfun(@csi_combine_ZCA_matrix, nVec, nVal,...
 data = cellfun(@(x,y) x * y, data, reshape(zcaMatrix, size(data)),...
     'UniformOutput',0);
         
+% Maximum after decorrelation
+mxa = cellfun(@(x) max(real(x(:))), data); mxa = max(mxa);
+
+% Correct scaling over all voxels.
+scaleCorrection = numzeros(mxb / mxa) + 1;
+data = cellfun(@(x) x * 10^-(scaleCorrection), data, 'UniformOutput', false);
 
 % Reshape to orignal index order % ----------------------------- %
 

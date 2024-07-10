@@ -22,9 +22,19 @@ nCov_Chol = cellfun(@chol, nCov, 'UniformOutput', 0);
 [spec, permv, szr] = csi_combine_reshape(spec, chan_ind);
 nCov_Chol = reshape(nCov_Chol, [numel(nCov_Chol) 1]);
 
+% Maximum before decorrelation
+mxb = cellfun(@(x) max(real(x(:))), spec); mxb = max(mxb);
+
 % Decompose signal
 [spec, scaleMatrix] = cellfun(@decorrelate_noise_equation, ...
                               spec, nCov_Chol, 'UniformOutput', false);
+
+% Maximum after decorrelation
+mxa = cellfun(@(x) max(real(x(:))), spec); mxa = max(mxa);
+
+% Correct scaling over all voxels.
+scaleCorrection = numzeros(mxb / mxa) + 1;
+spec = cellfun(@(x) x * 10^-(scaleCorrection), spec, 'UniformOutput', false);
 
 % Reshape back to matrix with same dimensions
 if numel(szr) > 2 && (numel(dim)-2 > 2)

@@ -1,4 +1,4 @@
-function loadBar(perc, info)
+function barObj = loadBar(perc, info, barObj)
 % Opens a load bar if not existant and sets the load-bar percentage to
 % perc. If perc equals NaN, the bar is closed.
 %
@@ -13,8 +13,10 @@ if nargin == 1, info = 'Busy...'; end
 % Normalize percentage
 if ~isnan(perc) && perc > 1, perc = perc/100; end
 
+if nargin < 3 || ~ishandle(barObj)
 % Check for bar-figure
 barObj = findobj('Type','Figure','Tag','loadBar');
+end
 
                 % ------- % Create loadBar % ------- %
 if isempty(barObj)

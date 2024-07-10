@@ -225,7 +225,8 @@ ax = cell(plot_par.dim);
 
 % Loop each tab of figure
 for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
-    loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...');
+    barObj = ...
+        loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...', barObj);
 
     tab_index = plot_par.tabs_index_table(sli,:);
     tab_index_cell = num2cell(tab_index);
@@ -271,8 +272,9 @@ if plot_par.plot_img == 0, return; end
 
 tgui = guidata(plot_par.fh);
 
+barObj = loadBar(0,'Plotting images...');
 for tabi = 1:plot_par.tabs_total
-    loadBar(tabi./plot_par.tabs_total , 'Plotting images...');
+    barObj = loadBar(tabi./plot_par.tabs_total , 'Plotting images...', barObj);
 
     % Current tab - its index in tab format
     tab_index = plot_par.tabs_index_table(tabi,:);

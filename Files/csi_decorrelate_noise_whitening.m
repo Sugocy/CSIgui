@@ -32,7 +32,7 @@ if nargin < 3, nCov = csi_noisecov_usingdata(data, chan_ind); end
 [nVec, nVal]= cellfun(@eig, nCov, 'UniformOutput', 0);
 
 % Calculate the scale matrix
-scaleMatrix = cellfun(@csi_combine_ZCA_scaleMatrix, nVec, nVal, ...
+scaleMatrix = cellfun(@csi_combine_whitening_scaleMatrix, nVec, nVal, ...
     'UniformOutput',0);
 
 % Apply scaling
@@ -95,6 +95,6 @@ if numel(szr) >= 3 && (numel(dim)-2 > 2)
     nCov = reshape(nCov, szr(3:end)); 
 end
 
-function scaleMatrix = csi_combine_ZCA_scaleMatrix(nVec,nVal)
+function scaleMatrix = csi_combine_whitening_scaleMatrix(nVec,nVal)
 % Calculate the scale matrix for ZCA whitening
 scaleMatrix = nVec * diag(sqrt(0.5) ./ sqrt(diag(nVal)));

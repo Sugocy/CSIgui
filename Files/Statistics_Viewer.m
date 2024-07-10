@@ -61,7 +61,7 @@ for kk = 1:numel(flds)
             if nZeros <= 0 || nZeros == acc
                 vals{kk} = strip(sprintf('%6.2f', val));    
             else
-                prefix = '0'; if nZeros >= 10, prefix = ''; end
+                prefix = '0'; if nZeros >= 9, prefix = ''; end
                 vals{kk} = sprintf('%3.3fe-%s%i', ...
                                    val*10.^(nZeros+1), prefix, nZeros+1);
             end
