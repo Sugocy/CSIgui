@@ -1,5 +1,6 @@
 setDomain=frequency;
-Delete;
+setBackup=0;
+Single;
 ReorderDim_Auto;
 Average;
 Apodization_Kspace;

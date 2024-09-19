@@ -111,7 +111,15 @@ if add_zero, vals = [0 vals]; xdata = [0 xdata]; end
 xdat_HR = xdata(1):1:xdata(end);
 
 % Weighting for fit: SNR
-snrw = csi_SNR(doi_main, round(size(doi_main,1)./8), 0, [1 size(doi_main,1)]);
+% snrw = csi_SNR(doi_main, round(size(doi_main,1)./8), 0, [1 size(doi_main,1)]);
+% SNR weighting is not fair as usually, small peak data is send and not the
+% full spectrum. Instead, we can use the maximum value in the data.
+% But, as data can become negative, use max-min and max-max.
+
+mx_tmp = max(real(doi_main)); mn_tmp = min(real(doi_main));
+do_mn_tmp = abs(mn_tmp) > mx_tmp;
+mx_tmp(do_mn_tmp) = abs(mn_tmp(do_mn_tmp));
+snrw = mx_tmp ./ max(mx_tmp);
 if add_zero, weights = [max(snrw) snrw]; else, weights = snrw; end
 
 % FIT % ---------------------------------------------------------------- %
@@ -395,6 +403,7 @@ function [doi_phased, indmin ]= phaseCorrection_zeroCrossing(doi)
 [~, mxmn] = findZeroCross(max(real(doi)));
 indmin = find(mxmn==1); indmax = find(mxmn==0);
 
+
 % Which spectrum has the lowest maximum signal if all are in absorption?
 mnph = max(real(doi)); [~, lowest_max_signal_ind] = min(mnph);
 indminPh = lowest_max_signal_ind+1:size(mnph,2);
@@ -402,6 +411,18 @@ indmaxPh = 1:size(mnph,2); indmaxPh(indminPh) = [];
 if numel(indmin) > numel(indminPh) || isempty(indmin)
     indmin = indminPh; indmax = indmaxPh;
 end   
+
+% Other method approach - find where signal goes down and up again.
+if sum(numel(indmin) >= (numel(mxmn) - [0 1]))
+    mx = max(real(doi)); df = diff(mx); down = df < 0;
+    zc_index = find((down==0), 1, 'last');
+    if ~isempty(zc_index)
+        indmin = zc_index:size(mx,2);
+        indmax = 1:zc_index-1;
+    else
+        indmin = []; indmax = 1:numel(mxmn);
+    end
+end
 
 % I) Apply 180 degree phasechange
 %    ...to all spectra after the zerocrossing

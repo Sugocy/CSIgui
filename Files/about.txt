@@ -1,4 +1,4 @@
-For updates check: www.csigui.tk\n
+For updates check: https://github.com/Sugocy/CSIgui\n
 \n
 A viewer and processing tool for raw X-nuclei MRSI data. \n
 - View a mutli-dimensional data volume per specific dimension attribute. \n
@@ -7,8 +7,9 @@ A viewer and processing tool for raw X-nuclei MRSI data. \n
 - Calculate maps or specific spectrum properties.\n
 - Edit and save a single spectrum from bulk data.\n
 \n
-Supports list/data files (Philips), spar/sdat files (Philips), \n
-dicom files (Philips) and par/rec files.\n
+Supports dat files (Siemens), list/data files (Philips), \n
+spar/sdat files (Philips), dicom files (Siemens/Philips) and \n
+par/rec files (Philips).\n
 \n
-Q. van Houtum\n
+Q. van Houtum, PhD\n
 quincyvanhoutum@gmail.com\n

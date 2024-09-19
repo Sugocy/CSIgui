@@ -20,7 +20,9 @@ else
                   'Name', 'Statistics Viewer',...
                   'Color','k', 'NumberTitle','off');
 end
-fh.Position(3:4) = round(fh.Position(3:4) ./ [1.9 1.5]);
+fh.Position(3:4) = round(fh.Position(3:4) ./ [1.9 1.25]);
+scrsz = get(0,'screensize');
+fh.Position(1:2) = (scrsz(3:4) .* [0.15 0.85]) - [0 fh.Position(4)];
 
 dxy = 5;
 lb_sz = fh.Position(3:4)-(dxy*2); lb_sz(1) = lb_sz(1)./2.5;

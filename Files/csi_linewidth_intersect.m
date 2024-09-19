@@ -2,13 +2,14 @@ function [linewidth, xest, yest] = csi_linewidth_intersect(data, ax, peak_range)
 %%% Calculate linewidth of a peak at a given frequency peak_range using an
 %%% intersect FWHM method.
 
+
 try
 
 % Baseline | Samples
 N = size(data,1); 
 % Baseline
 bv = mean(real([data(1:round(N/20)); data(N-round(N/20):N)]));  % Value
-% bvline = cat(2,ax',repmat(bv,N,1));                           % Line
+% bvline = cat(2,ax',repmat(bv,N,1));                          % Line
 
 % Maximum
 data_peak_ranged = real(data(peak_range(1):peak_range(2)));

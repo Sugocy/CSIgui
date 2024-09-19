@@ -4,7 +4,7 @@ function varargout = CSIgui(varargin)
 % "files" directory or via help in the GUI.
 %
 % Possible labels for input arguments:
-%            'data','list','csi','spec','image', 'mrs', 'labels'
+%            'data','list','csi','spec','image', 'mrs', 'labels', twix
 %            {filepath}, {filepathi}
 % Input:
 % CSIgui(data, label);
@@ -63,7 +63,7 @@ end
 
 % Choose default command line output for CSIgui
 gui.output = hObject;
-% This field create ID for this CSIgui-instance.
+% This field creates an ID for this CSIgui-instance.
 id = strrep(strjoin(string(datevec(datetime("now"))),''),'.','');
 gui.ID = sprintf('%s', id);
 % Define CSIgui version here.
@@ -214,17 +214,23 @@ gui.menubar.MRSI.ColorScale.Static = ...
     uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Static',...
     'Check', 'Off','Callback', @CSI_2D_Scaling_Color_Set, 'Enable', 'On');
 
+% 2. MRSI > Color Scaling (2D) > Umbrella
+gui.menubar.MRSI.ColorScale.Umbrella = ...
+    uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Umbrella',...
+    'Check', 'On','Separator','on',...
+    'Callback', @CSI_2D_Scaling_Color_Umbrella_Set, 'Enable', 'On');
+
 % 2. MRSI > Color Scaling (2D) > Scale by window
 gui.menubar.MRSI.ColorScale.ScalebyWindow = ...
     uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Scale by Window',...
-    'Check', 'Off','Separator','on',...
+    'Check', 'Off','Separator','off',...
     'Callback',@CSI_2D_Scaling_Color_ScaleByWindow, 'Enable', 'On');
 
 % 2. MRSI > Color Scaling (2D) > Colorbar
 gui.menubar.MRSI.ColorScale.Colorbar = ...
     uimenu(gui.menubar.MRSI.ColorScale.main, 'Label', 'Colorbar',...
-    'Check', 'Off','Separator','off',...
-    'Callback',@CSI_2D_Scaling_plotColorbar, 'Enable', 'On');
+    'Check', 'Off','Separator','on',...
+    'Callback',@CSI_2D_Scaling_Color_showColorBar, 'Enable', 'On');
 
 
 
@@ -247,16 +253,22 @@ gui.menubar.MRSI.AxisScale.Volume = ...
     uimenu(gui.menubar.MRSI.AxisScale.main,'Label', 'Volume',...
     'Check', 'Off', 'Callback', @CSI_2D_Scaling_Axis_Set, 'Enable', 'On');
         
+% 2. MRSI > Axis Scaling (2D) > Umbrella
+gui.menubar.MRSI.AxisScale.Umbrella = ...
+    uimenu(gui.menubar.MRSI.AxisScale.main, 'Label', 'Umbrella',...
+    'Check', 'Off','Separator','on',...
+    'Callback', @CSI_2D_Scaling_Axis_Umbrella_Set, 'Enable', 'On');
+
 % 2.MRSI > Axis Scaling (2D) >  Scale by window
 gui.menubar.MRSI.AxisScale.ScalebyWindow = ...
     uimenu(gui.menubar.MRSI.AxisScale.main, 'Label', 'Scale by Window',...
-    'Check', 'Off','Separator','on',...
+    'Check', 'Off','Separator','off',...
     'Callback',@CSI_2D_Scaling_Axis_ScaleByWindow, 'Enable', 'On');
 
 % 2.MRSI > Axis Scaling (2D) >  Grid
 gui.menubar.MRSI.AxisScale.Grid = ...
     uimenu(gui.menubar.MRSI.AxisScale.main, 'Label', 'Grid',...
-    'Check', 'Off','Separator','off',...
+    'Check', 'Off','Separator','on',...
     'Callback',@CSI_2D_Scaling_GridVoxels, 'Enable', 'On');
 
 
@@ -395,15 +407,17 @@ try
         jMRSI.doClick;  pause(0.015); 
         
         menu_name = {'Color Scaling', 'Axis Scaling','Noise',...
-            'Set Domain', 'Snap Window'};
+            'Set Domain', 'Snap Window', 'Umbrella'};
         menu_tip = {...
-     ['Set spectra color scaling in 2D MRSI plot relative to,',... 
+     ['Set spectra color scaling in 2D MRSI plot relative to ',... 
       'maximum per slice, volume or as static (e.g. single color), '...
-      'from the total spectrum or within the displayed x-axis window. '],...
+      'from the full or within the displayed x-axis window. '...
+      'Umbrella includes higher order indexes.'],...
       ['Scale the spectra y-axis in 2D MRSI plot to the maximum '...
       'per voxel, slice or volume, '...
-      'from the total spectrum or within the displayed x-axis window. '...
-      'Enable/Disable the grid within a voxel in the 2D MRSI plot.'],...
+      'from the full or within the displayed x-axis window. '...
+      'Umbrella includes higher order indexes. ' ...
+      'Enable/Disable grid within voxels in the 2D MRSI plot.'],...
      ['View noise data from list/data file. Use the show '...
       'CSI-button or plot in menu > CSI to display. ' ...
       'To revert back to the original data, click here again.'], ...
@@ -617,7 +631,7 @@ elseif strcmp(ext,'.list') || strcmp(ext,'.data')              % LIST/DATA
     % Reorder dimensions of data
     CSI_ReorderDim_Auto(gui);
     % Calculate xaxis data struct
-    CSI_2D_Scaling_calc_xaxis(hObj, [], 1); % Automatic
+    CSI_2D_Scaling_Xaxis(hObj, [], 1); % Automatic
     % Data domain set to 2 = frequency
     domain = 3; 
     
@@ -626,14 +640,14 @@ elseif strcmp(ext,'.mat')                                      % MAT
     % Parse mat-file
     success = parse_mat(fp, fn, gui);
     % Calculate xaxis data struct
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_Xaxis(hObj,[],1);
     
 elseif strcmpi(ext,'.sdat') || strcmpi(ext,'.spar')            % SDAT/SPAR
 
     % Parse the sdat/spar file
     success = parse_sdatspar(fp, fn, gui);
     % Calculate xaxis data struct
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_Xaxis(hObj,[],1);
     
     % Data domain set to 1 = none 2 = frequency 3 = time
     domain = 3; 
@@ -643,7 +657,7 @@ elseif strcmpi(ext, '.txt')                                    % TEXT
     % Parse the text file
     success = parse_text(fp, fn, gui);
     % Calculate xaxis data struct
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_Xaxis(hObj,[],1);
     
     % Data domain set to 2 = frequency
     domain = 2; 
@@ -662,7 +676,7 @@ elseif strcmpi(ext,'.dat')                                     % DAT-file
     success = parse_datfile(fp, fn, gui);
    
     % Calculate xaxis data struct
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_Xaxis(hObj,[],1);
     
     % Frequency domain - kspace
     domain = 2; 
@@ -673,7 +687,7 @@ elseif strcmpi(ext,'multi')
     success = parse_multifile(fp, fn, ext_tmp, gui);
 
     % Calculate xaxis if applicable
-    CSI_2D_Scaling_calc_xaxis(hObj,[],1);
+    CSI_2D_Scaling_Xaxis(hObj,[],1);
 
     % Set domain
     domain = 1; % Is it though?
@@ -995,7 +1009,7 @@ if old_format
                 % ------- % Process CSI VOXMASK % ------- %
 
     if isfield(csigui,'voxelmask')
-        csi.voxelmask = csigui.voxelmask;
+        csi.data.voxelmask = csigui.voxelmask;
     end
     
                   % ------- % Process CSI struct % ------- %
@@ -1064,6 +1078,11 @@ elseif new_format
         csi = rmfield(csi,'log');
     end
 
+    if isfield(csi, 'voxelmask')
+        csi.data.voxelmask = csi.voxelmask; 
+        csi = rmfield(csi, 'voxelmask');
+    end
+
     % Set extensions
     csi.ext = 'mat';    
 end
@@ -1115,7 +1134,7 @@ if isfield(gui.inp,'data')
     CSI_Log({'User input processed: '},{userInfo});
 
     % Calculate xaxis from available data
-    CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1); 
+    CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1); 
     gui = guidata(gui.CSIgui_main);
     csi = getappdata(gui.CSIgui_main,'csi'); 
     
@@ -1176,7 +1195,7 @@ if isfield(gui.inp,'csi') || ...
     CSI_Log({'User input processed: '},{userInfo});
 
     % Calculate xaxis from available data
-    CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+    CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
     gui = guidata(gui.CSIgui_main);
     csi = getappdata(gui.CSIgui_main,'csi'); 
     
@@ -1230,16 +1249,11 @@ function success = parse_multifile(fp, fn, ext, gui)
 % First we need to correct the order as Matlab does not save the order of
 % the files as clicked... 
 order = 0;
-while size(unique(order),2) ~= size(fn,2)
-
+while size(unique(order),2) ~= size(fn,2)    
     numbers = cell(1,size(fn,2));
     for nf = 1:size(fn,2)
-        if nf == 1
-            tmp = nf:size(fn,2);
-        else
-            tmp = [nf:size(fn,2) 1:nf-1];
-        end
-        numbers{nf} = strsplit(num2str(tmp));
+        numbers{nf} = strsplit(num2str(...
+            circshift(1:size(fn,2), -1 * (nf-1))));
     end
     uans = getUserInput_Popup(fn, numbers,...
            [gui.colors.main; gui.colors.text_main], 'Set load order.');
@@ -1429,7 +1443,7 @@ switch ext
                 
                 % ------- % Process CSI VOXMASK % ------- %        
                 if isfield(csigui,'voxelmask')
-                    csi.voxelmask = csigui.voxelmask;
+                    csi.data.voxelmask = csigui.voxelmask;
                 end
                 
                 % ------- % Process CSI struct % ------- %                
@@ -1486,6 +1500,12 @@ switch ext
                     csi = rmfield(csi,'log');
                 end
             
+                if isfield(csi, 'voxelmask')
+                    csi.data.voxelmask = csi.voxelmask; 
+                    csi = rmfield(csi, 'voxelmask');
+                end
+                       
+
                 % Set extensions
                 csi.ext = 'mat';    
             end
@@ -1761,7 +1781,7 @@ csi.nfo = nfo;
 setappdata(gui.CSIgui_main,'csi',csi); 
 
 % Calculate xaxis
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main);
 
 % Calculate coordinates
 button_CSI_setCoordinates_Callback([], [], gui);
@@ -1821,7 +1841,7 @@ csi.xaxis.BW = nfo.sample_frequency;
 setappdata(gui.CSIgui_main,'csi',csi); 
 
 % Calculate xaxis
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main);
 
 % Calculate coordinates
 button_CSI_setCoordinates_Callback([], [], gui);
@@ -3041,7 +3061,6 @@ function button_CSI_Apodization_FID_Callback(~, ~, gui, backup)
 if nargin < 4, backup = gui.checkbox_backup.Value; end
 
 
-
 % BACKUP + APPDATA % --------------------------- %
 
 % Create backup
@@ -3056,8 +3075,6 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % Check data domain
 domain = CSI_getDomain(gui); doFFT = 0;
 if ~strcmp(domain, 'time')
-    CSI_Log({'MRS data is possibly in frequency domain; '},...
-            {'Apodization requires time domain data.'});
     qry = {'MRS-data is possibly in frequency domain:'};
     def = {{'Ignore', 'Convert', 'Abort'}};
     uans = getUserInput_Popup(qry,def,[],'Apodization');
@@ -3080,7 +3097,7 @@ switch uanstype{1}
         % ((1/(1/BW x nSamples) * (ans/nSamples)) / pi) == (bw/ans)/pi 
         % Hz = bw / (N*pi) && N = (Hz * Pi)/BW
         if isfield(csi.xaxis,'BW')
-            uopts = getUserInput({'Apodization factor: (Hz)'},{15});    
+            uopts = getUserInput({'Apodization factor: (Hz)'},{20});    
             if isempty(uopts)
                 CSI_Log({'Skipped apodization.'},{''}); return; 
             end
@@ -3134,8 +3151,7 @@ setappdata(gui.CSIgui_main, 'csi', csi)
 if exist('hz','var'), uopts{1} = hz; end 
 % Update LOG
 if  (size(win,1) > 1) % No apodization if window size equals 1.
-    CSI_Log({['Filter ' uanstype{1} ' applied. Possible opts:']},...
-               uopts);
+    CSI_Log({['Filter ' uanstype{1} ' applied. Possible opts:']}, uopts);
 end
 
 % --- Normalize CSI data.
@@ -3583,7 +3599,7 @@ CSI_Log({'Applied ISIS add/subtract scheme to data:'},{schemes_str} );
 % --- Executes on button press in button_CSI_setParameters.
 function button_CSI_setFrequency_Callback(hObject, eventdata, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-CSI_2D_Scaling_calc_xaxis(hObject, eventdata);
+CSI_2D_Scaling_Xaxis(hObject, eventdata);
 
 % --- Executes on button press in button_CSI_setLabels.
 function button_CSI_setLabels_Callback(~, ~, gui)
@@ -3622,18 +3638,58 @@ if backup, CSI_backupSet(gui, 'Before reordering.'); end
 if ~isappdata(gui.CSIgui_main, 'csi'),return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+% ORDER FROM USER % -----------------------%
+% Includes label maintenance
+
+% Original number of labels.
+ndim_ori = numel(csi.data.labels);
+
+% Create additional labels: number of expended labels
+lab = csi.data.labels; nexp = 2;
+lab_qry = cat(2,lab, repmat({''}, 1, nexp)); strt = 65; 
+for nl = 1:nexp
+    n = 0;
+    % create new label name and check if it does exist y/n   
+    while sum(ismember(lab_qry, char([strt strt]))) == 1
+        strt = strt + n; n = n+1;    
+    end
+    lab_qry{numel(lab) + nl} = char([strt strt]); n = strt;   
+end
+
+% Create query list for user input
+ndim = ndim_ori + nexp;  numbers = cell(1,ndim);
+new_order = ones(1,ndim);
+while numel(unique(new_order)) ~= ndim
+
+    for nf = 1:ndim
+        numbers{nf} = strsplit(num2str(circshift(1:ndim, -1 * (nf-1))));
+    end
+    % Get new order from user.
+    uans = getUserInput_Popup(lab_qry , numbers,...
+           [gui.colors.main; gui.colors.text_main], 'Set load order.');
+    if isempty(uans),CSI_Log({'Skipped data re-ordering.'},{''}); return; end
+    
+    % Str-ans to dbl-ans: new data order.
+    new_order = str2double((uans));
+end
+
+% Corrrect for added dimensions if not used
+expdims = ndim_ori+1:ndim_ori+nexp;
+exp_bool = new_order(end-nexp+1:end) == expdims;
+if  sum(exp_bool) == nexp
+    new_order = new_order(1:end-nexp);
+else
+    % remove expended dimensions that arent used.
+    cut_off = find((exp_bool == 0), 1, 'last');
+    new_order = new_order(1:end+(cut_off-nexp));    
+end
+
 % PERMUTE % ---------------------------- %
-% Get order from user
-uans = getUserInput(...
-    {'New order of MRS data dimensions?: '},{1:size(csi.data.labels,2)});
-% If user pressed skip.
-if isempty(uans),CSI_Log({'Skipped data re-ordering.'},{''}); return; end
 
-% Str-ans to dbl-ans: new data order.
-new_order = str2double(strsplit(uans{1}));
-
-% I. Reorder data 
+% Reorder data 
 csi.data.raw = permute(csi.data.raw ,new_order);
+
+% LABEL MAINTENANCE % ------------------ %
 
 % II. Reorder labels
 % To allow increase in dimensionality, as labels(new_order) will not work,
@@ -3671,9 +3727,7 @@ csi.data.labels = new_label;
 
 % III. Reorder dimensions
 csi.data.dim = size(csi.data.raw);
-% Might be required to change this way and use new_label approach as
-% dim-field of csi.data may contain data size equal to 1 for example after
-% averaging or combining channels.
+
 
 % CLEAN UP % ----------------------------- %
 
@@ -3997,7 +4051,7 @@ end
 if data_ylimits(2) <= data_ylimits(1),data_ylimits(2) =  data_ylimits(1)+1; 
 end
 % Get plot color
-[clrs, clrs_data_range] = CSI_2D_Scaling_calc_ColorOfPlots(data_ylimits);  
+[clrs, clrs_data_range] = CSI_2D_Scaling_Color_Calculate(data_ylimits);  
 
 % CALC & PLOT VOXEL % --------------------------------------------------- %
 % Be aware of the row/column switch to get proper x/y axis display in the
@@ -4352,7 +4406,7 @@ if strcmp(domain,'freq'), csi.data.raw = csi_fft(csi.data.raw); end
 setappdata(gui.CSIgui_main,'csi',csi);
 
 % Recalculate xaxis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Update info
 CSI_Log({'Applied zero filling. Sample size increased to'},{N});
@@ -4706,6 +4760,7 @@ spec = ipermute(spec, permv);
 function button_CSI_Multiply_Callback(hObj, ~, gui, backup)
 % Multiply the MRS data
 
+gui = guidata(hObj);
 if nargin < 4, backup = gui.checkbox_backup.Value; end
 
 if ~exist('gui', 'var'), gui = guidata(hObj); end
@@ -5032,6 +5087,157 @@ end
 % Array 2 Cell: {nS x Kx x Ky x Kz x nChan} x Other
 data = mat2cell(data, cell_layout{:}); 
 
+% --- Executes on button press in button_CSI_NoiseDecorrelation.
+function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind)
+% Apply either Cholesky or zero-phase component whitening transformations
+% to the multi-channel csi data i.e. noise decomposition, noise
+% decorrelation.
+%
+% If method, source and chan_ind arent given, userinput is required.
+
+functag = 'Decorrelation:'; % Ease of CSI_Log
+
+% Create backup
+backup = gui.checkbox_backup.Value; 
+if backup, CSI_backupSet(gui, 'Before noise decorrelation.'); end
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% User Input % ------------------------------------------------------- %
+if nargin < 4
+    chan_ind = csi_findDimLabel(csi.data.labels,{'chan','cha'});
+    chan_ind(isnan(chan_ind)) = []; chan_ind_def = 1:numel(csi.data.labels);
+    if ~isempty(chan_ind)
+        chan_ind_def([1 chan_ind]) = chan_ind_def([chan_ind 1]);   
+    end
+    chan_ind_def = csi.data.labels(chan_ind_def);
+    
+    qry = {'Noise decorrelation method:', ...
+           'Calculate noise covariance matrix using:', 'Coil index:'};
+    def = {{'Cholesky', 'Whitening', 'ZCA'}, ...
+           {'Measurement', 'Data', 'ID-Matrix'}, chan_ind_def};
+    uans = getUserInput_Popup(qry,def);
+    if isempty(uans), return; end
+
+
+    % --- % Analyse user input
+
+    % Decorrelation method
+    method = uans{1}; 
+    
+    % Noise-cov source.
+    src = uans{2};
+
+    % Coil/Channel index
+    chan_ind = find(strcmp(uans{3}, csi.data.labels) == 1);
+
+end
+
+
+% Noise-covariance source
+switch src
+    case 'Data',        do_NoiseData = 0;
+    case 'Measurement', do_NoiseData = 1;    
+    case 'ID-Matrix',   do_NoiseData = 2;
+end
+
+
+% Prepare Noise Data % ----------------------------------------------- %
+
+if do_NoiseData == 1
+    if isfield(csi.data,'noise')
+        % Run noise-prepare fcn
+        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
+        if ~isstruct(csi)
+            CSI_Log({'Decorrelation:'}, {'Aborted.'});
+            return; 
+        end
+
+        % Message to user
+        CSI_Log({functag},...
+                {'Noise-data processed and stored.'});  
+    else
+        do_NoiseData = 0; 
+        CSI_Log({functag},...
+                {'No noise-data present, using voxel-noise instead.'});
+    end
+end
+
+% Noise Covariance Matrix % -------------------------------------------- %
+if isfield(csi.data, 'noise') && do_NoiseData == 1
+    
+    % Get noise-cov using noise data
+    noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
+                                              csi.data.noise.labels);
+        
+    % Copy it for nVoxels
+    sz = size(csi.data.raw); % Data size
+    non_spat_ind = ...
+        csi_findDimLabel(csi.data.labels,...
+        {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
+    non_spat_ind(isnan(non_spat_ind)) = []; 
+    non_spat_ind(non_spat_ind > numel(sz)) = [];
+    sz(non_spat_ind) = [];
+
+    % Covariance matrix
+    noise_cov = repmat({noise_cov}, sz);
+
+    % NFO Update
+    CSI_Log({functag},...
+            {'Noise-data used to calculate noise-covariance matrix.'});
+
+elseif do_NoiseData == 0
+    % Noise covariance matrix required for noise-decorrelation
+    % calculated using noise in data itself.
+    noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
+    CSI_Log({functag },...
+            {'Voxel-data used to calculate noise-covariance matrices.'});
+
+elseif do_NoiseData == 2
+    % Calculate the ID-matrix for use as noise-cov matrix
+    nVox = prod(csi.data.dim(2:end));
+    noise_cov = ...
+        repmat({diag(ones(csi.data.dim(chan_ind),1))},nVox,1); 
+    CSI_Log({functag},...
+            {'Using the ID-matrix as the noise-covariance matrix.'});
+
+end
+
+% Store noise-covariance matrix
+csi.data.noise_cov = noise_cov;
+
+switch method
+    case 'Whitening'
+        % Decorrelate signal (Whitening as done via WSVD)
+        [csi.data.raw, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_whitening(csi.data.raw, chan_ind, noise_cov);
+
+    case 'Cholesky'
+
+        % Decorrelate signal (Cholensky)
+        [csi.data.raw, csi.data.noise_cov_chol, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_chol(csi.data.raw, chan_ind, noise_cov);
+
+    case 'ZCA'
+        
+        % Decorrelate signal (ZCA)
+        [csi.data.raw, csi.data.scaleMatrix] = ...
+        csi_decorrelate_noise_zca(csi.data.raw, chan_ind, noise_cov);
+end
+
+% --------------------------------------------------------------------- %
+
+% Store data %
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Update x-axis data
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
+
+% Show nfo
+CSI_Log({functag},{['Applied ' method]});
+
 % --- Executes on button press in button_CSI_Fieldmap.
 function button_CSI_Fieldmap_Callback(~, ~, gui)
 % Calculate and show fieldmaps as used by Roemer weighting method.
@@ -5232,10 +5438,13 @@ end
 
 % --- Voxelmask
 if isfield(csi,'voxelmask')
+         
     % Permute vector
-    permv = 1:numel(size(csi.voxelmask));
+    permv = 1:numel(size(csi.data.voxelmask));
     permv(spat_dim) =  spat_dim(permvec); 
-    csi.voxelmask = permute(csi.voxelmask, permv);
+    csi.data.voxelmask = permute(csi.data.voxelmask, permv);
+    csi.data.voxelmask = ...
+        CSI_VoxelMask_Checksum(csi.data.voxelmask, size(csi.data.raw));
 end
 
 % --- Store data
@@ -5243,13 +5452,11 @@ setappdata(gui.CSIgui_main,'csi', csi);
 if doMRI, setappdata(gui.CSIgui_main,'conv', conv); end
 
 % --- Update x-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 msg = [uans{1} '. NB. Beta-release.'];
 CSI_Log({'Changed orientation of data to'},{msg});
-
-
 
 % --- Executes on button press in button_MRI_Interpolate.
 function button_MRI_Interpolate_Callback(~, ~, gui)
@@ -5491,12 +5698,11 @@ end
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update X-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 CSI_Log({'Removed oversampling (dimension | size | Method): '}, ...
         {[ind_lab, ' | ', num2str(osval) ' | ' method]});
-
 
 % --- Executes on button press in button_CSI_Maps.
 function button_CSI_Maps_Callback(~, ~, gui)
@@ -5565,7 +5771,56 @@ nmap = CSI_dataAs_SNRfilter(nmap, 'peak-ratio', gui, doi_range{1});
 % \\ Display Data
 CSI_dataAs_Initiate(nmap, 'Peak-Ratio', gui);
 
+% --- Executes on button press in button_CSI_VoxelsShift.
+function button_CSI_VoxelsShift_Callback(~, ~, gui)
+% Subtract or add voxels to the CSI coordinates grid or by manipulating the
+% data indexing.
 
+uans = ...
+    getUserInput_Buttons('Shift MRS data by manipulating:',...
+                        {'Coordinate grid', 'Data index'});
+if isempty(uans), return; end
+
+switch uans
+    case 'Data index'
+        CSI_voxelShift_Indexing(gui);
+    case 'Coordinate grid'        
+        CSI_voxelShift_Coordinates(gui);
+end
+             
+% --- Shift coordinate grid of CSI volume to apply a voxel shift
+function CSI_voxelShift_Coordinates(gui)
+% Shift N-voxels by manipulating the cooridnate grid of the CSI data. 
+
+% Get csi data
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+if ~isfield(csi, 'ori'), return; end
+
+% Get orientation data
+ori = csi.ori;
+
+% Get requested shift
+uans = getUserInput({'Voxel shift for each direction?'},{'0.5 0.5 0.5'});
+if isempty(uans), return; end
+shft = str2double(strsplit(uans{1}));
+
+% Get previous voxel-coordinate calculation shift options.
+opts.fft_cor = ori.fft_cor; opts.vox_cor = ori.vox_cor;
+
+% Calculate coordinates.
+csi.ori = CSI_coordinates_calculate...
+    (ori.res, ori.offcenter, ori.dim, shft, opts);
+
+% Save to appdata
+setappdata(gui.CSIgui_main,'csi',csi);   
+gui = guidata(gui.CSIgui_main);
+
+% Recalculate all conversion data.
+MRI_to_CSIspace(gui);
+
+% --- Executes by selecting this method in CSI_VoxelsShift_Callback
+function CSI_voxelShift_Indexing(gui)
 
 % Coil Combination Methods % ---------------------------------------- %
 % ------------------------------------------------------------------- %
@@ -5596,7 +5851,6 @@ switch uans{1}
     case 'Roemer'
         CSI_Combine_Roemer(hobj)
     case 'WSVD'
-        
         CSI_Combine_WSVD(hobj);
     case 'SNR Weighted'
         CSI_Combine_SNRweighted(hobj)
@@ -5835,7 +6089,7 @@ csi.data.dim = size(csi.data.raw);
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Update some calculations
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Output
 CSI_Log({'Roemer: Done.'},{''});
@@ -6044,7 +6298,7 @@ csi.data.dim = size(csi.data.raw);
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update x-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 CSI_Log({'Combined channels via SNR weighting, noise mask: '},{noiseMask});
@@ -6252,7 +6506,7 @@ csi.data.dim = size(csi.data.raw);
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update x-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 CSI_Log({'WSVD: data combined by applying weights from'},...
@@ -6409,8 +6663,8 @@ qry = {'Noise decorrelation method:', ...
        'Calculate noise-covariance using:', 'Apply PCA denoising:',...
        'Average data:', 'Exclude channels:'};
 opt = {{'Whitening', 'Cholesky', 'ZCA', 'None'},...
-       {'Data', 'Measurement', 'ID-Matrix', 'In-Memory'},...
-       {'Yes','No'}, avg_opt, {'No', 'Yes'}};
+       {'Measurement', 'Data', 'ID-Matrix', 'In-Memory'},...
+       {'No','Yes'}, avg_opt, {'No', 'Yes'}};
 
 % Ask user
 uans = getUserInput_Popup(qry, opt, [], 'WSVD');
@@ -6626,7 +6880,7 @@ end
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Recalculate xaxis properties
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show statistics nfo
 stats = csi_statistics_of_volume(comb.Q);
@@ -6746,7 +7000,7 @@ csi.data.dim = size(csi.data.raw);
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Recalculate xaxis properties
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Update user
 CSI_Log({'SOS:'},{'Finished.'});
@@ -6858,7 +7112,7 @@ else
 end
 
 % DISPLAY INFO % ----------------------------- %
-CSI_dataAs_Initiate(data_max, 'Maximum per slice', gui, csi.data.labels);
+CSI_dataAs_Initiate(data_max, 'maximum/slice', gui, csi.data.labels);
 
 % Show statistics nfo
 stats = csi_statistics_of_volume((data_max));
@@ -6980,6 +7234,7 @@ csi = getappdata(gui.CSIgui_main,'csi');
            % POI, mask-size, snr-method & display-method
 
 % POI: Peak of SNR
+CSI_Log({'Executing SNR caluclations.'},{''});
 range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
 if isempty(range_none), return; end
 
@@ -7184,13 +7439,33 @@ if backup, CSI_backupSet(gui, 'Before phase shift'); end
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-% Get shift from user
-uans = getUserInput({'FID Acquisition delay (ms)'},{0.05});
-if isempty(uans), CSI_Log({'Skipped phase shift.'},{''}) ; return; end
-dt = str2double(uans{1});
+CSI_Log({'Executing FID-shift...'},{''});
 
-% Shift FIDS
-csi.data.raw = csi_frequencyShift(csi.data.raw, dt);
+% Convert to FID
+csi.data.raw = csi_ifft(csi.data.raw);
+
+% Convert to cell
+sz = size(csi.data.raw); 
+cell_layout = arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),...
+    'UniformOutput',0);
+data = mat2cell(csi.data.raw, sz(1), cell_layout{:}); 
+
+% Shift every FID
+data = cellfun(@csi_shift, data, 'uniform', 0);
+
+% Convert to matrix.
+csi.data.raw = cell2mat(data);
+
+% Convert to spectra
+csi.data.raw = csi_fft(csi.data.raw);
+
+% % Get shift from user
+% uans = getUserInput({'FID Acquisition delay (ms)'},{0.05});
+% if isempty(uans), CSI_Log({'Skipped phase shift.'},{''}) ; return; end
+% dt = str2double(uans{1});
+
+% % Shift FIDS
+% csi.data.raw = csi_frequencyShift(csi.data.raw, dt);
 
 % CLEAN UP % ---------- %
 
@@ -7198,7 +7473,8 @@ csi.data.raw = csi_frequencyShift(csi.data.raw, dt);
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update LOG
-CSI_Log({['Applied a phase shift of ' num2str(dt) 'ms to each FID']},{''});
+% CSI_Log({['Applied a phase shift of ' num2str(dt) 'ms to each FID']},{''});
+CSI_Log({'Shifted every FID.'},{''});
 
 % --- Executes on button press in button_CSI_SpatialShift_kspace.
 function button_CSI_SpatialShift_kspace_Callback(~, ~, gui, backup)
@@ -7552,7 +7828,7 @@ for kk = 1:nelem
             button_CSI_ReadInfo_Callback([], [], gui)
         elseif kk == 5
             % Set frequency parameters
-            CSI_2D_Scaling_calc_xaxis(hObj,[]);
+            CSI_2D_Scaling_Xaxis(hObj,[]);
         elseif kk == 6
             % Set geometry parameters
             button_CSI_setCoordinates_Callback([], [], gui)
@@ -7603,114 +7879,133 @@ function CSI_dataAs_Initiate(data, data_tag, gui, labels)
 % Call this function. It will ask the user the proper info; display type,
 % filter by SNR and more.
 
-
+%  Check for CSI-data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-if nargin < 4    
-    labels = csi.data.labels;
-end
+% Labels of data
+if nargin < 4, labels = csi.data.labels; end
 
 % Display type from user
-uans = getUserInput_Popup({'Display type: ','Apply excluding voxel mask:'},...
-                          {{'Map','Graph','Table','Histogram'}, {'Yes', 'No'}},...
-                          [], data_tag );
+qry = {'Display type: ','Apply excluding voxel mask:', 'Mode:'};
+def = {{'Map','Table','Histogram','Graph'},...
+       {'Yes', 'No'},...
+       {'Fast','Quality'}};
+uans = getUserInput_Popup(qry, def, [] , data_tag);
 if isempty(uans)
-    CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); 
-    return; 
+    CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); return; 
 end
+
+% --- Process user-input
+
+% // Display method
 dataDisp = lower(uans{1}); % Display method
+
+% // Data masking
 switch uans{2}, case 'Yes', doMask = 1; otherwise, doMask = 0; end
 
+% // Display mode
+dispMode = lower(uans{3});
+if strcmp(dataDisp, 'graph'), dispMode = 'Quality'; end
+
+
+% --- Mask preparations
+
 % If voxel mask is requested.
+maskMsg = 'none';
 if doMask
-    if ~isfield(csi, 'voxelmask')
+    if ~isfield(csi.data, 'voxelmask')
         button_CSI_VoxelMask_Callback([], [], gui)
     end
     csi = getappdata(gui.CSIgui_main, 'csi');
     % User can quit/cancel voxel-mask creation - this catches that error
     % and continues without creating masked-data
-    if isfield(csi, 'voxelmask')
-        mask = csi.voxelmask;  
-    
-        % Data-size - is expected to have spatial dimensions on ind(2:4);
-        dsz = size(data); msz = size(mask);     
-    
-        % Retrieve mask for current size: if non-spatial dimensions are 
-        % used to calculate a parameter, that index is not present in the 
-        % data-volume.
-        if numel(msz) ~= numel(dsz)
-            dim = size(data);
-            cell_ind = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);  
-            mask = mask(cell_ind{:});
-        end
-    
+    if isfield(csi.data, 'voxelmask')
+        % Checksum of voxel-mask dimensions and data-size
+        mask = CSI_VoxelMask_Checksum(csi.data.voxelmask, size(data));
+        
+        % Store in csi-struct;
+        csi.data.voxelmask = mask;
+        
         % Apply mask to data
         data(mask) = NaN;
+        
+        % For mask-nfo
+        maskMsg = 'applied';
     else
         CSI_Log({'Voxel-Mask was not loaded into memory.'}, ...
                 {'Continuing with full data-volume without masking.'})
+        doMask = 0;
     end
 end
 
-% Show statistics nfo
-stats = csi_statistics_of_volume(data);
-CSI_Log({[ data_tag ' statistics (VOI) ---------------------- %'],...
-         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: ', 'Applied mask:'},...
-     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
-          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
-          sprintf('%.2f', stats.median), ...
-          sprintf('%.2f | %.2f', stats.min, stats.max),...
-          uans{2}});
 
 % Display Info %
 CSI_Log({'Starting data display:'}, {dataDisp});
 
-% Switch to data-display type.
-switch dataDisp
-    case 'table'      % Table % ----- %    
-        % Send to tableData function, to show each slice as a table.
-        % If higher dimensions are available, the data will be 
-        % concentonated per slice. Graph may be better suited.
-        CSI_dataAsTable(data, data_tag)
+
+switch dispMode
     
-    case 'graph'      % Graph % ----- %
-        % Send to displayData function, to show each slice as a graph.
-        % If higher dimensions represent only 1 value/voxel, a dot is 
-        % shown. Adviced is using table in those cases.
-        CSI_dataAsGraph(data, gui, data_tag);
-
-        % Optional older function
-        % CSI_dataAsGraph2(data, data_text, datatag, gui, img)
-
-    case 'map'
-        % Send data to dataAsTabs and create maps in a tabbed figure for 
-        % all slices (or only the current slice plotted).
+    % NEW FAST METHOD
+    case 'fast'
         
-        % Prepare dataAsTabs input
-        [data, color_scale, sloi] = CSI_dataAsTabs_Prepare(data, gui);
-        if isnan(data), return; end
-        % Plot as tab
-        CSI_dataAsTabs(gui, data, data_tag, labels, color_scale, sloi);
-    
+        %  Check for converted image data
+        if isappdata(gui.CSIgui_main, 'conv') 
+            csi.conv = getappdata(gui.CSIgui_main,'conv');
+        end
+        
+        opts.dataDisp = dataDisp; opts.doMask = doMask;        
+        displayData(data, csi, data_tag, labels, opts);
+        
+    % PREVIOUS QUALITY METHOD (SLOW)    
+    otherwise
+        
         % Show statistics nfo
-        stats = csi_statistics_of_volume(data);
-        % Show statistics nfo
-        CSI_Log({[ data_tag ' statistics (Plotted) ------------------- %'],...
-         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: ', 'Applied mask:'},...
-         {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
-          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
-          sprintf('%.2f', stats.median), ...
-          sprintf('%.2f | %.2f', stats.min, stats.max),...
-          uans{2}});
+        stats = csi_statistics_of_volume(data); stats.mask = maskMsg;
+        stats.source = 'full-data-volume'; stats.nfo = data_tag;
+        Statistics_Viewer(stats);
 
-    case 'histogram'
-        % Plot data as histogram - simple display.    
-        fig = figure(); ax = axes(fig);
-        mx = max(data(:), [], 'omitnan'); md = median(data(:),'omitnan');  
-        tmp = data(:);
-        histogram(ax, tmp(~isnan(tmp)), round(100+(mx./md)) );
-        title([data_tag ' Histogram']); xlabel([data_tag ' Bins']);
+        % Switch to data-display type.
+        switch dataDisp
+            case 'table'      % Table % ----- %    
+                % Send to tableData function, to show each slice as a table.
+                % If higher dimensions are available, the data will be 
+                % concentonated per slice. Graph may be better suited.
+                CSI_dataAsTable(data, data_tag)
+
+            case 'graph'      % Graph % ----- %
+                % Send to displayData function, to show each slice as a graph.
+                % If higher dimensions represent only 1 value/voxel, a dot is 
+                % shown. Adviced is using table in those cases.
+                CSI_dataAsGraph(data, gui, data_tag);
+
+                % Optional older function
+                % CSI_dataAsGraph2(data, data_text, datatag, gui, img)
+
+            case 'map'
+                % Send data to dataAsTabs and create maps in a tabbed figure for 
+                % all slices (or only the current slice plotted).
+
+                % Prepare dataAsTabs input
+                [data, color_scale, sloi] = CSI_dataAsTabs_Prepare(data, gui);
+                if isnan(data), return; end
+                % Plot as tab
+                CSI_dataAsTabs(gui, data, data_tag, labels, color_scale, sloi);
+
+                % Show statistics nfo
+                stats = csi_statistics_of_volume(data);
+                stats.mask = maskMsg; stats.source = 'displayed-data'; 
+                stats.nfo = lower(data_tag); Statistics_Viewer(stats);
+
+            case 'histogram'
+                % Plot data as histogram - simple display.    
+                fig = figure(); ax = axes(fig);
+                mx = max(data(:), [], 'omitnan'); md = median(data(:),'omitnan');  
+                tmp = data(:);
+                histogram(ax, tmp(~isnan(tmp)), round(100+(mx./md)) );
+                title([data_tag ' Histogram']); xlabel([data_tag ' Bins']);
+        end
+
 end
 
 % ---- Executed by functions to graphically display data/slice
@@ -7862,7 +8157,7 @@ if ~isnan(data_ylimits_color)
             data_ylimits_color(2) = data_ylimits_color(1)+1; 
     end
 
-    [clrs, clrs_data_range] = CSI_2D_Scaling_calc_ColorOfPlots(data_ylimits_color);
+    [clrs, clrs_data_range] = CSI_2D_Scaling_Color_Calculate(data_ylimits_color);
 else
     clrs = clr_li1; 
     tmp = data{1}(:,:,:,sli,nDimC{:}); clrs_data_range = max(tmp(:));
@@ -8173,8 +8468,8 @@ for sli = 1:size(data,4) % ----------------- %
         % Yaxis Scaling % ------------------ %
         
         % Scale Y axis by limits of voxel, slice or volume.
-        if     plot_par.scale == 0 % to voxel, no change.             
-        elseif plot_par.scale == 1 || plot_par.scale == 2 
+        if     plot_par.scale_type_axis == 0 % to voxel, no change.             
+        elseif plot_par.scale_type_axis == 1 || plot_par.scale_type_axis == 2 
                 % Use pre-calculated limit relative to slice or volume
                 ylimit = plot_par.axScale_ylimit;    
         end
@@ -8586,6 +8881,51 @@ end
 
 end
 
+function [data, raw] = CSI_dataAsTable_getTableData(hobj)
+
+% Get app-structs and parent of this function
+tgui = guidata(hobj); 
+
+% Sizes
+dsize = [size(tgui.tab{1}.table.Data) size(tgui.tab,2)];
+data = NaN(dsize); datastr = cell(dsize);
+
+% Get data as double and string
+for sli = 1:size(tgui.tab,2)
+    data(:,:,sli) = ...
+        cellfun(@str2double, tgui.tab{sli}.table.Data);
+    datastr(:,:,sli) = tgui.tab{sli}.table.Data;
+end
+
+% Find all header-rows: starts with "Ind"
+ind = contains(datastr, 'Ind');
+ind = find(ind == 1);
+ind = ind2subQ(dsize,ind);
+
+% row/col/slice indexes
+row = unique(ind{1}); 
+
+% Number of row/col/slices
+extr = size(row,1); % Number of additional slices
+nrow = (size(data,1) - extr)/extr; % nRows in slice
+ncol = size(data,2); % #Col in slice
+nsli = size(data,3); % #Number of actual slices
+
+outp = NaN(nrow,ncol,nsli, extr);
+for si = 1:nsli
+    % Take slice of interest
+    sloi = data(:,:,si);
+    % Remove header-rows
+    ind_header = ind{1}(ind{3} == si);
+    sloi(ind_header,:) = [];  
+    sloi = reshape(sloi,[nrow*extr, ncol]);
+    % Loop each extra-dim
+    for xi = 1:extr
+        outp(:,:,si,xi) = sloi( ((xi-1)*nrow)+1:xi*nrow,:);        
+    end
+end
+
+raw = data; data = outp;
 
 % --- Executed by data visualization with seperate figures functions
 function toolbar_create(figure_object)
@@ -8913,14 +9253,18 @@ if isempty(uans), return; end
 
 
 % Get data
-ax = tgui.plot_par.ax(:);
-data = NaN(size(ax));
-for axi = 1:size(ax,1)
-    if ~isempty(ax{axi})
-        data(axi) = ax{axi}.Children.YData;
-    end    
+if ~strcmp(figobj.Tag, 'CSIgui_tableSNR') % Get data from maps
+    ax = tgui.plot_par.ax(:);
+    data = NaN(size(ax));
+    for axi = 1:size(ax,1)
+        if ~isempty(ax{axi})
+            data(axi) = ax{axi}.Children.YData;
+        end    
+    end
+    data = reshape(data, size(tgui.plot_par.ax));
+else % get data from table
+    [data, raw] = CSI_dataAsTable_getTableData(figobj);    
 end
-data = reshape(data, size(tgui.plot_par.ax));
 sz = size(data);
 data = permute(data, [numel(sz)+1 1:numel(sz)]);
 
@@ -8963,8 +9307,9 @@ function [data, color_scale, sloi] = CSI_dataAsTabs_Prepare(data, gui)
 % variables to plot data-array in a tabbed-figure.
 
 % USERINPUT: What data to show?
-qry = {'Data range to show: ','Color scale range: '};
-def = {{'All', 'Current Slice'}, {'Min to Max', 'Histogram optimized'}};
+qry = {'Data range to show: ','Color scaling range: '};
+def = {{'All', 'Current', 'Displayed'}, ...
+    {'Min to Max', 'Histogram optimized'}};
 uans = getUserInput_Popup(qry, def, [], 'Data Display - Maps');                                                 
 if isempty(uans), data = nan; color_scale = nan; sloi = nan; return; end
 
@@ -8984,14 +9329,34 @@ if strcmpi(uans{1},'Current Slice')
     data_dim_range = arrayfun(@(x) 1:x,data_dim, 'uniform',0);
     data_dim(4) = 1; data_dim_range{4} = sloi;
 
-    % 2. Get data of interest from SNR_all.
+    % 2. Get data of interest
     data_cut = data(data_dim_range{:});
     permvec = 1:numel(data_dim);
     permvec(4) = []; permvec(end+1) = 4;
     data_cut = permute(data_cut, permvec);
 
-    % Replace SNR-all with SNR-cut
+    % Replace cutted-data
     data = data_cut;
+
+elseif strcmpi(uans{1}, 'Displayed')
+      % \\ Get current plotted slice index from CSIgui 2D-plot
+    % \\ Get curent slice data from SNR_all array.
+
+    % Get the panel-slider object and 2d-plot object
+    [~, gui2D] = CSI_2D_getDataSliders(gui);
+
+    % Plotted slice index of interest
+    sloi = gui2D.plotindex;
+
+    % Get data of interest.    
+    dim = size(data);
+    doi_cell_layout = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);
+    doi_cell_layout(4:4+numel(sloi)-1) = sloi; 
+    data = data(doi_cell_layout{:});
+
+    sloi = cell2mat(sloi);
+
+     
 else
     sloi = NaN;
 end
@@ -9039,7 +9404,7 @@ if nargin == 5, sloi = NaN; end
 
 % Data-Dimensions safety
 dim = size(data); 
-if numel(dim) <= 2
+if numel(dim) <= 2 && dim(2) == 1
     CSI_Log({'Aborted. Function dataAsTab requires 2D or 3D data',...
              'Reshape the data as such to enable maps.'},{'',''}); return; 
 end
@@ -10723,7 +11088,7 @@ end
 
 
 % PLOT 2D CSI % -------------------------------------------------------- %
-
+% ---------------------------------------------------------------------- %
 
 % --- Executes on button press in button_plotCSI.
 function button_plotCSI_Callback(hobj, evt, gui)
@@ -10830,6 +11195,7 @@ plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 plot_par = CSI_2D_plotImages(plot_par, csgui_main_obj);
 
 % ------- % Plot data using options from plot_par
+% This function takes up to most time with increasing voxel-dimensions.
 CSI_2D_plotVoxels(plot_par,gui);
 
 % ------ % Set the figure ratio to voxel size
@@ -10902,12 +11268,13 @@ else
     set(fh, 'Position', [fig_ps fig_sz]);
 end
 
-% Save figure object
-plot_par.fh = fh;
-
 % SNAP 2 PLOT % ------------------------------------ % DEV Experimental
 % Add snapping of 2D panel to main plot figure.
 % panel_2D_followPlot2D_initiate(); panel_2D_followPlot2D();
+% This option can now be turned on or off through the menubar.
+
+% Save figure object
+plot_par.fh = fh;
 
 % --- Executed by CSI_plot2D_initiate and other to get plot-data.
 function plot_par = CSI_2D_getData(plot_par, gui, data_volume)
@@ -10966,17 +11333,73 @@ plot_par.data_unit = data_unit;
 % Data save to field - Used for plotting.
 plot_par.data2D = data_volume(:,:,:,plot_par.plotindex{:});
 
-% --- Ececuted to return colorscaling settings for plotting.
-function plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume)
-% Input-fields: plot_par...
-%                    data_unit, plotindex.
-%               Data total volume (3D)
-% Output-fields: plot_par.clrs, plot_par.clrs_data_range
+% --- Executed by CSI_2D_getPlotSettings
+function plot_par = CSI_2D_getPlotSettings_AxisScaling(plot_par, gui, data_volume)
+% Returns the plot settings for y-axis scaling of the voxels in CSIgui 2D.
+
+% Scaling: Axis Y Limit % ------------------- %
+% Y-limit of axis scaling by VOXEL, SLICE OR VOLUME.
+scaleby = CSI_2D_Scaling_Axis_Get(gui);
+
+% If voxel, set scale (0), slice (1) and volume (2). 
+% For slice and volume, already calculate the axes-y-limits. 
+scale_range = plot_par.scale_range_axis;
+umbrella = CSI_2D_Scaling_Axis_Umbrella_Get(gui) && numel(plot_par.dim) > 3;
+switch scaleby 
+    case 'vox', plot_par.scale_type_axis = 0; 
+    case 'sli', plot_par.scale_type_axis = 1; 
+
+        % Unit
+        tmp_data = CSI_getUnit(data_volume, plot_par.data_unit);
+
+        if umbrella % Include all higher order dimensions of this slice
+            ind = plot_par.select_all_dim;
+            ind(1) = plot_par.plotindex(1);            
+        else % Umbrella is off - only include current slice
+            ind = plot_par.plotindex;            
+        end
+
+        % Get data.
+        tmp_data = tmp_data(scale_range(1):scale_range(2),...
+            :,:,ind{:});
+        
+        % Plot axes-scale scaled for all voxels in the slice-volume
+        plot_par.axScale_ylimit = [min(tmp_data(:)) max(tmp_data(:))]; 
+    case 'vol', plot_par.scale_type_axis = 2; 
+        % Unit
+        tmp_dataVol = CSI_getUnit(data_volume, plot_par.data_unit);
+
+        if umbrella        
+            % Axis scale using all higher order indexes volume
+            ind = plot_par.select_all_dim;
+        else
+            % Axis scale using current higher order index volumes
+            ind = cat(2,...
+                plot_par.select_all_dim(1),plot_par.plotindex(2:end));            
+        end
+
+        % Correct x-axis window and get selected volume
+        tmp_dataVol = tmp_dataVol(scale_range(1):scale_range(2),...
+            :,:,ind{:});
+        
+        % Scale limit.
+        plot_par.axScale_ylimit = [min(tmp_dataVol(:)) max(tmp_dataVol(:))];
+end
+
+
+% --- Executed by CSI_2D_getPlotSettings
+function plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, gui, data_volume)
+% Returns the color-scaling settings for CSIgui 2D plot.
+%
+% Input: plot_par 
+%               using fields .data_unit, .plotindex.
+%        data total volume
+%               the full data-volume of interest used for plotting.
+% Output-fields: 
+%        plot_par .clrs, .clrs_data_range
 
 
 % Scaling: Plot Color % ------------- %
-csiobj = findobj('Tag','CSIgui_main'); gui = guidata(csiobj);
-
 % Returns colors gradient and related data-values, a range set within the
 % given limits. This is used to color the plot of each voxel in the
 % displayed CSI slice relative to the limits of the slice.
@@ -11004,21 +11427,42 @@ if plot_par.scale_by_window_color
 end
 
 scaleby = CSI_2D_Scaling_Color_Get(gui);
+umbrella = CSI_2D_Scaling_Color_Umbrella_Get(gui) && numel(plot_par.dim) > 3;
 switch scaleby
     case 'vol' % Scale by volume
-        % Plot color scaled for all voxels in the *volume*
-        max_per_voxel = max(vol_data,[],1);
-        data_ylimits_color = [min(max_per_voxel(:)), max(max_per_voxel(:))]; 
-        plot_par.scale_color = 0;
+
+        if umbrella        
+            % Plot color scaled for all voxels in the *volume*
+            ind = plot_par.select_all_dim;
+        else
+            % Umbrella is off - only include volume of current higher
+            % indexes.
+            ind = cat(2,...
+                plot_par.select_all_dim(1),plot_par.plotindex(2:end));            
+        end
+        mx_per_vox = max(vol_data(:,:,:,ind{:}),[],1);
+        data_ylimits_color = [min(mx_per_vox(:)), max(mx_per_vox(:))]; 
+        plot_par.scale_type_color = 0;
+
     case 'sli' % Scale by slice
-        % Calc limits in slice        
-        max_per_voxel = max(vol_data(:,:,:,plot_par.plotindex{:}),[],1);
-        data_ylimits_color = [min(max_per_voxel(:)) max(max_per_voxel(:))];           
-        plot_par.scale_color = 1;
+        
+        % Include slice + higher indexes
+        if umbrella 
+            % Correct indexing for slice + other indexes
+            ind = cat(2,...
+                plot_par.plotindex(1),plot_par.select_all_dim(2:end));           
+        else % Include only slice-data
+            % Calc limits in slice        
+            ind = plot_par.plotindex;
+        end
+        mx_per_vox = max(vol_data(:,:,:,ind{:}),[],1);
+        data_ylimits_color = [min(mx_per_vox(:)) max(mx_per_vox(:))];           
+        plot_par.scale_type_color = 1;
+
     case 'sta' % Static color
         % Color scaling limited to 1 color: static line color
         data_ylimits_color = NaN;
-        plot_par.scale_color = 2;
+        plot_par.scale_type_color = 2;
 end
 
 
@@ -11029,10 +11473,9 @@ if ~isnan(data_ylimits_color)
             data_ylimits_color(2) = data_ylimits_color(1)+1; 
     end
     [plot_par.clrs, plot_par.clrs_data_range] = ...
-        CSI_2D_Scaling_calc_ColorOfPlots(data_ylimits_color);
+        CSI_2D_Scaling_Color_Calculate(data_ylimits_color);
 else
     % Set static line color.
-    % tmp = vol_data(:,:,:,plot_par.plotindex{:}); 
     plot_par.clrs = gui.colors.lines1; 
     plot_par.clrs_data_range = max(vol_data(:)); 
 end
@@ -11045,51 +11488,43 @@ function plot_par = CSI_2D_getPlotSettings(plot_par, gui, data_volume)
 % Scaling plot color, axis-y and x limit (by volume/static/voxel) and
 % more.
 % Output fields to plot_par:
-%               scale_by_window_color   Color scale data by window or full 
-%                                       spectra
-%               scale_color             Scale type of colors: 
-%                                       vol(0/sli(1/sta(2
-%               clrs                    Plot colors for color scaling 
-%                                       spectra
-%               xlimit                  Visual x-limits of spectra plots
-%               xaxisdata               Xaxis plot data (ppm/unitless)
-%               scale_by_window_axis    Scale y-axis by window or full
-%                                       spectrum
-%               scale_range             Index scale range for previous
-%               scale                   Scale type: vox(0/sli(1/vol(2
-%               axScale_ylimit          Y-limits for scaling vol/sli
-%               voxel_grid              Enable or disable grid in each vox
+%   xlimit                  visual limits for x-axis.
+%   xaxisdata               x-axis data within x-limits.
+%   scale_range_color       range in data to use for color scaling.
+%   scale_by_window_color   boolean to set scale by full x-axis range or
+%                           only visualised x-axis range.
+%   scale_type_color        calculate scale type using voxel (2), slice (1)
+%                           or volume (0).
+%   clrs                    colors for color-scaling per data-range.
+%   clrs_data_range         data ranges that match the clrs-list.
+%   scale_range_axis        range in data to use for axis scaling.
+%   scale_by_window_axis    boolean to set scale by full x-axis range or
+%                           only visualised x-axis range.
+%   scale_type_axis         calculate scale type using voxel (0), slice (1)
+%                           or volume (2).
+%   voxel_grid              boolean to set individual voxel grid on or off.
 
 
-% Axis: scale by window and X-limits% ---------- %
-
-% Get visual and index range of x-axis data to use for scale by window of
-% the y-axis.
+% Axis: scale by window and X-limits % ------------------- %
+% Get visual- and data- index range of x-axis data
 
 % X-axis visual limits
 plot_par.xlimit = plot_par.xaxis.xlimit;
 
-% Get the frequenty axis
-% unitless(none) or frequency(ppm) and get unitless range of data to 
-% scale y-axis; to full spectrum or to visible part of spectrum.
+% X-axis values
+% Either unitless(none) or frequency(ppm) plus the correct index range
+% to scale the y-axis; to full spectrum or to visible part of spectrum.
 if isfield(plot_par.xaxis, 'ppm')
     plot_par.xaxisdata = plot_par.xaxis.ppm;
-    
-    [~,scale_range(1)] =  ...
-        min(abs(plot_par.xaxis.ppm - plot_par.xaxis.xlimit(1)));
-    [~,scale_range(2)] =  ...
-        min(abs(plot_par.xaxis.ppm - plot_par.xaxis.xlimit(2)));
-   
-else         
-    
+else     
     plot_par.xaxisdata = plot_par.xaxis.none; 
-    [~,scale_range(1)] =  ...
-        min(abs(plot_par.xaxis.none - plot_par.xaxis.xlimit(1)));
-    [~,scale_range(2)] =  ...
-        min(abs(plot_par.xaxis.none - plot_par.xaxis.xlimit(2)));
 end
+[~,scale_range(1)] =  ...
+    min(abs(plot_par.xaxisdata - plot_par.xaxis.xlimit(1)));
+[~,scale_range(2)] =  ...
+    min(abs(plot_par.xaxisdata - plot_par.xaxis.xlimit(2)));
 
-% If only a single value... 
+% Safety: If only a single value
 if diff(scale_range) > size(data_volume,1)
     scale_range = [1 size(data_volume,1)];
 end
@@ -11107,52 +11542,20 @@ else
     plot_par.scale_by_window_axis = 1;
 end
 
-
 % Scaling: Axis Y Limit % ------------------- %
-            
-% Get data-unit to plot and extract data from array.
-% Vol data is only used if volume color scaling to ylimits is on.
-data_unit = get(gui.popup_plotUnit,'String');
-data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
-plot_par.data_unit = data_unit;
-
-% Y-limit of axis scaling by VOXEL, SLICE OR VOLUME.
-scaleby = CSI_2D_Scaling_Axis_Get(gui);
-
-% If voxel, set scale to zero, slice to one and volume to two. For slice
-% and volume, already calculate the limits. 
-scale_range = plot_par.scale_range_axis;
-switch scaleby 
-    case 'vox', plot_par.scale = 0; 
-    case 'sli', plot_par.scale = 1; 
-        % Unit
-        tmp_data = CSI_getUnit(plot_par.data2D, plot_par.data_unit);
-        % Correct x-axis window
-        tmp_data = tmp_data(scale_range(1):scale_range(2),:,:);
-        plot_par.axScale_ylimit = [min(tmp_data(:)) max(tmp_data(:))]; 
-    case 'vol', plot_par.scale = 2; 
-        % Unit
-        tmp_dataVol = CSI_getUnit(data_volume, plot_par.data_unit);
-        % Correct x-axis window
-        tmp_dataVol = tmp_dataVol(scale_range(1):scale_range(2),...
-            :,:,plot_par.select_all_dim{:});
-        plot_par.axScale_ylimit = [min(tmp_dataVol(:)) max(tmp_dataVol(:))];
-end
-
- 
-% Voxel grid on or off % ---------------- %
-if strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on')
-    plot_par.voxel_grid = 1;
-else
-    plot_par.voxel_grid = 0;
-end
-
+% Create and calculate all y-axis scale range settings.
+plot_par = CSI_2D_getPlotSettings_AxisScaling(plot_par, gui, data_volume);
 
 % Scaling: Plot Color % ------------- %
-% Create - plot_par.clrs, plot_par.clrs_data_range
-plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume);
-
-
+% Create and calculate the color scale range settings.
+plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, gui, data_volume);
+ 
+% Voxel grid on or off % ---------------- %
+% Set if voxel-axis has individual grid enabled or disabled.
+plot_par.voxel_grid = 0;
+if strcmp(gui.menubar.MRSI.AxisScale.Grid.Checked, 'on')
+    plot_par.voxel_grid = 1;
+end
 
 % --- % Executed by CSI_plot2D_initiate: plot images
 function plot_par = CSI_2D_plotImages(plot_par, csiguiObj)
@@ -11268,6 +11671,10 @@ if isfield(plot_par, 'ax'), createFig = 0; else, createFig = 1; end
 full_scale_range =  ...
     plot_par.scale_range_axis(1):plot_par.scale_range_axis(2);
 
+% Scale range window of color
+color_scale_range = ...
+        plot_par.scale_range_color(1):plot_par.scale_range_color(2);
+
 % Plot csi voxel per axis in plot_par.grid
 for ci = 1:plot_par.dim(1)                  % Col loop.
     for ri = 1:plot_par.dim(2)              % Row loop.
@@ -11294,12 +11701,12 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         
         % This is NOT the Ylimit eventually used for axis-display.
         % See below plot() @ YAXIS SCALING
-        ylimit = [min( plot_data_vox( : ) ) max( plot_data_vox( : ) )];
+        ylimit = [min( plot_data_vox( color_scale_range ) ) ...
+                  max( plot_data_vox( color_scale_range ) )];
         
         % Relative to maximum Y-data.
         [~, clr_ind] = min(abs(plot_par.clrs_data_range-ylimit(2)));
         plot_color = plot_par.clrs(clr_ind,:); % See before ri/ci for-loops.
-  
        
         %%%% PLOT CSI data %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         plot(plot_par.ax{ri,ci}, plot_par.xaxisdata, plot_data_vox,...
@@ -11310,12 +11717,12 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         % YAXIS SCALING % -------------- %
         
         % Scale Y axis by limits of voxel, slice or volume.
-        if plot_par.scale == 0                                              % Voxel 
+        if plot_par.scale_type_axis == 0 % Voxel             
             ylimit = ...
                 [min( plot_data_vox( full_scale_range ) )...
                  max( plot_data_vox( full_scale_range ) )];
-        elseif plot_par.scale == 1 || plot_par.scale == 2                   % Slice or Volume
-            ylimit = plot_par.axScale_ylimit;                               % Use pre-calculated limit.
+        elseif plot_par.scale_type_axis ~= 0  % Slice (1) or Volume (2)
+            ylimit = plot_par.axScale_ylimit; % Use pre-calculated limit.
         end
             
         % Largest absolute limit: min/max.
@@ -11330,16 +11737,14 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         ylim(plot_par.ax{ri,ci}, ylimit); % Set Ylimit
 
         
-        % X LIMIT % -------------------- %
-        
+        % X LIMIT % -------------------- %        
         % Use limits of ppm axis(1) and (end) plus reverse the x-axis
         % direction to correctly display MRSI data.
         xlim(plot_par.ax{ri,ci}, sort(plot_par.xlimit(1:2))); 
         set(plot_par.ax{ri,ci}, 'xdir', 'reverse');
         
         
-        % VOXEL GRID % ------------------ %
-        
+        % VOXEL GRID % ------------------ %        
         if plot_par.voxel_grid
             plot_par.ax{ri,ci} = ...
                 CSI_2D_plotVoxels_grid(plot_par.ax{ri,ci},...
@@ -11348,7 +11753,6 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         
 
         % AXIS COSMETICS % -------------- %
-        
         set(plot_par.ax{ri,ci},...
           'Color', 'None',...
           'XColor', plot_par.colors.main,'YColor', plot_par.colors.main,...
@@ -11361,11 +11765,8 @@ for ci = 1:plot_par.dim(1)                  % Col loop.
         set(plot_par.ax{ri,ci},'ButtonDownFcn',@CSI_2D_voxel_select);
         
         % Update guidata of axis, every axis gets the plot_parameters send
-        % with it, thus its own handle too! 
-        
-        plot_par.ax{ri,ci}.UserData = [ri, ci];
-        % guidata(plot_par.ax{ri,ci}, plot_par);
-         
+        % with it, thus its own handle too!         
+        plot_par.ax{ri,ci}.UserData = [ri, ci];         
       
     end
 end
@@ -11394,8 +11795,8 @@ function ax = CSI_2D_plotVoxels_grid(ax, clr)
 % Prep options                                  ----- !Can Be Edited!
 % Number of grid lines, grid linewidth and grid alpha opacity; latter
 % overwrites userinput.
-gridN = 5; gridW = 0.5; 
-gridAlpha = 0.75; clr(4) = gridAlpha;
+gridN = 5; gridW = 0.5; gridAlpha = 0.75; 
+clr(4) = gridAlpha;
 
 
 % Get current axis limits
@@ -11417,12 +11818,11 @@ hold(ax,'off');
 % Reverse plot-layering e.g. plotted data on top.
 ax.Children = flip(ax.Children,1);
 
-
-
 % --- Executes on button press in button_CSI_setFigure_ratio.
 function button_CSI_setFigure_ratio_Callback(~, ~, gui)
 CSI_2D_setFigure_ratio(gui);
  
+% --- Executed by user or CSI_plot2D_Initiate
 function CSI_2D_setFigure_ratio(gui)
 % Calculate ratio of screen and voxels; set figure ratio to voxel ratio.
 
@@ -11447,6 +11847,7 @@ pos(3) = pos(4).*ratio_vox; obj2D.Position = pos;
 
 
 % PLOT 2D FUNCTIONS % -------------------------------------------------- %
+% ---------------------------------------------------------------------- %
 
 % --- Calculate and add the voxel grid in 2D-plots
 function CSI_2D_grid(target, target_sz, dim, range, grid_clr)
@@ -11648,6 +12049,9 @@ else
      
 end
 
+
+% Slide Panel Follow Plot2D % ----------------------------------------- %
+
 % --- % Executed by CSI_2D_setFigure.
 function panel_2D_followPlot2D_initiate(hobj)
 % Initiate the panel2D to follow CSIgui2D plot figure if this screen is 
@@ -11739,7 +12143,6 @@ catch err
     return;
 end
 
-
 % --- % Executed if user click snap Window in menubar
 function panel_2D_followPlot2D_menubar(~, ~)
 % Set checkmark on or off in menubar when clicking menubar > snap Window
@@ -11771,12 +12174,11 @@ end
 
 
 
-% ---------------------------------------------------- %
-% PLOT 2D SCALING % -------------------------------------------------- %
-% ---------------------------------------------------- %
+% PLOT 2D SCALING % ---------------------------------------------------- %
+% ---------------------------------------------------------------------- %
 
 % --- Plot a colorbar for 2D plot information
-function CSI_2D_Scaling_plotColorbar(hObj,~)
+function CSI_2D_Scaling_Color_showColorBar(hObj,~)
 % Open up a colorbar representing color limits of the 2D CSI plot.
 %
 % Requires full csi-data acces.
@@ -11826,8 +12228,7 @@ plot_par = CSI_2D_getPlotSettings(plot_par, gui, csi.data.raw);
 % --- Open colorbar with color-options from plot_par
 
 % Set input
-colors = plot_par.clrs; values = plot_par.clrs_data_range;
-colorbarQ(colors, values)
+colorbarQ(plot_par.clrs,  plot_par.clrs_data_range);
 
 catch err
     CSI_Log({[err.stack(1).name ':'], 'Line: '},...
@@ -11849,6 +12250,10 @@ elseif strcmp(vol_scaling,'on'), scaleby = 'vol';
 elseif strcmp(sta_scaling,'on'), scaleby = 'sta'; 
 end
 
+function umbrella = CSI_2D_Scaling_Color_Umbrella_Get(gui)
+menuChecked = get(gui.menubar.MRSI.ColorScale.Umbrella, 'checked');
+umbrella = 0; if strcmp(menuChecked, 'on'), umbrella  = 1; end
+
 % --- Executed by plot2D and others to get current axis scaling state
 function scaleby = CSI_2D_Scaling_Axis_Get(gui)
 % Returns what to axis scale by; voxel(VOX), slice(SLI), volume(VOL)
@@ -11863,6 +12268,10 @@ if     strcmp(sli_scaling,'on'), scaleby = 'sli';
 elseif strcmp(vol_scaling,'on'), scaleby = 'vol'; 
 elseif strcmp(vox_scaling,'on'), scaleby = 'vox'; 
 end
+
+function umbrella = CSI_2D_Scaling_Axis_Umbrella_Get(gui)
+menuChecked = get(gui.menubar.MRSI.AxisScale.Umbrella, 'checked');
+umbrella = 0; if strcmp(menuChecked, 'on'), umbrella  = 1; end
 
 % --- Executed by user in menubar: CSI > Scaling Color
 function CSI_2D_Scaling_Color_Set(hObject, evt)
@@ -11907,6 +12316,17 @@ end
 % 3. Update GUI data.
 guidata(hObject,gui);
     
+% --- Executed by user in menubar: CSI > Scaling Color
+function CSI_2D_Scaling_Color_Umbrella_Set(hobj, ~)
+% Get guidata
+gui = guidata(hobj);
+
+switch get(gui.menubar.MRSI.ColorScale.Umbrella, 'checked')
+    case 'on',  setto = 'off';
+    case 'off', setto = 'on';
+end
+set(gui.menubar.MRSI.ColorScale.Umbrella, 'checked', setto);
+
 % --- Executed by user in menubar: CSI > Scaling Color > Scale by window
 function CSI_2D_Scaling_Color_ScaleByWindow(hObject, ~)
 % Enabel or disbale scale by Color.
@@ -11987,8 +12407,18 @@ end
 % 3. Update GUI data.
 guidata(hObject,gui);
 
+function CSI_2D_Scaling_Axis_Umbrella_Set(hobj, ~)
+% Get guidata
+gui = guidata(hobj);
+
+switch get(gui.menubar.MRSI.AxisScale.Umbrella, 'checked')
+    case 'on',  setto = 'off';
+    case 'off', setto = 'on';
+end
+set(gui.menubar.MRSI.AxisScale.Umbrella, 'checked', setto);
+
 % --- Executed by CSI_plot2D; y-axis color scaling.
-function [clrs, clrs_range] = CSI_2D_Scaling_calc_ColorOfPlots(data_limits)
+function [clrs, clrs_range] = CSI_2D_Scaling_Color_Calculate(data_limits)
 % Given limits of the data in a CSI slice:
 %       a vector of size (1 x #colors) of values within the CSI-slice limit
 %       is returned.
@@ -12020,7 +12450,7 @@ clrs_range = ...
 if isempty(clrs_range), clrs_range = data_limits(1); end
 
 % --- Executed by parameters button callback and several other scripts
-function CSI_2D_Scaling_calc_xaxis(hObject, ~, auto)
+function CSI_2D_Scaling_Xaxis(hObject, ~, auto)
 % Creates struct xaxis which contains all frequency information and
 % corresponding axis for visualization.
 %
@@ -12761,6 +13191,15 @@ switch unit_str
     otherwise,        data = abs(data);
 end
 
+function [data, unit_str] = CSI_getUnit_data(data, gui)
+% Returns the data according to the GUI popup menu plotUnit and the
+% corresponding string.
+% Uses CSI_getUnit.
+
+unit_str = get(gui.popup_plotUnit,'String');
+unit_str = unit_str{get(gui.popup_plotUnit,'Value')};
+data = CSI_getUnit(data, unit_str);
+
 % --- Get data at peak of interest
 function [doi, doi_axis, range] = CSI_getDataAtPeak(spec, xaxis, range)
 % Input 1: Spec is the full spectrum;
@@ -12861,7 +13300,7 @@ if ppm
     CSI_Log({'Converting ppm-range for POI: '},{poi});
     [~, poi(1)] = min(abs(xaxis.ppm - poi(1)));
     [~, poi(2)] = min(abs(xaxis.ppm - poi(2)));
-    CSI_Log({'Converted range-index: '},{poi});
+    CSI_Log({'Converted to data range-index: '},{poi});
 end
 
 % Sort the range from low to high
@@ -13574,6 +14013,7 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % USER INPUT % ---------------------------------- %
 
 % Get peak of interest.
+CSI_Log({'Executing automatic zeroth-order phase corrections.'},{''});
 range = CSI_getPeakOfInterest(appdata1D.axis, ...
                               'CSIgui-1D: Automatic phase correction');
 
@@ -13963,6 +14403,9 @@ for pp = 1:size(peak_pos,1)
     [lw(pp), lwv(pp,:), lwp(pp,:)] = ...
         csi_lineWidth(data, ax, range(1):range(2), 1);
     
+     % [lw(pp), lwv(pp,:), lwp(pp,:)] = ...
+     %     csi_linewidth_intersect(data, ax, peak_range);
+
     % Plot data
     hold(appdata1D.axes,'on'); % Hold 1D plot figure
     plot(appdata1D.axes, lwp(pp,:), real(lwv(pp,:)),'or');    % Plot marker
@@ -14521,14 +14964,14 @@ switch uans{1}
         hold on; plot(ax,real(data),'--y'); 
 
         % Find peaks A
-        [pks, locs, w] = findpeaks(datasmo,'NPeaks', 5); 
+        [pks, locs, w] = findpeaks(datasmo,'NPeaks', 4); 
         pks_smooth = cat(2,locs,pks);
 
         % Maximum width-peak
         [~, max_w_loc] = max(w);
         shiftval = locs(max_w_loc);
         mm = pks(max_w_loc);
-    
+        shiftval
         % Save new data.
         appdata1D.voxel.processed = zeros(sz,1);
         appdata1D.voxel.processed(1:(sz-shiftval+1)) = dataOri(shiftval:end);
@@ -14545,7 +14988,8 @@ switch uans{1}
 
         dt = mean(diff(ax)); str = sprintf('Shifted: %1.6f | %3.0f', dt.*shiftval,...
             shiftval);
-        text(ax(round(shiftval./2)), mm.*1.05, str, 'Color', [0.8 0.8 0.8]);
+        text(ax(round(shiftval./2)), double(mm.*1.05), str,...
+            'Color', [0.8 0.8 0.8]);
 
         pl.Parent.Color = [0 0 0]; 
 
@@ -14782,7 +15226,7 @@ if isfield(csi.data, 'noise')
     % Save appdata.
     setappdata(gui.CSIgui_main, 'csi', csi);
     
-    CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+    CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
     %Show user.
     CSI_Log({'% ---------------------------------------------------- %'},...
@@ -14806,7 +15250,12 @@ function [csi, hobj, gui] = CSI_Noise_Prepare(hobj, gui)
 qry = {'Process noise data:', 'Delete a channel from noise-data:', ...
        'Average noise', 'Remove OS', 'Apodize noise:', 'FFT noise:', };
 opt = repmat({{'Yes', 'No'}}, size(qry));
-dans = ones(1,size(qry,2)); dans(3) = 0; dans(4) = 0;
+dans = ones(1,size(qry,2)); 
+
+% Default noise-processing steps
+dans(2) = 0; dans(3) = 0; dans(4) = 0;
+
+
 uans = getUserInput_Tick(qry, opt, 'Noise Preparation', dans);
 if isempty(uans)
     CSI_Log({'Noise Preperation:'},{'Aborted.'}); csi = NaN; return; 
@@ -14857,6 +15306,326 @@ CSI_Noise_ViewManager(hobj, [], []);
 
 % Reload csi-app-data
 csi = getappdata(gui.CSIgui_main,'csi');
+
+
+% -------------------------------------------------------------------- %
+% B1 mapping % ------------------------------------------------------- %
+% -------------------------------------------------------------------- %
+
+
+
+% --- Executes on button press in button_CSI_MapB1.
+function button_CSI_MapB1_Callback(~, ~, gui)
+% Choose a method to calculate B1.
+% Double CSI - use FA = invcos(M(2a) / 2M(a));
+% Multi CSI - use signal equation and fit FA, T1 and M0.
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+% csi = getappdata(gui.CSIgui_main, 'csi');
+
+
+% User Input % --------------------------------------------------------- %
+qry = 'Choose a B1-method:';
+opt = {'Double-CSI', 'Multi-CSI'};
+uans = getUserInput_Popup({qry},{opt}, [], 'Calculate B1-Map');
+if isempty(uans), return; end
+
+switch uans{1}
+    case 'Multi-CSI'
+        CSI_MapB1_MultiCSI(gui);
+    case 'Double-CSI'
+        CSI_MapB1_DoubleCSI(gui);
+end
+
+% --- Executes by button_CSI_MapB1
+function CSI_MapB1_MultiCSI(gui)
+% Calculate B1 maps using multiple-CSI protocol and fitting the CSI-signal
+% equation for FA, T1 and M0.
+%
+% Requires TR. 
+% T1 range of upper lower bound
+% FA range of upper lower bound
+%
+%
+% Input: gui-handle of CSIgui
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% User Input % ------------------------------------------------- %
+
+% Read TR from file, Get stored TR, if available.
+if isfield(csi.xaxis,'TR'), TR = csi.xaxis.TR;
+elseif strcmp(csi.ext, 'dat') || isfield(csi,'twix')
+    try
+        fn = strtrim(strsplit(csi.filename, '|'));
+        TR = NaN(1,numel(fn));
+        for kk = 1:numel(fn)
+            twix = mapVBVD([csi.filepath fn{kk}]);
+            TR(kk) = twix.hdr.Config.TR./(1e6);        
+        end
+        clear('twix'); 
+    catch 
+        TR = [0.3 0.5 0.65 0.8 1 1.2 1.5 2 4 6 8 10 12 14]; 
+    end
+else, TR = [0.3 0.5 0.65 0.8 1 1.2 1.5 2 4 6 8 10 12 14]; 
+end
+
+% Get TR, T1, Zero, Parallel - Add FA?
+ele = {'popup', 'edit', 'edit', 'edit', 'edit', 'edit', 'popup',...
+       'popup', 'popup', 'popup', 'popup', 'popup'};
+qry = {'TR Index:', 'Give a TR range [s]:',...
+       'Initial T1 [s]:', 'T1 boundary [s]:'...
+       'Initial FA [deg]:','FA Boundary [deg]:', ...
+       'Add S(0) = 0:', 'Extend TR by copying S(end): ',...
+       'Double fit cycle', 'Save data:', 'Display data:'};
+opt = {flip(csi.data.labels), num2str(TR, '%2.2f '), ...
+      '8.9', '8.8999 8.9001', '20', '1 90', {'Yes', 'No'},...
+      {'No', 'Once','Twice', 'Thrice'},...
+      {'Yes', 'No'}, {'Yes', 'No'}, {'Yes', 'No'}};
+uans = getInput(ele, qry, opt, 'Fit FA-maps');
+if isempty(uans), return; end
+
+% UANS - TR-index
+ind_TR = csi_findDimLabel(csi.data.labels,uans(1));        
+
+% UANS - TR
+TR = str2double(strsplit(uans{2}));
+csi.xaxis.TR = TR; setappdata(gui.CSIgui_main, 'csi', csi);
+
+% UANS - T1
+T1init = str2double(uans{3});
+
+% UANS - T1 Boundary
+T1bound = str2double(strsplit(uans{4}));
+
+% UANS - FA
+FAinit = str2double(uans{5});
+
+% UANS - FA Boundary
+FAbound = str2double(strsplit(uans{6}));
+
+% UANS - Add Zero
+if strcmp(uans{7},'Yes'), doZero = 1; else, doZero = 0; end
+
+% UANS - Extend TR(end) by S(end)
+if strcmp(uans{8},'No'), doExtend = 0; doExtendVal = 0; 
+else, doExtend = 1;  doExtendVal = numel(uans{8}) - 3; 
+end
+
+% UANS - Double Fit Cycle
+if strcmp(uans{9},'Yes'), doDouble = 1; else, doDouble = 0; end
+
+% UANS - Save data to file
+if strcmp(uans{10},'Yes'), doSave = 1; else, doSave = 0; end
+
+% UANS - Display data
+if strcmp(uans{11},'Yes'), doDisp = 1; else, doDisp = 0; end
+
+% Prepare FIT loop % ------------------------------------------- %
+
+% Add zero to TR if enabled
+if doZero, TR = [0 TR]; end
+
+% Add TR if doExtend S(end) for TR(end)*N
+if doExtend
+    TR = [TR repmat(TR(end), 1, doExtendVal)]; 
+    for kk = 0:doExtendVal-1, TR(end-kk) = TR(end-kk) * (2.5 - (0.5*kk));
+    end
+end
+
+% Get k-space index
+sz = size(csi.data.raw); % For Kx,Ky,Kz
+lab_spat = {'kx','ky','kz', 'x', 'y', 'z'};
+ind_spat = csi_findDimLabel(csi.data.labels,lab_spat);
+ind_spat(isnan(ind_spat)) = [];        
+
+% k-space order as is.
+ind_spat = sort(ind_spat);
+
+% KEEP THE ORDER OF KXKYKZ HERE!
+
+% Permute: #S x Spatial Dimensions x TR-dimensions x Rest
+permv = [1 ind_spat ind_TR];
+add_ind = find(~ismember(1:numel(csi.data.dim), permv) == 1);
+permv = [permv add_ind];
+csi.data.raw = permute(csi.data.raw, permv);
+
+% Create voxel index for loop
+vec = arrayfun(@(x) 1:x, sz(ind_spat), 'UniformOutput', false);
+voi = allCombinations(vec);
+ind_full = arrayfun(@(x) 1:x, size(csi.data.raw), 'UniformOutput', false);
+ind_full(ind_spat) = {0};
+
+% Double iteration value
+if doDouble, double_iter = 2; else, double_iter = 1; end
+% fit_par_di = cell(1,double_iter);
+
+% CSI-fitting model: PAR(1) = FA, PAR(2) = T1 and PAR(3) = M0.
+csi_model = @(PAR, TR) PAR(3) * (1-exp(-TR./PAR(2))).*sind(PAR(1))./ ...
+                                (1-(exp(-TR./PAR(2)).*cosd(PAR(1))));
+
+% Fit twice - using first calculated T1 average and FA for initial fit
+% parameters.
+
+for di = 1:double_iter
+        
+    if di == 1 % Initiate output-var
+        ind_spat_sz_c = num2cell(csi.data.dim(ind_spat));
+        fit_par = NaN(ind_spat_sz_c{:}, 3);         
+        rsq = NaN(1,ind_spat_sz_c{:}); 
+        confint = NaN(ind_spat_sz_c{:}, 3, 2);               
+        M0bound = [NaN NaN]; opts = cell(ind_spat_sz_c{:}, double_iter);
+        output = cell(ind_spat_sz_c{:}, double_iter);  
+    end
+    
+    % @Second iteration: Set new boundaries, get fitted FA/T1.
+    if doDouble && di == 2 
+        FA = fit_par(:,:,:,1); T1 = fit_par(:,:,:,2); 
+        T1init = mean(T1(:)); T1std = std(T1(:)); fac = 0.01;
+        T1bound = T1init + [-fac*T1std +fac*T1std];
+        FAinit = 'Voxel dependent using first fit-iteration FA.';
+    end
+    
+    % Display fit-variable limits   
+    CSI_Log({''},{''});
+    CSI_Log({'% ----------------------------------- %'},{''});
+    CSI_Log({'M0:'},{'Voxel and T1/FA dependent.'});
+    CSI_Log({'TR:', 'FA-Initial:','FA-boundary:',...
+                    'T1-Initial:', 'T1-boundary:', },...
+            {TR, FAinit, FAbound, T1init, T1bound});    
+    CSI_Log({sprintf('Fit iteration #%i ------------------- %', di)},{''});
+    
+    yval = NaN(1, numel(TR));
+    % barObj = loadBar(0, 'Fitting voxels...');
+    for kk = 1:size(voi,2) % Loop voxels
+
+        % Continue-second fit dialog box.
+        if di == 2 && kk == 1
+            uans = getUserInput_Buttons({'Start second iteration?'},...
+                {'Continue', 'Stop'}, [], 'B1-map fitting');
+            if isempty(uans), loadBar(NaN); return; end
+            switch uans
+                case 'Continue' % Continue script...
+                case 'Stop', loadBar(NaN); return;
+            end
+        end
+        
+        % Progress bar
+        loadBar(kk./size(voi,2), 'Fitting voxels...');
+
+        % Use index-lookup to get voxel-data
+        voitmp = num2cell(voi(:,kk)); ind_full(ind_spat) = voitmp;
+        
+        % Convert data to double
+        spoi = squeeze(double(csi.data.raw(ind_full{:})));
+        
+        %  Peak Value
+        ydat = max(real(spoi),[],1);
+        
+        % lsqcurvefit properties
+        opt = optimoptions(@lsqcurvefit,'Display', 'None', ...
+            'TolFun', 1e-18, 'TolX', 1e-18, ...
+            'MaxFunEvals', 600, 'MaxIter', 600);
+
+        % Add zero to the data
+        if doZero, yval(1:end-doExtendVal) = [0 ydat]; 
+        else, yval(1:(end-doExtendVal)) = ydat; end
+
+        % Extend by S(end)
+        if doExtend 
+            yval(end-doExtendVal+1:end) = ...
+                repmat(yval(end-doExtendVal), 1, doExtendVal); 
+            % opt.Weights = ...
+            % [opt.Weights repmat(opt.Weights(end), 1, doExtendVal)];
+        end
+        
+        % Get fitted FA from first iteration if second iteration
+        if doDouble && di == 2, FAinit = FA(voitmp{:}); end
+        
+        % Initial M0
+        M0init = max(yval) .* ...
+            (1- (exp(-TR(end-doExtendVal)./T1init).*cosd(FAinit))) ./ ...
+            (sind(FAinit).*( 1-exp(-TR(end-doExtendVal)./T1init)));
+        M0bound(1) = M0init * 0.75; M0bound(2) = M0init * 1.25;        
+    
+        % Upper and lower bound of fitting parameters.
+        % M0 needs to be adjusted according T1/FA init
+        lb = [FAbound(1)  T1bound(1)  M0bound(1)];
+        ub = [FAbound(2)  T1bound(2)  M0bound(2)];
+        starting_values =  [FAinit T1init M0init];
+                
+        % Fit using nonlinear least square curve fitting fcn        
+        [beta, ~, R, ~, outp, ~, J] = ...
+        lsqcurvefit(csi_model, starting_values, TR, yval, lb, ub, opt);    
+        
+        % Store output
+        outp.startpoint = starting_values;
+        outp.lower = lb; outp.upper = ub;  
+        outp.TR = TR; outp.yval = yval;
+        outp.beta = beta; outp.model = csi_model;
+
+        % Store fit-options and output
+        output{voitmp{:}, di} = outp; opts{voitmp{:}, di} = opt;
+
+        % Store fit-parameters per voxel
+        fit_par(voitmp{:}, :) = beta;    
+         
+        % R-Squared
+        yfit  = csi_model(beta,TR);
+        rsq(:, voitmp{:}) = ...
+            1 - (sum((yval(:)-yfit(:)).^2)/sum((yval-mean(yval)).^2));
+                
+        % Confidence Interval  
+        confint(voitmp{:}, :,:) = nlparci(beta, R, 'jacobian', J);                
+    end
+    loadBar(NaN);
+
+    % Store fit-par of volume per double-iter
+    % fit_par_di{di} = fit_par;
+
+    % Save data to file? % -------------------------------------- %
+    if doSave
+        if isfield(csi.data,'filepath'), fp = csi.data.filepath;
+        else, fp = [];
+        end
+        tstr = sprintf('Save data iteration #%i', di);
+
+        [fn_out, fp_out, idx] = ...
+            uiputfile({'*.mat','MATLAB File';}, tstr, fp);
+        if idx ~= 0
+            fpn = [fp_out fn_out]; 
+            fit_par_label = {'FA', 'T1', 'M0'};
+            save(fpn, 'fit_par', 'TR', 'rsq', 'confint', 'opts', ...
+                'csi_model', 'fit_par_label', 'output');
+        end
+    end
+    
+    % Display data? % ------------------------------------------- %
+    if doDisp               
+        % Fit parameters
+        FAt = permute(fit_par(:,:,:,1), [4 1 2 3]);
+        CSI_dataAs_Initiate(FAt,  ['FA - ' int2str(di)], gui,...
+            csi.data.labels);        
+        
+        % T1t = permute(fit_par(:,:,:,2), [4 1 2 3]);
+        % CSI_dataAs_Initiate(T1t,  ['T1 - ' int2str(di)], gui,...
+        %     csi.data.labels);
+        
+        M0t = permute(fit_par(:,:,:,3), [4 1 2 3]);
+        CSI_dataAs_Initiate(M0t,  ['M0 - ' int2str(di)], gui,...
+            csi.data.labels);
+        
+        % Goodness of fit
+        CSI_dataAs_Initiate(rsq,  ['R2 - ' int2str(di)], gui,...
+            csi.data.labels);        
+    end
+   
+
+end % End of double fit-iterations
+
 
 
 % -------------------------------------------------------------------- %
@@ -15134,14 +15903,22 @@ if isappdata(gui.CSIgui_main,'csi')
     % Reduce file size? Save Backup?
     uans = getUserInput_Popup(...
         {'Reduce file size by converting to single?',...
-         'Include backup-data?'},...
-        {{'Yes','No'},{'No', 'Yes'}}, [], 'Save Data');
+         'Include backup-data?', 'Remove decorrelation matrices:'},...
+        {{'Yes','No'},{'No', 'Yes'},{'Yes','No'}}, [], 'Save Data');
     
     if strcmpi(uans{1},'yes')
         csi.data.raw = single(csi.data.raw);
     end
     if strcmpi(uans{2},'No') && isfield(csi,'backup')
         csi = rmfield(csi,'backup');
+    end
+    if strcmpi(uans{3}, 'Yes')
+        foi = {'noise_cov', 'noise_cov_chol', 'scaleMatrix'};
+        for kk = 1:numel(foi)
+            if isfield(csi.data, foi{kk})
+                csi.data = rmfield(csi.data, foi{kk});
+            end
+        end
     end
     
     % Add log
@@ -15162,7 +15939,7 @@ if isappdata(gui.CSIgui_main,'csi')
     %     csigui.list = csi.list;
     % end
     % if isfield(csi,'voxelmask')
-    %     csigui.voxelmask = csi.voxelmask;
+    %     csigui.voxelmask = csi.data.voxelmask;
     % end
     % 
     % % Add log
@@ -16812,8 +17589,14 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 if ~isfield(csi, 'timer')
+    
+    % Safety for selection of peaks
+    CSI_Log({'Executing timer-auto-click...'},{''});
+    CSI_getPeakOfInterest(csi.xaxis, 'Set a peak-of-interest preset');
+    csi = getappdata(gui.CSIgui_main, 'csi');
+    
     t = timer('TimerFcn',@(~,~)auto_click, 'StartDelay', 1); 
-    t.Period = 3; t.ExecutionMode = 'fixedRate';
+    t.Period = 2; t.ExecutionMode = 'fixedRate';
     t.start;
     csi.timer = t;
     msg = 'enabled.';
@@ -16832,56 +17615,7 @@ CSI_Log({'Timer-auto-click:'}, {msg});
 function an = sincQ(x)
 an = sin(x)./x;
 
-% --- Executes on button press in button_CSI_VoxelsShift.
-function button_CSI_VoxelsShift_Callback(~, ~, gui)
-% Subtract or add voxels to the CSI coordinates grid or by manipulating the
-% data indexing.
 
-uans = ...
-    getUserInput_Buttons('Shift MRS data by manipulating:',...
-                        {'Coordinate grid', 'Data index'});
-if isempty(uans), return; end
-
-switch uans
-    case 'Data index'
-        CSI_voxelShift_Indexing(gui);
-    case 'Coordinate grid'        
-        CSI_voxelShift_Coordinates(gui);
-end
-             
-% --- Shift coordinate grid of CSI volume to apply a voxel shift
-function CSI_voxelShift_Coordinates(gui)
-% Shift N-voxels by manipulating the cooridnate grid of the CSI data. 
-
-% Get csi data
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-if ~isfield(csi, 'ori'), return; end
-
-% Get orientation data
-ori = csi.ori;
-
-% Get requested shift
-uans = getUserInput({'Voxel shift for each direction?'},{'0.5 0.5 0.5'});
-if isempty(uans), return; end
-shft = str2double(strsplit(uans{1}));
-
-% Get previous voxel-coordinate calculation shift options.
-opts.fft_cor = ori.fft_cor; opts.vox_cor = ori.vox_cor;
-
-% Calculate coordinates.
-csi.ori = CSI_coordinates_calculate...
-    (ori.res, ori.offcenter, ori.dim, shft, opts);
-
-% Save to appdata
-setappdata(gui.CSIgui_main,'csi',csi);   
-gui = guidata(gui.CSIgui_main);
-
-% Recalculate all conversion data.
-MRI_to_CSIspace(gui);
-
-% --- Executes by selecting this method in CSI_VoxelsShift_Callback
-function CSI_voxelShift_Indexing(gui)
 
 % Get csi data
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
@@ -16969,7 +17703,7 @@ switch uans{1}
         % Get reference voxel
         uans = getUserInput(...
            {'Voxel index: '},{ones(1,numel(size(csi.data.raw))-1)});
-        vox_ref = num2cell(str2double(uans{1}));
+        vox_ref = num2cell(str2double(strsplit(uans{1})));
         
         % Get peak indices
         [~, ind_peaks] = max(real(doi),[],1);
@@ -17091,6 +17825,8 @@ for kk = 1:size(inp,2)
                 CSI_backupDel(gui);
             case 'setBackup'
                 gui.checkbox_backup.Value = str2double(inpvar);
+            case 'TestSomething'
+                button_TestSomething_Callback([], [], gui);
         end
     else
        btn = butfunc(qry);
@@ -17133,9 +17869,18 @@ if isempty(uans), CSI_Log({'Aborted deleting data.'},{''}); return; end
 tmp = strfind(uans{1},':');
 if isempty(tmp)
     tbdeleted = str2double(strsplit(uans{1}));
-else
-    tmp = strsplit(uans{1},':');
-    tbdeleted = str2double(tmp{1}):str2double(tmp{2}); 
+else    
+    tmp = strsplit(uans{1},' ');
+    tbdeleted = [];
+    for kk = 1:numel(tmp)
+        isRange = strsplit(tmp{kk}, ':');
+        if numel(isRange) > 1
+            range = str2double(isRange{1}):str2double(isRange{2});
+            tbdeleted(end+1:end+numel(range)) = range;
+        else
+            tbdeleted(end+1) = str2double(isRange{kk});
+        end
+    end
 end
 
 % Delete!
@@ -17149,7 +17894,7 @@ csi.data.dim = size(csi.data.raw);
 setappdata(gui.CSIgui_main,'csi', csi);
 
 % Update X-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
+CSI_2D_Scaling_Xaxis(gui.CSIgui_main,[],1);
 
 % Show nfo
 CSI_Log({'Deleted data (dimension|index): '}, {[lab ' | ' int2str(tbdeleted)]});
@@ -17416,309 +18161,6 @@ CSI_Log({'Zero-crossing statistics ---------- %',...
 end
 
 
-% --- Executes on button press in button_CSI_MapB1.
-function button_CSI_MapB1_Callback(~, ~, gui)
-% Choose a method to calculate B1.
-% Double CSI - use FA = invcos(M(2a) / 2M(a));
-% Multi CSI - use signal equation and fit FA, T1 and M0.
-
-% Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-% csi = getappdata(gui.CSIgui_main, 'csi');
-
-
-% User Input % --------------------------------------------------------- %
-qry = 'Choose a B1-method:';
-opt = {'Double-CSI', 'Multi-CSI'};
-uans = getUserInput_Popup({qry},{opt}, [], 'Calculate B1-Map');
-if isempty(uans), return; end
-
-switch uans{1}
-    case 'Multi-CSI'
-        CSI_MapB1_MultiCSI(gui);
-    case 'Double-CSI'
-        CSI_MapB1_DoubleCSI(gui);
-end
-
-% --- Executes by button_CSI_MapB1
-function CSI_MapB1_MultiCSI(gui)
-% Calculate B1 maps using multiple-CSI protocol and fitting the CSI-signal
-% equation for FA, T1 and M0.
-%
-% Requires TR. 
-% T1 range of upper lower bound
-% FA range of upper lower bound
-%
-%
-% Input: gui-handle of CSIgui
-
-% Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-% User Input % ------------------------------------------------- %
-
-% Read TR from file, Get stored TR, if available.
-if isfield(csi.xaxis,'TR'), TR = csi.xaxis.TR;
-elseif strcmp(csi.ext, 'dat') || isfield(csi,'twix')
-    fn = strtrim(strsplit(csi.filename, '|'));
-    TR = NaN(1,numel(fn));
-    for kk = 1:numel(fn)
-        twix = mapVBVD([csi.filepath fn{kk}]);
-        TR(kk) = twix.hdr.Config.TR./(1e6);        
-    end
-    clear('twix'); 
-else, TR = [0.3 0.5 0.65 0.8 1 1.2 1.5 2 4 6 8 10 12 14]; 
-end
-
-% Get TR, T1, Zero, Parallel - Add FA?
-ele = {'popup', 'edit', 'edit', 'edit', 'edit', 'edit', 'popup',...
-       'popup', 'popup', 'popup', 'popup', 'popup'};
-qry = {'TR Index:', 'Give a TR range [s]:',...
-       'Initial T1 [s]:', 'T1 boundary [s]:'...
-       'Initial FA [deg]:','FA Boundary [deg]:', ...
-       'Add S(0) = 0:', 'Extend TR by copying S(end): ',...
-       'Double fit cycle', 'Save data:', 'Display data:'};
-opt = {flip(csi.data.labels), num2str(TR, '%2.2f '), ...
-      '8.9', '8.8999 8.9001', '20', '1 90', {'Yes', 'No'},...
-      {'No', 'Once','Twice', 'Thrice'},...
-      {'Yes', 'No'}, {'Yes', 'No'}, {'Yes', 'No'}};
-uans = getInput(ele, qry, opt, 'Fit FA-maps');
-if isempty(uans), return; end
-
-% UANS - TR-index
-ind_TR = csi_findDimLabel(csi.data.labels,uans(1));        
-
-% UANS - TR
-TR = str2double(strsplit(uans{2}));
-csi.xaxis.TR = TR; setappdata(gui.CSIgui_main, 'csi', csi);
-
-% UANS - T1
-T1init = str2double(uans{3});
-
-% UANS - T1 Boundary
-T1bound = str2double(strsplit(uans{4}));
-
-% UANS - FA
-FAinit = str2double(uans{5});
-
-% UANS - FA Boundary
-FAbound = str2double(strsplit(uans{6}));
-
-% UANS - Add Zero
-if strcmp(uans{7},'Yes'), doZero = 1; else, doZero = 0; end
-
-% UANS - Extend TR(end) by S(end)
-if strcmp(uans{8},'No'), doExtend = 0; doExtendVal = 0; 
-else, doExtend = 1;  doExtendVal = numel(uans{8}) - 3; 
-end
-
-% UANS - Double Fit Cycle
-if strcmp(uans{9},'Yes'), doDouble = 1; else, doDouble = 0; end
-
-% UANS - Save data to file
-if strcmp(uans{10},'Yes'), doSave = 1; else, doSave = 0; end
-
-% UANS - Display data
-if strcmp(uans{11},'Yes'), doDisp = 1; else, doDisp = 0; end
-
-% Prepare FIT loop % ------------------------------------------- %
-
-% Add zero to TR if enabled
-if doZero, TR = [0 TR]; end
-
-% Add TR if doExtend S(end) for TR(end)*N
-if doExtend
-    TR = [TR repmat(TR(end), 1, doExtendVal)]; 
-    for kk = 0:doExtendVal-1, TR(end-kk) = TR(end-kk) * (2.5 - (0.5*kk));
-    end
-end
-
-% Get k-space index
-sz = size(csi.data.raw); % For Kx,Ky,Kz
-lab_spat = {'kx','ky','kz', 'x', 'y', 'z'};
-ind_spat = csi_findDimLabel(csi.data.labels,lab_spat);
-ind_spat(isnan(ind_spat)) = [];        
-
-% k-space order as is.
-ind_spat = sort(ind_spat);
-
-% KEEP THE ORDER OF KXKYKZ HERE!
-
-% Permute: #S x Spatial Dimensions x TR-dimensions x Rest
-permv = [1 ind_spat ind_TR];
-add_ind = find(~ismember(1:numel(csi.data.dim), permv) == 1);
-permv = [permv add_ind];
-csi.data.raw = permute(csi.data.raw, permv);
-
-% Create voxel index for loop
-vec = arrayfun(@(x) 1:x, sz(ind_spat), 'UniformOutput', false);
-voi = allCombinations(vec);
-ind_full = arrayfun(@(x) 1:x, size(csi.data.raw), 'UniformOutput', false);
-ind_full(ind_spat) = {0};
-
-% Double iteration value
-if doDouble, double_iter = 2; else, double_iter = 1; end
-fit_par_di = cell(1,double_iter);
-
-% CSI-fitting model: PAR(1) = FA, PAR(2) = T1 and PAR(3) = M0.
-csi_model = @(PAR, TR) PAR(3) * (1-exp(-TR./PAR(2))).*sind(PAR(1))./ ...
-                                (1-(exp(-TR./PAR(2)).*cosd(PAR(1))));
-
-% Fit twice - using first calculated T1 average and FA for initial fit
-% parameters.
-
-for di = 1:double_iter
-        
-    if di == 1 % Initiate output-var
-        ind_spat_sz_c = num2cell(csi.data.dim(ind_spat));
-        fit_par = NaN(ind_spat_sz_c{:}, 3);         
-        rsq = NaN(1,ind_spat_sz_c{:}); 
-        confint = NaN(ind_spat_sz_c{:}, 3, 2);               
-        M0bound = [NaN NaN]; opts = cell(ind_spat_sz_c{:}, double_iter);
-        output = cell(ind_spat_sz_c{:}, double_iter);  
-    end
-    
-    % @Second iteration: Set new boundaries, get fitted FA/T1.
-    if doDouble && di == 2 
-        FA = fit_par(:,:,:,1); T1 = fit_par(:,:,:,2); 
-        T1init = mean(T1(:)); T1std = std(T1(:)); fac = 0.01;
-        T1bound = T1init + [-fac*T1std +fac*T1std];
-    end
-    
-    % Display fit-variable limits   
-    CSI_Log({''},{''});
-    CSI_Log({'% ----------------------------------- %'},{''});
-    CSI_Log({'M0:'},{'Voxel and T1/FA dependent.'});
-    CSI_Log({'TR:', 'FA-Initial:','FA-boundary:',...
-                    'T1-Initial:', 'T1-boundary:', },...
-            {TR, FAinit, FAbound, T1init, T1bound});    
-    CSI_Log({sprintf('Fit iteration #%i ------------------- %', di)},{''});
-    
-    yval = NaN(1, numel(TR));
-    for kk = 1:size(voi,2) % Loop voxels
-
-        % Continue-second fit dialog box.
-        if di == 2 && kk == 1
-            uans = getUserInput_Buttons({'Start second iteration?'},...
-                {'Continue', 'Stop'}, [], 'B1-map fitting');
-            if isempty(uans), loadBar(NaN); return; end
-            switch uans
-                case 'Continue' % Continue script...
-                case 'Stop', loadBar(NaN); return;
-            end
-        end
-        
-        % Progress bar
-        barObj = loadBar(kk./size(voi,2), 'Fitting voxels...', barObj);
-
-        % Use index-lookup to get voxel-data
-        voitmp = num2cell(voi(:,kk)); ind_full(ind_spat) = voitmp;
-        
-        % Convert data to double
-        spoi = squeeze(double(csi.data.raw(ind_full{:})));
-        
-        %  Peak Value
-        ydat = max(real(spoi),[],1);
-        
-        % lsqcurvefit properties
-        opt = optimoptions(@lsqcurvefit,'Display', 'off', ...
-            'TolFun', 1e-8, 'TolX', 1e-8, ...
-            'MaxFunEvals', 600, 'MaxIter', 600);
-
-        % Add zero to the data
-        if doZero, yval(1:end-doExtendVal) = [0 ydat]; 
-        else, yval(1:(end-doExtendVal)) = ydat; end
-
-        % Extend by S(end)
-        if doExtend 
-            yval(end-doExtendVal+1:end) = ...
-                repmat(yval(end-doExtendVal), 1, doExtendVal); 
-            % opt.Weights = ...
-            % [opt.Weights repmat(opt.Weights(end), 1, doExtendVal)];
-        end
-        
-        % Get fitted FA from first iteration if second iteration
-        if doDouble && di == 2, FAinit = FA(voitmp{:}); end
-        
-        % Initial M0
-        M0init = max(yval) .* ...
-            (1- (exp(-TR(end-doExtendVal)./T1init).*cosd(FAinit))) ./ ...
-            (sind(FAinit).*( 1-exp(-TR(end-doExtendVal)./T1init)));
-        M0bound(1) = M0init * 0.75; M0bound(2) = M0init * 1.25;        
-    
-        % Upper and lower bound of fitting parameters.
-        % M0 needs to be adjusted according T1/FA init
-        lb = [FAbound(1)  T1bound(1)  M0bound(1)];
-        ub = [FAbound(2)  T1bound(2)  M0bound(2)];
-        starting_values =  [FAinit T1init M0init];
-                
-        % Fit using nonlinear least square curve fitting fcn        
-        [beta, ~, R, ~, outp, ~, J] = ...
-        lsqcurvefit(csi_model, starting_values, TR, yval, lb, ub, opt);    
-        
-        % Store output
-        outp.startpoint = starting_values;
-        outp.lower = lb; outp.upper = ub;  
-        outp.TR = TR; outp.yval = yval;
-        outp.beta = beta; outp.model = csi_model;
-
-        % Store fit-options and output
-        output{voitmp{:}, di} = outp; opts{voitmp{:}, di} = opt;
-
-        % Store fit-parameters per voxel
-        fit_par(voitmp{:}, :) = beta;    
-         
-        % R-Squared
-        yfit  = csi_model(beta,TR);
-        rsq(:, voitmp{:}) = ...
-            1 - (sum((yval(:)-yfit(:)).^2)/sum((yval-mean(yval)).^2));
-                
-        % Confidence Interval  
-        confint(voitmp{:}, :,:) = nlparci(beta, R, 'jacobian', J);                
-    end
-    loadBar(NaN);
-
-    % Store fit-par of volume per double-iter
-    fit_par_di{di} = fit_par;
-
-    % Save data to file? % -------------------------------------- %
-    if doSave
-        if isfield(csi.data,'filepath'), fp = csi.data.filepath;
-        else, fp = [];
-        end
-        tstr = sprintf('Save data iteration #%i', di);
-
-        [fn_out, fp_out, idx] = ...
-            uiputfile({'*.mat','MATLAB File';}, tstr, fp);
-        if idx ~= 0
-            fpn = [fp_out fn_out]; 
-            fit_par_label = {'FA', 'T1', 'M0'};
-            save(fpn, 'fit_par', 'TR', 'rsq', 'confint', 'opts', ...
-                'csi_model', 'fit_par_label', 'output');
-        end
-    end
-    
-    % Display data? % ------------------------------------------- %
-    if doDisp               
-        % Fit parameters
-        FAt = permute(fit_par(:,:,:,1), [4 1 2 3]);
-        CSI_dataAs_Initiate(FAt,  ['FA - ' int2str(di)], gui,...
-            csi.data.labels);        
-        T1t = permute(fit_par(:,:,:,2), [4 1 2 3]);
-        CSI_dataAs_Initiate(T1t,  ['T1 - ' int2str(di)], gui,...
-            csi.data.labels);
-        M0t = permute(fit_par(:,:,:,3), [4 1 2 3]);
-        CSI_dataAs_Initiate(M0t,  ['M0 - ' int2str(di)], gui,...
-            csi.data.labels);
-        % Goodness of fit
-        CSI_dataAs_Initiate(rsq,  ['R2 - ' int2str(di)], gui,...
-            csi.data.labels);        
-    end
-
-end % End of double fit-iterations
-
-% --- Executes by button_CSI_MapB1
 function CSI_MapB1_DoubleCSI(gui)
 % Given two CSI measurements with M1(a) and M2(2a), calculate the flipangle
 % using: invcos(m2/2*m1) = FA.
@@ -17734,6 +18176,7 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 % -- USERINPUT -- %
 
 % \\ Get peak of interest
+CSI_Log({'Executing double-CSI FA-mapping...'},{''});
 range = CSI_getPeakOfInterest(csi.xaxis, 'Calculate B1-maps');
 if isempty(range), return; end
 doi = CSI_getDataAtPeak(csi.data.raw, csi.xaxis, range);
@@ -17930,13 +18373,13 @@ switch uans{1}
     plot_par.dim = plot_par.dim(1:3); plot_par.data_dim = 3; % 3D Only.
     
     % Add previous-voxel mask if available.
-    if isfield(csi, 'voxelmask')
-        msz = size(csi.voxelmask);
+    if isfield(csi.data, 'voxelmask')
+        msz = size(csi.data.voxelmask);
         if numel(msz) > 3
             ind = num2cell(ones(1,numel(msz)-4)); 
-            plot_par.mask = squeeze(csi.voxelmask(:,:,:,:,ind{:})); 
+            plot_par.mask = squeeze(csi.data.voxelmask(:,:,:,:,ind{:})); 
         else
-            plot_par.mask = squeeze(csi.voxelmask); 
+            plot_par.mask = squeeze(csi.data.voxelmask); 
         end
     end
     
@@ -17977,12 +18420,59 @@ if numel(msz) ~= numel(csz) % If there are higher order indexes
 end
 
 % Clean up
-csi.voxelmask = mask;
+csi.data.voxelmask = mask;
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Message user
 CSI_Log({'Exclusion voxel mask created.'},...
         {'Applicable to data visualization'});  
+
+function mask = CSI_VoxelMask_Checksum(mask, dsz, sloi)
+% Returns the voxelmask in the correct format for the given size. This can
+% be used to ensure any masking isnt broken because of index/dimension
+% changes due calculations and such.
+
+if nargin < 3, sloi = {NaN}; end
+
+msz = size(mask);
+
+% Permute vector to move mask to spatial dimension
+if msz(1) ~= 1
+    permv = [numel(msz)+1 1:numel(msz)];
+    mask = permute(mask, permv); msz = size(mask);    
+end
+
+% Check for non-spatial dimensions and if requested sizes match, plus
+% selections of possible slice/plane of interest
+if numel(msz) ~= numel(dsz) || ...
+            sum(msz(2:end) ~= dsz(2:end)) < numel(dsz(2:end))
+
+    % Repeat mask over non-spatial dimensions    
+    dimrem = dsz(numel(msz)+1:numel(dsz));
+    dimrem = [ones(1,numel(msz)) dimrem];
+    mask = repmat(mask, dimrem); 
+
+    % Select all mask-slices/planes of interest in the mask-array
+    cell_ind = arrayfun(@(x) 1:x, dsz, 'UniformOutput', false);
+    % First dimension of mask is only single value
+    cell_ind{1} = 1;
+    % Set specific slice/indexes of interest
+    if sum(cellfun(@isnan, sloi)) == 0
+        cell_ind(4:4+numel(sloi)-1) = sloi; 
+    end
+    % Cut mask
+    mask = mask(cell_ind{:}); msz = size(mask);
+end
+
+
+
+% Last safety check
+if sum(msz(2:end) ~= dsz(2:end))
+    mask = zeros(dsz);
+    CSI_Log({'Mask conversion error.'},{'Mask set to empty.'});        
+end
+ 
+
 
 % --- Executes on button press in button_CSI_Statistics.
 function button_CSI_Statistics_Callback(~, ~, gui)
@@ -17993,12 +18483,15 @@ function button_CSI_Statistics_Callback(~, ~, gui)
 if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
+% Some log for user
+CSI_Log({'Executing statistics calculations...'},{''});
+
 % Ask user data-range of interest
 qry = {'Calculate statistics over slice(s):', ...
        'Apply exclusion voxel-mask:', 'Select peak/frequency range:',...
        'Measure of interest:'};
-def = {{'All', 'Current','Displayed'},{'Yes','No'},{'No','Yes'},...
-       {'Signal', 'SNR', 'Linewidth'}};
+def = {{'All', 'Current','Displayed', 'Select'},{'Yes','No'},{'No','Yes'},...
+       {'Signal', 'SNR', 'Linewidth', 'Peak Location'}};
 uans = getUserInput_Popup(qry, def);
 if isempty(uans), return; end
 
@@ -18013,7 +18506,7 @@ doi = csi.data.raw;
 % LW requires full-spectrum and a peak will be selected during 
 % LW-calculations, therefor, if user wants to select peak - itll be done
 % later. Same goes for SNR.
-if doPeak && strcmp(uans{4}, 'Signal')    
+if doPeak && (strcmp(uans{4}, 'Signal')   || strcmp(uans{4}, 'Peak Location')) 
     poi = CSI_getPeakOfInterest(csi.xaxis,'Calculate statistics');
     doi = CSI_getDataAtPeak(doi, csi.xaxis, poi);
     if isempty(poi), return; end
@@ -18050,43 +18543,50 @@ switch uans{1}
         % Log message
         addStr = repmat(' %i |', 1, numel(sloi));
         msg = sprintf(['Displayed slice only: ' addStr], sloi{:});
+    case 'Select'
+        
+        % Create queries for user (dim lists including "all" option)
+        def = arrayfun(@(x) 1:x, dim(4:end), 'uniform', 0); 
+        nqry = numel(def);
+        for kk = 1:numel(def)
+            def{kk} = ['All' arrayfun(@num2str, def{kk}, 'Uniform', 0)];       
+        end   
+        elm = repmat({'popup'}, 1, nqry); 
+        qry = csi.data.labels(4:end);
+        sel_uans = getInput(elm, qry, def, 'Statistics');
+        if isempty(sel_uans), return; end
 
+        % Message for LOG
+        addStr = repmat(' %s |', 1, numel(sel_uans));
+        msg = sprintf(['Selected data: ' addStr], sel_uans{:});
+
+        % Process userinput
+        sel_uans = str2double(sel_uans); non_nan = find(~isnan(sel_uans));
+        doi_cell_layout = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);
+        doi_cell_layout(non_nan+3) = num2cell(sel_uans(non_nan));      
 end
+
 % Data of interest
 doi = doi(doi_cell_layout{:});
 
 % Voxel mask % --------------------------------------------------------- %
 if doMask
     % Apply voxel-mask
-    if ~isfield(csi, 'voxelmask')
+    if ~isfield(csi.data, 'voxelmask')
         button_CSI_VoxelMask_Callback([], [], gui)
     end
     csi = getappdata(gui.CSIgui_main, 'csi');
     % User can quit/cancel voxel-mask creation - this catches that error
     % and continues without creating masked-data
-    if isfield(csi, 'voxelmask')
-        mask = csi.voxelmask;  
-    
-        % Data-size - is expected to have spatial dimensions on ind(2:4);
-        dsz = size(doi); msz = size(mask);     
-    
-        % Retrieve mask for current size: if non-spatial dimensions are 
-        % used to calculate a parameter, that index is not present in the 
-        % data-volume.
-        if numel(msz) ~= numel(dsz) || ...
-                sum(msz(2:end) ~= dsz(2:end)) < numel(dsz(2:end))
-            cell_ind = arrayfun(@(x) 1:x, dsz, 'UniformOutput', false);
-            % First dimension of mask is only single value
-            cell_ind{1} = 1;
-            % Set specific slice of interest (see % get DOI % --- %)
-            if exist('sloi','var'), cell_ind(4:4+numel(sloi)-1) = sloi; end
-            % Cut mask
-            mask = mask(cell_ind{:});
-        end
-  
-        % Apply mask to data
-        msktmp = repmat(mask,size(doi,1), 1, 1) == 1;        
-        doi(msktmp) = (NaN +1i*NaN);
+    if isfield(csi.data, 'voxelmask')
+        
+        mask = csi.data.voxelmask;      
+
+        % Two thigns can happen here - either only sloi or sloi + higher
+        if ~exist('sloi', 'var'), sloi = {NaN}; end
+        mask = CSI_VoxelMask_Checksum(mask, size(doi), sloi);
+        doi(mask) = (NaN + 1i*NaN);
+
     else
         CSI_Log({'Voxel-Mask was not loaded into memory.'}, ...
                 {'Continuing with full data-volume without masking.'})
@@ -18098,14 +18598,12 @@ end
 switch uans{4}
     case 'Signal'
         % Get correct signal-unit
-        data_unit = get(gui.popup_plotUnit,'String');
-        data_unit = data_unit{get(gui.popup_plotUnit,'Value')};
-        doi = CSI_getUnit(doi, data_unit);
+        doi = CSI_getUnit_data(doi, gui);
     case 'SNR'
         sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./12)});
-        if isempty(sans), return; end
-        masksz = str2double(sans);
-        doi = csi_SNR(doi, masksz,1);        
+        range = CSI_getPeakOfInterest(csi.xaxis, 'SNR');
+        if isempty(sans), return; end; masksz = str2double(sans); 
+        doi = csi_SNR(doi, masksz, 1, range); 
     case 'Linewidth'
 
         % Prep data
@@ -18130,6 +18628,31 @@ switch uans{4}
         doi = cellfun(@double, doi); doi(isnan(doi)) = 0; 
         if doMask, doi(mask) = NaN; end
 
+    case 'Peak Location'
+
+        % Ask user - in ppm or unitless
+        if isfield(csi.xaxis, 'ppm')
+            uans_pl = getUserInput_Popup({'Axis unit of interest:'},...
+                                     {{'unitless', 'ppm'}});
+            if isempty(uans_pl), return; end
+            doPPM = 0;
+            if strcmp(uans_pl{1}, 'ppm'), doPPM = 1; end
+        end
+
+        % Correct data-unit
+        doi = CSI_getUnit_data(doi, gui);
+        % Get maximum location       
+        [~, doi] = max(real(doi));
+        % Correct for peak-selection
+        if doPeak, doi = doi + poi(1) - 1; end
+        % Apply mask
+        if doMask, doi(mask) = NaN; end
+
+        % Apply conversion to ppm
+        if doPPM
+            ppm = csi.xaxis.ppm; nanBool = isnan(doi);           
+            doi(nanBool) = 1; doi = ppm(doi); doi(nanBool) = NaN;            
+        end
 end
 
 
@@ -18138,157 +18661,5 @@ stats = csi_statistics_of_volume(doi); stats.measure = uans{4};
 Statistics_Viewer(stats);
 
 % Log to user
-CSI_Log({'Statistics calculated over:'}, {msg});
-
-% --- Executes on button press in button_CSI_NoiseDecorrelation.
-function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind)
-% Apply either Cholesky or zero-phase component whitening transformations
-% to the multi-channel csi data i.e. noise decomposition, noise
-% decorrelation.
-%
-% If method, source and chan_ind arent given, userinput is required.
-
-functag = 'Decorrelation:'; % Ease of CSI_Log
-
-% Create backup
-backup = gui.checkbox_backup.Value; 
-if backup, CSI_backupSet(gui, 'Before noise decorrelation.'); end
-
-% Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-% User Input % ------------------------------------------------------- %
-if nargin < 4
-    chan_ind = csi_findDimLabel(csi.data.labels,{'chan','cha'});
-    chan_ind(isnan(chan_ind)) = []; chan_ind_def = 1:numel(csi.data.labels);
-    if ~isempty(chan_ind)
-        chan_ind_def([1 chan_ind]) = chan_ind_def([chan_ind 1]);   
-    end
-    chan_ind_def = csi.data.labels(chan_ind_def);
-    
-    qry = {'Noise decorrelation method:', ...
-           'Calculate noise covariance matrix using:', 'Coil index:'};
-    def = {{'Cholesky', 'Whitening', 'ZCA'}, ...
-           {'Measurement', 'Data', 'ID-Matrix'}, chan_ind_def};
-    uans = getUserInput_Popup(qry,def);
-    if isempty(uans), return; end
-
-
-    % --- % Analyse user input
-
-    % Decorrelation method
-    method = uans{1}; 
-    
-    % Noise-cov source.
-    src = uans{2};
-
-    % Coil/Channel index
-    chan_ind = find(strcmp(uans{3}, csi.data.labels) == 1);
-
-end
-
-
-% Noise-covariance source
-switch src
-    case 'Data',        do_NoiseData = 0;
-    case 'Measurement', do_NoiseData = 1;    
-    case 'ID-Matrix',   do_NoiseData = 2;
-end
-
-
-% Prepare Noise Data % ----------------------------------------------- %
-
-if do_NoiseData == 1
-    if isfield(csi.data,'noise')
-        % Run noise-prepare fcn
-        [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
-        if ~isstruct(csi)
-            CSI_Log({'Decorrelation:'}, {'Aborted.'});
-            return; 
-        end
-
-        % Message to user
-        CSI_Log({functag},...
-                {'Noise-data processed and stored.'});  
-    else
-        do_NoiseData = 0; 
-        CSI_Log({functag},...
-                {'No noise-data present, using voxel-noise instead.'});
-    end
-end
-
-% Noise Covariance Matrix % -------------------------------------------- %
-if isfield(csi.data, 'noise') && do_NoiseData == 1
-    
-    % Get noise-cov using noise data
-    noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
-                                              csi.data.noise.labels);
-        
-    % Copy it for nVoxels
-    sz = size(csi.data.raw); % Data size
-    non_spat_ind = ...
-        csi_findDimLabel(csi.data.labels,...
-        {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
-    non_spat_ind(isnan(non_spat_ind)) = []; 
-    non_spat_ind(non_spat_ind > numel(sz)) = [];
-    sz(non_spat_ind) = [];
-
-    % Covariance matrix
-    noise_cov = repmat({noise_cov}, sz);
-
-    % NFO Update
-    CSI_Log({functag},...
-            {'Noise-data used to calculate noise-covariance matrix.'});
-
-elseif do_NoiseData == 0
-    % Noise covariance matrix required for noise-decorrelation
-    % calculated using noise in data itself.
-    noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
-    CSI_Log({functag },...
-            {'Voxel-data used to calculate noise-covariance matrices.'});
-
-elseif do_NoiseData == 2
-    % Calculate the ID-matrix for use as noise-cov matrix
-    nVox = prod(csi.data.dim(2:end));
-    noise_cov = ...
-        repmat({diag(ones(csi.data.dim(chan_ind),1))},nVox,1); 
-    CSI_Log({functag},...
-            {'Using the ID-matrix as the noise-covariance matrix.'});
-
-end
-
-% Store noise-covariance matrix
-csi.data.noise_cov = noise_cov;
-
-switch method
-    case 'Whitening'
-        % Decorrelate signal (Whitening as done via WSVD)
-        [csi.data.raw, csi.data.scaleMatrix] = ...
-        csi_decorrelate_noise_whitening(csi.data.raw, chan_ind, noise_cov);
-
-    case 'Cholesky'
-
-        % Decorrelate signal (Cholensky)
-        [csi.data.raw, csi.data.noise_cov_chol, csi.data.scaleMatrix] = ...
-        csi_decorrelate_noise_chol(csi.data.raw, chan_ind, noise_cov);
-
-    case 'ZCA'
-        
-        % Decorrelate signal (ZCA)
-        [csi.data.raw, csi.data.scaleMatrix] = ...
-        csi_decorrelate_noise_zca(csi.data.raw, chan_ind, noise_cov);
-end
-
-% --------------------------------------------------------------------- %
-
-% Store data %
-setappdata(gui.CSIgui_main,'csi', csi);
-
-% Update x-axis data
-CSI_2D_Scaling_calc_xaxis(gui.CSIgui_main,[],1);
-
-% Show nfo
-CSI_Log({functag},{['Applied ' method]});
-
+CSI_Log({'Statistics calculated over: '}, {msg});
 

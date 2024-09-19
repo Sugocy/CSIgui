@@ -225,8 +225,7 @@ ax = cell(plot_par.dim);
 
 % Loop each tab of figure
 for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
-    barObj = ...
-        loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...', barObj);
+    loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...');
 
     tab_index = plot_par.tabs_index_table(sli,:);
     tab_index_cell = num2cell(tab_index);
@@ -272,9 +271,9 @@ if plot_par.plot_img == 0, return; end
 
 tgui = guidata(plot_par.fh);
 
-barObj = loadBar(0,'Plotting images...');
+
 for tabi = 1:plot_par.tabs_total
-    barObj = loadBar(tabi./plot_par.tabs_total , 'Plotting images...', barObj);
+    loadBar(tabi./plot_par.tabs_total , 'Plotting images...');
 
     % Current tab - its index in tab format
     tab_index = plot_par.tabs_index_table(tabi,:);
@@ -427,7 +426,7 @@ inp_fcn = repmat({@VoxelMask_selectVoxel}, size(plot_par.ax));
 cellfun(@(x,y) set(x, 'ButtonDownFcn', y), plot_par.ax, inp_fcn);
            
 % Save and exit.
-loadBar(NaN); tgui.plot_par = plot_par; guidata(fh, tgui); 
+tgui.plot_par = plot_par; guidata(fh, tgui); 
 
 function VoxelMask_addMask(fh)
 

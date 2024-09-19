@@ -32,6 +32,9 @@ if nargin <= 4, mask_side = 0; end
 % Noise mask
 sz = size(spectrum); 
 
+% NaN position
+nan_ind = isnan(spectrum);
+
 if mask_side == 0
     mask_size_double = [round(mask_sz./2) mask_sz-round(mask_sz./2)];
     mask = [1:mask_size_double(1) (sz(1) - mask_size_double(2) + 1):sz(1)];
@@ -66,7 +69,7 @@ elseif method == 1
 end
 
 % Convert to matrix.
-SNR = cell2mat(SNR);
+SNR = cell2mat(SNR); SNR(nan_ind) = NaN;
 
 
 function SNR = SNRfunc(spectrum, noise, range)

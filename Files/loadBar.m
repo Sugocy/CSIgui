@@ -13,9 +13,12 @@ if nargin == 1, info = 'Busy...'; end
 % Normalize percentage
 if ~isnan(perc) && perc > 1, perc = perc/100; end
 
-if nargin < 3 || ~ishandle(barObj)
-% Check for bar-figure
-barObj = findobj('Type','Figure','Tag','loadBar');
+% Check for barObject if necessary
+if nargin < 3    
+    % Check for bar-figure
+    barObj = findobj('Type','Figure','Tag','loadBar');
+elseif ~ishandle(barObj)
+    barObj = findobj('Type','Figure','Tag','loadBar');
 end
 
                 % ------- % Create loadBar % ------- %
