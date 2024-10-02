@@ -2,7 +2,8 @@ function auto_click
 
 % fprintf('Running!\n')
 
-N = 0; boi = {'CSIgui_UI_popup', 'CSIgui_UI_edits', 'CSIgui_UI_tick', 'CSIgui_UI_button'}; 
+N = 0; boi = {'CSIgui_UI_popup', 'CSIgui_UI_edits',...
+              'CSIgui_UI_tick', 'CSIgui_UI_button', 'getInput'}; 
 while N ~= 1
     
     for kk = 1:numel(boi)

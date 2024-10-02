@@ -15,7 +15,7 @@ val = abs(val); sign = -1;
 
 val_bool = 1; dt = 10.^-(acc); n = 0;
 while val_bool        
-    val = val + (sign * dt * (10.^n));
+    val = val + (sign .* dt .* (10.^n));
     if sign, val_bool = val > 0; else, val_bool = val < 0; end
     n = n+1;
 end

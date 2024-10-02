@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 13-May-2024 15:45:51
+% Last Modified by GUIDE v2.5 26-Sep-2024 13:17:23
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -5370,8 +5370,8 @@ uans = getUserInput_Popup({'Orientation:'},{{'Sagittal', 'Coronal'}});
 if isempty(uans), return; end
 
 switch uans{1}
-    case 'Sagittal', permvec = [2 3 1]; 
-    case 'Coronal',  permvec = [1 3 2];
+    case 'Sagittal', permvec = [2 3 1]; aim = 0;
+    case 'Coronal',  permvec = [1 3 2]; aim = 1;
 end
 
 % Sagittal: Y x Z - SLX --> rot = [2 3 1]
@@ -5385,10 +5385,11 @@ if isempty(spat_dim), spat_dim = [2 3 4]; end
 
 % Permute vector
 permv = 1:numel(size(csi.data.raw));
-permv(spat_dim) =  spat_dim(permvec); 
+permv(spat_dim) = spat_dim(permvec); 
 
 % Permute CSI-data
 csi.data.raw = permute(csi.data.raw, permv);
+if aim, csi.data.raw = flip(csi.data.raw, find(permv == spat_dim(3))); end 
 
 % Permute resolution
 csi.ori.res = csi.ori.res(permvec);
@@ -5422,7 +5423,8 @@ if doMRI
     
     % Permute images
     conv.data = permute(conv.data, permvec4img);
-
+    if aim, flip(conv.data,1); end
+    
     % Permute orientation data
     conv.res = conv.res(permvec2);
 
@@ -5437,7 +5439,7 @@ if doMRI
 end
 
 % --- Voxelmask
-if isfield(csi,'voxelmask')
+if isfield(csi.data,'voxelmask')
          
     % Permute vector
     permv = 1:numel(size(csi.data.voxelmask));
@@ -18663,3 +18665,10 @@ Statistics_Viewer(stats);
 % Log to user
 CSI_Log({'Statistics calculated over: '}, {msg});
 
+
+
+% --- Executes on button press in button_MRI_B0map.
+function button_MRI_B0map_Callback(hObject, eventdata, handles)
+% hObject    handle to button_MRI_B0map (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)

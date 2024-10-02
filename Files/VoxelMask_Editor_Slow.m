@@ -1,5 +1,5 @@
 function [varargout] = VoxelMask_Editor(plot_par)
-% Voxel Editor - V2 - Dr. Quincy van Houtum, 2024
+% Voxel Editor - V1 - Dr. Quincy van Houtum, 2023
 %
 % Input ---------------------------------------------------------------- %
 % plot_par struct with fields...
@@ -16,11 +16,9 @@ function [varargout] = VoxelMask_Editor(plot_par)
 %
 % Output --------------------------------------------------------------- %
 %
-% Mask of size dim with value 1 where voxels were selected.
+% Mask of size dim with ones where voxels were selected.
 %
-%
-% Version 2: updated plot-method to use single-axis per tab to speed up 
-%            GUI startup (by a factor of 15!).
+% 
 
 if ~isfield(plot_par, 'colors')
     plot_par.colors.main         = [0.1 0.1 0.1];
@@ -57,27 +55,14 @@ VoxelMask_addImages(plot_par.fh);
 % --- % Add menubar with options
 VoxelMask_addMenu(plot_par.fh)
 
-% --- % Add visual mask
-VoxelMask_PlotMask(plot_par.fh);
-
 % --- % Add voxel-selector 
-% VoxelMask_addSelectVoxel(plot_par.fh)
+VoxelMask_addSelectVoxel(plot_par.fh)
 
 % --- % Add previous-selection, if available
-% VoxelMask_addMask(plot_par.fh)
-
-tgui = guidata(plot_par.fh);
-plot_par = tgui.plot_par;
-
-set(tgui.plot_par.fh,'WindowButtonMotionFcn',@mouseHover);
-set(tgui.plot_par.fh,'WindowbuttonDownFcn',@mouseClick);
-
-% Get GUI data of figure
-guidata(tgui.plot_par.fh, tgui);
+VoxelMask_addMask(plot_par.fh)
 
 % Set output
 fh = plot_par.fh;
-
 
 % ---------------------------------------------------------------------- %
 
@@ -85,16 +70,15 @@ fh = plot_par.fh;
 uiwait(fh); % UIresume by closeRqstFnc.
 
 if nargout
-    % Update gui-data
-    tgui = guidata(fh);
     % create mask-output
-    varargout{1} = tgui.plot_par.mask;
+    varargout{1} = VoxelMask_Selection_get(fh);
 
     delete(fh);
 else
     delete(fh);
 end
 delete(fh);
+
 
 function fh = VoxelMask_createFigure(tag, clr)
 % Create a figure-window with specific settings.
@@ -236,29 +220,43 @@ tgui = guidata(fh);
 % Plot data for each tab: voxel grid and more plot settings.
 plot_par = tgui.plot_par;
 
-plot_par.alpha = 0.35; 
-
 % Storage for each axis.
-ax = cell(1,plot_par.tabs_total);
+ax = cell(plot_par.dim);
 
 % Loop each tab of figure
 for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
-    %     loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...');
+    loadBar(sli./plot_par.tabs_total , 'Adding voxel-axis...');
 
     tab_index = plot_par.tabs_index_table(sli,:);
     tab_index_cell = num2cell(tab_index);
     
-    % Create axis
-    ax{tab_index_cell{:}} = axes('parent',tgui.tabh{tab_index_cell{:}});    
-    
-    tbsz = tgui.tabh{tab_index_cell{:}}.Position;
-    pos = [0 0 tbsz(3) tbsz(4)];
-    set(ax{tab_index_cell{:}}, 'Unit', 'Normalized',...
-           'Position', pos,...
-           'LineWidth', 0.1, 'Xtick',[], 'Ytick', [],...
-           'Box', 'off');      
+    % Plot csi voxel per axis in plot_par.grid
+    for xi = 1:plot_par.dim(1)                  % Col loop. X
+        for yi = 1:plot_par.dim(2)              % Row loop. Y
+
+            % AXIS DETAILS 
+            % X and Y position in the figure of the axis to plot.
+            x   = plot_par.grid.x(yi,xi); y = plot_par.grid.y(yi,xi);
+            % Position of axis to plot
+            pos = [x y plot_par.res(1) plot_par.res(2)];
+            % Create axis with pos(3,4) size at pos(1,2) position
+            if ~ishandle(tgui.tabh{tab_index_cell{:}}), return; end
+            ax{xi, yi, tab_index_cell{:}} = ...
+                axes('parent',tgui.tabh{tab_index_cell{:}},'position',pos);           
+            % Add index data
+            ax{xi, yi, sli}.UserData = [xi, yi, sli];
+            
+            % AXIS COSMETICS
+            set(ax{xi,yi,tab_index_cell{:}},...
+                   'Color','None',...
+                   'XColor', plot_par.colors.main,...
+                   'YColor', plot_par.colors.main,...
+                   'LineWidth', 1, 'Xtick',[], 'Ytick', [],...
+                   'TickLength',[0 0.00001], 'Box', 'off');             
+        end 
+    end 
 end
-plot_par.ax = ax;  tgui.plot_par = plot_par; guidata(fh, tgui); loadBar(NaN);
+tgui.plot_par.ax = ax; guidata(fh, tgui); loadBar(NaN);
 
 function VoxelMask_addImages(fh)
 % Add image to each tab/slice of the figure.
@@ -316,7 +314,7 @@ function VoxelMask_addGrid(target, target_sz, dim, range, grid_clr)
 % Get figure size for normalization of grid thickness
 w = target_sz(1); h = target_sz(2);
 % Define using vertical line the thickness of horizontal ones 
-wv = 2; wh = wv; wv = wv./w; wh = wh./h; 
+wv = 3; wh = wv; wv = wv./w; wh = wh./h; 
 % Line height or width for both vertical and horizontal grid lines;
 h = 1; 
 
@@ -374,7 +372,7 @@ tgui.mb.selection.copy.all =  uimenu(tgui.mb.selection.copy.main,...
 tgui.mb.selection.copy.slice =  uimenu(tgui.mb.selection.copy.main,...
     'Label', 'Add', 'Callback', @VoxelMask_MB_copy);                    
 tgui.mb.selection.copy.memory =  uimenu(tgui.mb.selection.copy.main,...
-    'Label', 'to Memory', 'Callback', @VoxelMask_MB_copy);   
+    'Label', 'Memory', 'Callback', @VoxelMask_MB_copy);   
 tgui.mb.selection.copy.paste =  uimenu(tgui.mb.selection.copy.main,...
     'Label', 'Paste', 'Callback', @VoxelMask_MB_copy); 
 
@@ -410,207 +408,81 @@ tgui.mb.image.contrast.main = uimenu(tgui.mb.image.main, ...
 % Update gui-data
 guidata(fh, tgui);                 
 
-function tgui = VoxelMask_PlotMask(fh)
-% Plot a surface to use as a click-mask
+function VoxelMask_addSelectVoxel(fh)
+% Add voxel-selection function to each voxel-axes
 
 % Get GUI data of figure
 tgui = guidata(fh);
 % Plot data for each tab: voxel grid and more plot settings.
 plot_par = tgui.plot_par;
 
-if ~isfield(plot_par, 'mask')
-    plot_par.mask = zeros(plot_par.dim);
-end
+% Set hittest of axes-children off
+inp_off = repmat({'Off'}, size(plot_par.ax));
+cellfun(@(x,y) set(get(x,'Children'),'HitTest', y), ...
+               plot_par.ax, inp_off, 'uniform', 0); % X and Y
+           
+% Set ButtonDownFcn to @VoxelMask_selectVoxel
+inp_fcn = repmat({@VoxelMask_selectVoxel}, size(plot_par.ax));
+cellfun(@(x,y) set(x, 'ButtonDownFcn', y), plot_par.ax, inp_fcn);
+           
+% Save and exit.
+tgui.plot_par = plot_par; guidata(fh, tgui); 
 
-for tabi = 1:plot_par.tabs_total 
-    
-    % Current tab - its index in tab format
-    % This index lacks the slice+1 index (or the dim 1 above the slice
-    % dimension). Therefor it requires correction regards pointing to data.
-    tab_index = plot_par.tabs_index_table(tabi,:);
-    tab_index_cell = num2cell(tab_index);
-    
-    % For data indexing - convert tab_index_cell to correct index-dims.
-    sli = tab_index_cell{1}; % Slice from data.   
-    
-    % Plot data
-    tmp_data = squeeze(plot_par.mask(:,:,:,sli))';
-    tgui.plot_par.plotobj{tab_index_cell{:}} = ...
-        imagesc(tgui.plot_par.ax{tab_index_cell{:}}, tmp_data);
+function VoxelMask_addMask(fh)
 
-    % Colormap and transparency
-    set(tgui.plot_par.ax{tab_index_cell{:}},...
-        'colormap', jet(128), 'clim', [0 1]);
-    transmap = double((tmp_data) == 1); 
-    transmap(transmap == 1) = tgui.plot_par.alpha;
-    set(tgui.plot_par.plotobj{tab_index_cell{:}}, 'AlphaData', transmap)
-    tgui.plot_par.transmap = transmap;
+% Get GUI data of figure
+tgui = guidata(fh); plot_par = tgui.plot_par;
 
-    % Axes cosmetics
-    set(tgui.plot_par.ax{tab_index_cell{:}},...
-        'LineWidth', 0.1, 'Xtick',[], 'Ytick', [],...
-        'Box', 'off'); 
+if ~isfield(plot_par,'mask'), return; end
 
-    % Turn of outer-axis i.e. data-imagesc
-    tgui.plot_par.ax{tab_index_cell{:}}.Visible = 'off';    
+% Get mask
+mask = plot_par.mask;
 
-end
+% Highlight voxels
+inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(mask(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(mask), inp_color);
+inp_none = repmat({'none'}, [sum(~mask(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(~mask), inp_none);
 
-function mouseHover(hobj,~)
-% Handles figure-window mouse-position and value string plus tracking.
+function VoxelMask_selectVoxel(hobj, ~, ~)
+% Every selected voxel is highlighted or the highlighting is removed.
+% Specific for creating selected voxels.
 
-% Get data handle
+
+% Clicked axes object and its data
 tgui = guidata(hobj); 
 
-% Find current tab
-inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
-% Tab of interest
-tab_nr = find(cellfun(@isequal, tgui.tabh, inp_selectedTab)==1);
+            % ----------- % Clicked index % ------------- %
 
-% Current mouse-position
-C = tgui.plot_par.ax{tab_nr}.CurrentPoint;
+% Find current tab number
+tab_nr = ...
+    cellfun(@isequal,tgui.tabh, repmat({hobj.Parent},size(tgui.tabh)));
+tab_nr = find(tab_nr == 1);
 
-% Get value of mouse position
-pos = round(C(1,1:2)); % X and Y (COL / ROW)
+% Find clicked axis index
+% Compare ax-obj with stored ax-objects
+tgui.click_index = [hobj.UserData tab_nr];
+r = tgui.click_index(1); c = tgui.click_index(2);
 
-tag = ''; 
-if isfield(tgui, 'tracking') && tgui.tracking
-    tag = '| Tracking!'; 
+
+            % ----------- % Highlight voxel % ----------- %
+
+% Position and sizes
+ind = tgui.click_index;
+
+% Color
+clr = tgui.plot_par.colors.hilight1;
+
+% If highlighted, remove it.
+if ~ischar(tgui.plot_par.ax{ind(1),ind(2),tab_nr}.Color)
+    tgui.plot_par.ax{r,c,tab_nr}.Color = 'none';
+else
+    % Highlight clicked voxel (add transparent background)
+    tgui.plot_par.ax{ind(1),ind(2),tab_nr}.Color = [clr 0.3];
 end
 
-hobj.Name = (sprintf('%4.4f | %4.4f | %s', pos, tag));
-
-% Manage tracking in different ways
-if isfield(tgui, 'tracking') && tgui.tracking
-    if isfield(tgui, 'list')
-        
-        if sum(~ismember(tgui.list, pos, 'row')) == size(tgui.list,1)...
-                && ~tgui.tracking_type
-            tgui = MaskTile_enable(tgui,pos);
-            tgui.list(end+1,:) = pos;         
-        else
-            if max(ismember(tgui.list, pos, 'row') == 1)
-                if MaskTile_query(tgui,pos)
-                    MaskTile_enable(tgui,pos);
-                else
-                    MaskTile_disable(tgui,pos);
-                end
-            else
-                tgui = MaskTile_toggle(tgui, pos);
-                tgui.list(end+1,:) = pos; 
-            end
-            
-            
-        end
-        guidata(hobj, tgui);
-        tgui = VoxelMask_PlotMask(tgui.fig);                
-                        
-    else
-        tgui.list = [];
-        tgui.list(end+1,:) = pos;  
-        
-        tgui = MaskTile_toggle(tgui, pos); guidata(tgui.fig, tgui);
-        tgui = VoxelMask_PlotMask(tgui.fig);        
-    end
-    
-end
-
-guidata(hobj, tgui);
-
-function mouseClick(hobj, ~)
-clicktype = get(hobj, 'selectiontype');
-% 'normal' for left moue button
-% 'alt' for right mouse button
-% 'extend' for middle mouse button
-% 'open' on double click
-
-gui = guidata(hobj); 
-
-% Find current tab
-inp_selectedTab = repmat({gui.tabg.SelectedTab}, size(gui.tabh));
-% Tab of interest
-tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
-
-% Current mouse-position: X and Y (COL / ROW)
-click_pos = round(gui.plot_par.ax{tab_nr}.CurrentPoint(1,1:2));       
-if sum(click_pos <= 0) >=1 , return; end
-
-switch clicktype
-    case 'normal'
-        if MaskTile_query(gui, click_pos) % isEnabled
-            gui = MaskTile_disable(gui,click_pos);
-        else % isDisabled
-            gui = MaskTile_enable(gui,click_pos);
-        end
-        guidata(hobj, gui);
-        VoxelMask_PlotMask(hobj);      
-    case 'alt'       
-        gui.tracking_type = 1;
-        if ~isfield(gui, 'tracking') || gui.tracking == 0 
-            gui.tracking = 1; % Enable tracking            
-        else          
-            gui.tracking = 0; % Disable tracking  
-            if isfield(gui,'list'), gui = rmfield(gui,'list'); end
-        end                   
-        guidata(hobj, gui); 
-        mouseHover(hobj);
-   
-    case 'extend'
-        gui.tracking_type = 0;
-        if ~isfield(gui, 'tracking') || gui.tracking == 0 
-            gui.tracking = 1; % Enable tracking   
-        else          
-            gui.tracking = 0; % Disable tracking  
-            if isfield(gui,'list'), gui = rmfield(gui,'list'); end
-        end                   
-        guidata(hobj, gui); 
-        mouseHover(hobj);         
-end
-
-function gui = MaskTile_disable(gui, pos)
-% Find current tab
-inp_selectedTab = repmat({gui.tabg.SelectedTab}, size(gui.tabh));
-% Tab of interest
-tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
-% Change mask
-if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))
-    sz = size(gui.plot_par.mask);
-    if ~(sum(pos(1:2) > sz(2:3)) > 0)
-        gui.plot_par.mask(:,pos(1),pos(2), tab_nr) = 0;
-    end
-end
-
-function gui = MaskTile_enable(gui, pos)
-% Find current tab
-inp_selectedTab = repmat({gui.tabg.SelectedTab}, size(gui.tabh));
-% Tab of interest
-tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
-% Change mask
-if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))  
-    sz = size(gui.plot_par.mask);
-    if ~(sum(pos(1:2) > sz(2:3)) > 0)
-        gui.plot_par.mask(:,pos(1),pos(2), tab_nr) = 1;
-    end
-end
-
-function isEnabled = MaskTile_query(gui, pos)
-% Find current tab
-inp_selectedTab = repmat({gui.tabg.SelectedTab}, size(gui.tabh));
-% Tab of interest
-tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
-% Change mask
-isEnabled = 0;
-if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))
-    isEnabled = gui.plot_par.mask(:,pos(1),pos(2), tab_nr);
-end
-
-function gui = MaskTile_toggle(gui, pos)
-if MaskTile_query(gui, pos) % isEnabled
-    gui = MaskTile_disable(gui,pos);
-else % isDisabled
-    gui = MaskTile_enable(gui,pos);
-end
-guidata(gui.fig, gui);
+% Save any update to data
+guidata(hobj,tgui);
 
 function closeReqFcn(hobj, ~, ~)
 % Custom close-gui fcn.
@@ -669,10 +541,10 @@ tgui = guidata(hobj); plot_par = tgui.plot_par;
 % Use object text to replace or add "copy"-selection.
 setMemory = 0; useMemory = 0; doReplace = 0;
 switch hobj.Text
-    case 'Replace',    doReplace = 1; 
-    case 'Add',        doReplace = 0; 
-    case 'to Memory',  setMemory = 1; 
-    case 'Paste',      useMemory = 1;
+    case 'Replace', doReplace = 1; 
+    case 'Add',     doReplace = 0; 
+    case 'Memory',  setMemory = 1; 
+    case 'Paste',   useMemory = 1;
 end
 
 % Find current tab-obj
@@ -682,35 +554,39 @@ toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;
 
 if ~useMemory
     % Get selected of current slice
-    sel2copy = plot_par.mask(:,:,:,toi);    
+    sel = cellfun(@(x) get(x, 'color'), plot_par.ax(:,:,toi), 'uniform', 0);
+    sel = ~cellfun(@isequal, sel, repmat({'none'}, size(sel)));
+    sel2copy = repmat(sel, [1 1 plot_par.tabs_total]);
 end
 
 % Store selection if copy-to-memory
-if setMemory, tgui.copied = sel2copy; guidata(hobj, tgui); return; end
+if setMemory, tgui.copied = sel; guidata(hobj, tgui); return; end
 
 % Copy to all slices 
 if ~setMemory && ~useMemory
+    % Copy selection to other tabs
+    inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(sel2copy(:)) 1]);
+    cellfun(@(x,y) set(x, 'color', y), plot_par.ax(sel2copy), inp_color);
 
     if doReplace
-        % Copy selection to other tabs
-        plot_par.mask = repmat(sel2copy, [1 1 1 size(plot_par.mask,4)]);
-    else
-        tmp = repmat(sel2copy, [1 1 1 size(plot_par.mask,4)]);
-        plot_par.mask = arrayfun(@(x,y) x + y,tmp, plot_par.mask);
-        plot_par.mask(plot_par.mask == 2) = 1;
+        % If replace, remove selection everywhere else
+        inp_none = repmat({'none'}, [sum(~sel2copy(:)) 1]);
+        cellfun(@(x,y) set(x, 'Color', y), plot_par.ax(~sel2copy), inp_none); 
     end
 
 % Copy from memory
 else
     % Use copy from memory
     sel2copy = tgui.copied;
-    plot_par.mask(:,:,:,toi) = sel2copy;
+
+    % Voxels to clear (set to All)
+    inp_all = repmat({'none'}, size(plot_par.ax(:,:,toi)));
+    % Set voxels-to-highlight
+    inp_all(sel2copy) = {[plot_par.colors.hilight1 0.3]};   
+    % Paste selection from memory
+    cellfun(@(x,y) set(x, 'Color', y), plot_par.ax(:,:,toi), inp_all); 
 
 end
-
-% Clean up and plot
-tgui.plot_par = plot_par; guidata(hobj, tgui);
-VoxelMask_PlotMask(hobj);
 
 function VoxelMask_Selection_Clear(hobj)
 % Clear selection on all or current tab(s).
@@ -722,21 +598,22 @@ tgui = guidata(hobj); plot_par = tgui.plot_par;
 switch hobj.Text
     case 'All'               
         % Set axes-background-color to none for all axes.
-        plot_par.mask = zeros(size(plot_par.mask));
+        inp_none = repmat({'none'}, size(plot_par.ax));
+        cellfun(@(x,y) set(x, 'Color', y), ...
+            plot_par.ax, inp_none, 'uniform', 0); % X and Y
     case 'Slice'
         % Find current tab
         inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
         % Tab of interest
         toi = find(cellfun(@isequal, tgui.tabh, inp_selectedTab)==1);
         % Clear data
-        sz =  size(plot_par.mask);
-        plot_par.mask(:,:,:,toi) = zeros(sz(1:3));
+        inp_none = repmat({'none'}, size(plot_par.ax(:,:,toi)));
+        cellfun(@(x,y) set(x, 'Color', y), ...
+            plot_par.ax(:,:,toi), inp_none, 'uniform', 0); % X and Y
 end
 
 % Save changes.
 tgui.plot_par = plot_par; guidata(hobj, tgui);
-% Replot
-VoxelMask_PlotMask(hobj);
 
 function VoxelMask_Selection_Auto(hobj)
 % Automatically select voxels on background of images.
@@ -773,8 +650,6 @@ csum = cumsum(N)./sum(N);
 % Binary image
 img(img < cutoff) = 0; img(img >= cutoff) = max(img(:));
 % display3D(img, 'tag', 'Binary IMG')
-
-tmp = img; img(isnan(img)) = 0;
 
 % Dilate and erode binary image
 SE = strel('disk', 5); img = imdilate(img, SE); img = imdilate(img, SE); 
@@ -834,7 +709,8 @@ end
 
 % Threshold new binary image
 [N, edges] = histcounts(im_avg(:), 128); 
-csum = cumsum(N)./sum(N); cutoff_perc = 0.2; 
+csum = cumsum(N)./sum(N); 
+cutoff_perc = 0.3; 
 [~, ind] = min(abs(csum - (cutoff_perc))); cutoff = edges(ind);
 im_avg(im_avg <= cutoff) = 0; im_avg(im_avg > cutoff) = 1;
 
@@ -849,20 +725,17 @@ if doCurrent
     vox2light(:,:,toi) = logical(tmp);
 end
 
-% Magic!
-N = numel(size(plot_par.mask));
-plot_par.mask = permute(vox2light,[N+1 1:N]);
-tgui.plot_par = plot_par;
-guidata(hobj, tgui);
-
-% Update
-VoxelMask_PlotMask(hobj); 
-
+% Highlight voxels
+inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(vox2light(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(vox2light), inp_color);
+inp_none = repmat({'none'}, [sum(~vox2light(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(~vox2light), inp_none);
+    
 function VoxelMask_Selection_Inverse(hobj)
 % Inverse selection of voxels
 
 % Get gui-data
-tgui = guidata(hobj); 
+tgui = guidata(hobj); plot_par = tgui.plot_par;
 
 % Use object text to replace or add "copy"-selection.
 switch hobj.Text
@@ -870,32 +743,29 @@ switch hobj.Text
     case 'Slice', doSlice = 1;
 end
 
-% Get current mask
-selection = tgui.plot_par.mask;
+% Get current selection
+selection = VoxelMask_Selection_get(hobj);
+
+% Find current tab-obj
+inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
+% Tab of interest
+toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;        
 
 % Create inverse
-if doSlice
-    % Find current tab-obj
-    inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
-    % Tab of interest
-    toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;       
-    inversed = selection; inversed(:,:,:,toi) = ~inversed(:,:,:,toi);
-else
-    inversed = ~selection;
+if doSlice, inversed = selection; inversed(:,:,toi) = ~inversed(:,:,toi);
+else, inversed = ~selection;
 end
 
-% Apply and update
-tgui.plot_par.mask = inversed; guidata(hobj, tgui);
-
-% Plot
-VoxelMask_PlotMask(hobj);
+% Apply
+inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(inversed(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(inversed), inp_color);
+inp_none = repmat({'none'}, [sum(~inversed(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(~inversed), inp_none);
 
 function VoxelMask_Selection_Export(hobj)
 
-gui = guidata(hobj);
-
 % Get selection
-mask = gui.plot_par.mask;
+mask = VoxelMask_Selection_get(hobj);
 
 % Save selection
 [fi, fp, idx] = uiputfile({'*.mat'}, 'Export mask-data', 'VoxelMask.mat');
@@ -918,12 +788,23 @@ tgui = guidata(hobj); plot_par = tgui.plot_par;
 % Store mask
 tgui.plot_par.mask  = mask;
 
+% Highlight voxels
+inp_color = repmat({[plot_par.colors.hilight1 0.3]}, [sum(mask(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(mask), inp_color);
+inp_none = repmat({'none'}, [sum(~mask(:)) 1]);
+cellfun(@(x,y) set(x, 'color', y), plot_par.ax(~mask), inp_none);
+
 % Update gui-data
 guidata(hobj, tgui);
 
-% Plot mask
-VoxelMask_PlotMask(hobj);
+function selection = VoxelMask_Selection_get(hobj)
 
+% Get gui-data
+tgui = guidata(hobj); plot_par = tgui.plot_par;
+
+% Get selection
+selection = cellfun(@(x) get(x, 'color'), plot_par.ax, 'uniform', 0);
+selection = ~cellfun(@isequal, selection, repmat({'none'}, size(selection)));
 
 function VoxelMask_Contrast(hobj)
 

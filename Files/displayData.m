@@ -157,6 +157,9 @@ tgui = guidata(tfh); tgui.fig = tfh;
 % Tabgroup for all slices
 tgui.tabgp = uitabgroup(tgui.fig,'Unit','normalized','Position',[0 0 1 1]);
 
+
+[nZeros, nZeros_acc] = numzeros(median(data(:), 'omitnan'));
+
 % Loop each slice - expected at dimension 4
 for sl = 1:size(data,4)
 
@@ -207,17 +210,38 @@ for sl = 1:size(data,4)
     % Convert to a 2D sliced array: index 2 and 3 are considered the 2D 
     % plane of the original ND data array.
     [tableData_num, tableData_Index] = slices2rowArray(sliceData,1);
+    
+    
 
     % Calculate NaN row index
     NaNstep   = size(data,3)+1; dSz = size(sliceData); dSz = dSz(5:end);
     nanrow = 1: NaNstep : (NaNstep * prod(dSz));
 
     % DATA: String % -------------------------------------------------- %
+    
+    % Create proper format to vieuw the value
+    if nZeros <= 0 || nZeros == nZeros_acc        
+        % Convert double-array to cell-array and then to string
+        tableData_str = cellfun(@sprintf, repmat({'%3.3f'},...
+            [size(tableData_num,1) size(tableData_num,2)]), ...
+            num2cell(tableData_num), 'UniformOutput',0);
+    else 
+        prefix = '0'; if nZeros >= 9, prefix = ''; end
+        formatstr = repmat({'%3.3fe-%s%i'},...
+                    [size(tableData_num,1) size(tableData_num,2)]);
+        prefix = repmat({prefix}, ...
+                    [size(tableData_num,1) size(tableData_num,2)]);
+        tableData_num = num2cell(tableData_num .* (10.^(nZeros+1)));
+        nZeros_cell = repmat({nZeros},...
+                    [size(tableData_num,1) size(tableData_num,2)]);
 
-    % Convert double-array to cell-array and then to string
-    tableData_str = cellfun(@sprintf, repmat({'%f'},...
-        [size(tableData_num,1) size(tableData_num,2)]), ...
-        num2cell(tableData_num), 'UniformOutput',0);
+        tableData_str = cellfun(@sprintf, formatstr, tableData_num,...
+            prefix, nZeros_cell, 'UniformOutput',0);
+        isnan_ind = cellfun(@(x) isnan(x), tableData_num,'uniform', 0);
+        tableData_str(cell2mat(isnan_ind)) = {'NaN'};
+    end
+
+
 
     % Replace NaN with slice and higher index dimension information
     for ri = 1:length(nanrow)
@@ -535,6 +559,7 @@ if strcmpi(uans{1},'Specific Slice')
         def, 'UniformOutput',0);
     def = cellfun(@(x) ['All' x], def, 'UniformOutput', 0);
     % Default query:
+    nqry = numel(def);
     elm = repmat({'popup'}, 1, nqry); 
     qry = repmat({'Index of interest:'}, 1, nqry); 
     for kk = 1:nqry, qry{kk} = sprintf('Dimension %i - %s',kk, qry{kk});
@@ -734,7 +759,12 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
 
         % Image Contrast.
         if isfield(conv, 'contrast')
-            clim(tgui.himg{tab_index_cell{:}}, conv.contrast);
+            v = version('-release'); v(end) = []; v = str2double(v);
+            if v < 2023
+                caxis(tgui.himg{tab_index_cell{:}}, conv.contrast);
+            else
+                clim(tgui.himg{tab_index_cell{:}}, conv.contrast);
+            end
             tgui.plot_par.contrast_img =  conv.contrast;
         else
             contrast_min = min(img2plot(:));
@@ -1598,6 +1628,17 @@ tt_alpha.ClickedCallback = @toolbar_fixTransparency;
 tt_alpha.TooltipString = ...
     'Fix transparency of color-map. Alpha-maps arent stored by Matlab.';
 
+
+% Grid on/off
+tt_grid = uipushtool(tb); % Push button - change alpha
+tt_grid_icon = imread('Images\grid2.png');
+tt_grid_icon = imresize(tt_grid_icon,[20,20]);
+tt_grid_icon(tt_grid_icon ==  max(tt_grid_icon(:))) = ...
+    round(max(tt_grid_icon(:))*0.94);
+tt_grid.CData = tt_grid_icon;
+tt_grid.ClickedCallback = @toolbar_toggleGrid;
+tt_grid.TooltipString = 'Toggle visibility of the voxel-grid.';
+
 % Data2Table
 tt_data2table = uipushtool(tb); % Push button - data 2 table
 tt_data2table_icon = imread('Images\table3.png');
@@ -1675,7 +1716,6 @@ for axi = 1:size(ax,1)
 end
 guidata(figobj, tgui);
 
-
 % --- Executes on press of toolbar's save all tabs button.
 function toolbar_saveFigure_allTabs(src,~)
 
@@ -1701,7 +1741,7 @@ for kk = 1:size(tabs,1)
     % Set tab-kk to active
     tabg.SelectedTab = tabs(kk);
      
-    pause(0.75); % Make sure display is updated.       
+    pause(0.5); % Make sure display is updated.       
 
     check = 0; n = 0;
     while check ~= 1
@@ -1710,7 +1750,7 @@ for kk = 1:size(tabs,1)
         n = n + 1; if n == 100, break; end
     end
 
-    pause(0.75);
+    pause(0.5);
 
     tab_title_str = str2double(strsplit(tabs(kk).Title));
     tab_title_str = sprintf('%03i', tab_title_str);
@@ -1876,9 +1916,13 @@ if isempty(uans), return; end
 % \\ GET: Data
 ph = [tgui.plot_par.plotobj{:}];
 data = cat(3,ph.CData);
+
+% Correct X/Y
+permvec = 1:numel(size(data)); permvec([2 1]) = permvec([1 2]);
+data = permute(data, permvec);
  
-data = reshape(data, tgui.plot_par.dim);
-sz = size(data);
+% Reshape to [1 x X x Y x Z];
+data = reshape(data, tgui.plot_par.dim); sz = size(data);
 data = permute(data, [numel(sz)+1 1:numel(sz)]);
 
 
@@ -1915,4 +1959,27 @@ elseif strcmp(uans{1}, 'All/Slice')
     end
 end
 
+% --- Toggle the voxel-grid in the tabs
+function toolbar_toggleGrid(src,~)
 
+% \\ GET: object handles for figure and tab-group
+figobj = src.Parent.Parent;
+tgui = guidata(figobj);
+
+if ~isfield(tgui, 'tabh'), return; end
+
+% Toggle visibility of axes on and off.
+for tabi = 1:numel(tgui.tabh)
+    kids = tgui.tabh{tabi}.Children;
+    for kk = 1:numel(kids)
+        if strcmp(kids(kk).Type, 'uicontrol')
+            if strcmp(kids(kk).Style, 'text')
+                if strcmp(kids(kk).Visible, 'on')
+                    kids(kk).Visible = 'off';
+                else
+                     kids(kk).Visible = 'on';
+                end
+            end
+        end
+    end
+end
