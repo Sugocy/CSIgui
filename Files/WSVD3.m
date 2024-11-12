@@ -1,4 +1,4 @@
-function [spec, Q, W, A] = WSVD3(spec, noiseCov, method)
+function [spec, Q, W, A, scaleMatrix] = WSVD3(spec, noiseCov, method)
 % Whitened singular value decomposition to calculate weights for combining
 % multiple coil-channels in MR-data.
 %
@@ -12,7 +12,9 @@ function [spec, Q, W, A] = WSVD3(spec, noiseCov, method)
 %                      or set to Nan to calculate it using the data itself
 %                      and still allow setting whitening method.
 %           method   = Whitening (1, default), Cholesky (2), ZCA (3)
-%                      None (0, no whitening). 
+%                      None (0, no whitening). If method equals (5), it
+%                      assumes the scaleMatrix is given but data has not
+%                      been noise-decorrelated.
 %                      The noiseCov variable is still required @ none:
 %                           If ZCA;         expect scaleMatrix,
 %                           If Cholesky;    expect noiseCov.
@@ -68,7 +70,9 @@ elseif method == 2 % Cholesky
 elseif method == 3 % ZCA
     [spec, scaleMatrix] = csi_decorrelate_noise_zca(spec, 2, {noiseCov});    
     scaleMatrix = scaleMatrix{1};
-
+    
+elseif method == 5
+    scaleMatrix = noiseCov; spec = spec * scaleMatrix;
 end
 
 

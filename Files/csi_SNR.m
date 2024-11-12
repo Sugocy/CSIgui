@@ -9,6 +9,7 @@ function SNR = csi_SNR(spectrum, mask_sz, method, range, mask_side)
 %       spectrum;   Array of all spectra of interest.(dHz x N x M x etc.)
 %       mask_size;  Value for the mask size used to calculate noise. If no 
 %                   mask_size is given a defeault mask size of 50 is used.
+%                   OR the noise given per  voxel.
 %       method;     Either using the absolute (0) or real(1) part of the
 %                   spectrum
 %       range;      Range of spectrum to calculate SNR from. Noise is still
@@ -29,21 +30,30 @@ end
 if nargin <= 3, range = [1 size(spectrum,1)]; end
 if nargin <= 4, mask_side = 0; end
 
-% Noise mask
+% Data size
 sz = size(spectrum); 
 
 % NaN position
 nan_ind = isnan(spectrum);
 
-if mask_side == 0
-    mask_size_double = [round(mask_sz./2) mask_sz-round(mask_sz./2)];
-    mask = [1:mask_size_double(1) (sz(1) - mask_size_double(2) + 1):sz(1)];
-elseif mask_side == 1
-    mask = 1:mask_sz;
-elseif mask_side == 2
-    mask = (sz(1)-mask_sz + 1):sz(1);
+% Noise mask
+doMask = 0;
+if numel(mask_sz) == 1
+
+    if mask_side == 0
+        mask_size_double = [round(mask_sz./2) mask_sz-round(mask_sz./2)];
+        mask = [1:mask_size_double(1) (sz(1) - mask_size_double(2) + 1):sz(1)];
+    elseif mask_side == 1
+        mask = 1:mask_sz;
+    elseif mask_side == 2
+        mask = (sz(1)-mask_sz + 1):sz(1);
+    end
+    
+    doMask = 1;
 end
 
+
+% Create cell-array of data to use cellfun
 % Exclude first index dimensions
 % Create vector of ones equal in size to each remaining dimension.
 cell_layout = ...
@@ -53,9 +63,15 @@ cell_layout = ...
 specs = (mat2cell(spectrum, sz(1), cell_layout{:}));
 
 
-% Precalculate the noise
-noise = cellfun(@spectrum_noise,...
-    specs, repmat({mask}, size(specs)),'UniformOutput',0);
+if doMask
+    % Precalculate the noise
+    noise = cellfun(@spectrum_noise,...
+        specs, repmat({mask}, size(specs)),'UniformOutput',0);
+else    
+    if ~iscell(mask_sz)
+        noise = (mat2cell(mask_sz, 1, cell_layout{:}));
+    end
+end
 
 % SNR of each spectrum.
 if method == 0 

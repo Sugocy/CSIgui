@@ -105,9 +105,12 @@ end
 
 function setValue(gui, val)
 
+% Value info string 
 nfo = whos('val');
+size_input_str = [ '[' repmat('%i ', 1, numel(nfo.size))];
+size_input_str(end) = ']'; 
 gui.lblnfo.Text = ...
-    sprintf(' [%i %i] | %4i | %s', nfo.size, nfo.bytes, nfo.class);
+    sprintf([size_input_str ' | %4i | %s'], nfo.size, nfo.bytes, nfo.class);
 
 if ischar(val)
     gui.lboxvalue.Items = {val};
@@ -136,9 +139,21 @@ elseif isfloat(val)
         val = cellfun(@num2str, val, 'UniformOutput', false);
         gui.lboxvalue.Items = val;
     elseif isND || ~isList
-        val = num2cell(reshape(val,[],1));
-        val = cellfun(@num2str, val, 'UniformOutput', false);
-        gui.lboxvalue.Items = val;
+        tmp = whos('val'); megabytes = tmp.bytes./1024.^2;
+        if megabytes <= 50
+            val = num2cell(reshape(val,[],1));
+            val = cellfun(@num2str, val, 'UniformOutput', false);
+            gui.lboxvalue.Items = val;
+        else
+            % Calculate statistics and convert to string-array for display.
+            stat_str = val2statistics(val);
+
+            % Display
+            tmp = sprintf('Large data-array: %.2fMB', megabytes);
+            stat_str = cat(1, tmp, {''}, stat_str);
+            gui.lboxvalue.FontName = 'courier';
+            gui.lboxvalue.Items = stat_str;
+        end
     else        
         gui.lboxvalue.Items = {num2str(val(:))};
     end
@@ -148,12 +163,54 @@ elseif iscell(val)
     if numel(val{:}) <= 1
         setValue(gui, val{:});
     else
-        disp tbd-cell
+        bool_char = cellfun(@ischar, val);
+        if sum(bool_char) == numel(val)
+            gui.lboxvalue.Items = val;
+        else
+            disp tbd-non-char-cell
+        end        
     end
 else
-    disp tbd-other
+    disp tbd-other-data-format
 end
 
+
+end
+
+function stat_str = val2statistics(val)
+% Calculate statistics of val (array) and create a string from the 
+% resulting structure.   
+
+% Get statistics
+stats = csi_statistics_of_volume(val);
+
+% Fieldnames
+stat_names = fieldnames(stats);
+
+% Values
+stat_vals = cellfun(@getfield, ...
+    repmat({stats},size(stat_names)), stat_names,...
+    'UniformOutput', 0);
+
+% Convert any cell in cell-values
+isAcell = cellfun(@iscell, stat_vals);
+tmp = cellfun(@cell2mat, ...
+    stat_vals(isAcell),'UniformOutput',0);
+stat_vals(isAcell) = tmp;
+
+% Convert to string
+stat_vals_str = cellfun(@num2str, stat_vals,...
+    'UniformOutput', 0);
+
+% Combine with alignment
+stat_names_sz = cellfun(@numel, stat_names);
+align_val = max(stat_names_sz)+4;
+align_dff = align_val - stat_names_sz; 
+stat_names_wspace = arrayfun(@(x) repmat(' ', 1, x), ...
+    align_dff, 'UniformOutput', false);
+stat_str = cellfun(@(x,y,z) [x ':' y z], ...
+    stat_names, stat_names_wspace, stat_vals_str,...
+    'UniformOutput', false);
 
 end
 

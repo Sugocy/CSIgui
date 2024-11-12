@@ -34,8 +34,6 @@ end
 % csi:  csi-structure from CSIgui including conv-field for image-plot.
 CSI_dataAs_Initiate(data, csi, tag, labels, opts);
 
-
-
 % --- Executes by map-scripts to start any visualiziation of data
 function CSI_dataAs_Initiate(data, csi, data_tag, labels, opts)
 % After calculating some maps or anything 3D, and one wants to display it.
@@ -640,19 +638,15 @@ if numel(dim) <= 2
     fprintf('Aborted data-as-tabs plot, data is not 2D or 3D.\n'); return; 
 end
 
-
-
 % Number of tab-windows
 nwindows = 1; index_range = {1};
 if numel(dim) > 4
     nwindows = dim(5); 
     if numel(dim) > 5
         % Data ranges
-        index_range = cellfun(@(x) 1:x, ...
-            num2cell(dim(6:end)), 'uniform', 0); 
+        index_range = cellfun(@(x) 1:x, num2cell(dim(6:end)), 'uniform', 0); 
     end
 end
-
 
 % Restore data
 data_main = data; tag_main = tag;
@@ -670,8 +664,6 @@ for kk = 1:nwindows
 data = data_main(:,:,:,:,kk, index_range{:});
 tag = sprintf('%s - %s - %i', tag_main, loi, kk);
 
-
-
             % -------- % Figure: Create window % ----------------------- %
 
 % Create a figure with specific settings for tabs
@@ -686,7 +678,6 @@ CSI_dataAsTabs_create_griddedTabs(fh, data, csi.clr) ;
 
             % -------- % Figure: Create image axis % ------------------- %                
 
-
 % Get images
 plot_img = 0;
 if isfield(csi,'conv')
@@ -699,7 +690,6 @@ if plot_img
     fh = CSI_dataAsTabs_create_ImageAxis(fh);
 end
 
-
             % -------- % Figure: Create axis/voxel % ------------------- %                
 
 % Add a transparent axis to each voxel per slice
@@ -707,8 +697,6 @@ tgui = CSI_dataAsTabs_addVoxelAxis(fh);
 
 
             % --------- % Plot Data As Map % --------------------------- %
-
-
 
 % Color map data
 clr_map = jet(128);
@@ -788,6 +776,7 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
                        
         end
         colormap(tgui.himg{tab_index_cell{:}}, gray(255));
+        set(tgui.himg{tab_index_cell{:}}, 'box', 'off');
 
         end
     end
@@ -804,7 +793,7 @@ for tabi = 1:plot_par.tabs_total                % Sli/tab loop.
     transmap = double(~isnan(tmp_data)); 
     transmap(transmap == 1) = tgui.plot_par.alpha;
     set(tgui.plot_par.plotobj{tab_index_cell{:}}, 'AlphaData', transmap)
-    tgui.plot_par.transmap = transmap;
+    tgui.plot_par.transmap{tabi} = transmap;
 
     % Axes cosmetics
     set(tgui.plot_par.ax{tab_index_cell{:}},...
@@ -818,7 +807,6 @@ end
 % loadBar(NaN);
 
 % Save tgui-data to gui itself 
-% NB. Should use setappdata if data is involved!
 guidata(fh, tgui);
 
 % Save current object to tab-gui
@@ -1012,61 +1000,6 @@ for sli = 1:plot_par.tabs_total                % Sli loop/tabs loop
 end
 tgui.plot_par.ax = ax; guidata(fh, tgui);
 
-% --- Executes by dataAs-scripts to filter calculated data
-function data = CSI_dataAs_SNRfilter(data, tag, csi, doi_range)
-% Apply an SNR filter to the data-volume that needs to be displayed.
-% SNR is calculated for a peak given by doi_range, if not given, the user
-% will be prompted with peak-selection. The main CSI data in memory will be
-% used to calculate the SNR and the filter is applied on data.
-
-        % --------------- % SNR FILTER % --------------- %
-
-
-if nargin < 4 || isempty(doi_range)
-    % Get peak of interest
-    [~, ~, doi_range] = CSI_getDataAtPeak(csi.data.raw, csi.xaxis);
-end
-
-% \\ USER INPUT
-filter_snr = getUserInput(...
-    {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
-    {'0', round(csi.data.dim(1)./10)});
-if isempty(filter_snr)
-    CSI_Log({['Skipped ' tag ' display.']},{''}) ; return; 
-end
-
-if str2double(filter_snr{1}) ~= 0
-    
-    snr_limit = str2double(filter_snr{1});
-    snr_mask = str2double(filter_snr{2});
-    
-    % Display Info %
-    CSI_Log({['Calculating SNR per voxel, '... 
-              'and filter data using minimum SNR limit: ']},...
-            {snr_limit});
-
-    % Noise mask
-    mask_size = snr_mask;
-
-    % Dimensions of array to calculate SNR.
-    snr_dims = cellfun(@(x) 1:x, num2cell(csi.data.dim),'uniform', 0);
-    snr_dims(1) = [];
-    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
-    
-    % Calculate using noise mask
-    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, doi_range);
-    
-    % Convert NaNs to zero
-    SNR_all(isnan(SNR_all)) = 0; 
-    
-    % Filter boolean 
-    SNR_bool = SNR_all < snr_limit;
-    
-    % Filter data
-    data(SNR_bool) = NaN;
-
-end
-
 % --- Initiate loading/creating voxel-mask 
 function csi = VoxelMask_Initiate(csi, clr)
 
@@ -1157,7 +1090,7 @@ if numel(msz) ~= numel(csz) % If there are higher order indexes
 end
 
 % Clean up
-csi.voxelmask = mask;
+csi.data.voxelmask = mask;
 
 % --- Match MRI-slices to CSI-volume
 function [img, img_all, img_all_slice_range] = MRI_matchSlices(csi, conv)
@@ -1226,219 +1159,6 @@ end % End of slice loop
 
 img_all = conv.data;
 
-% --- Executed by CSI_2D_getPlotSettings
-function plot_par = CSI_2D_getPlotSettings_AxisScaling(plot_par, data_volume)
-% Returns the plot settings for y-axis scaling of the voxels in CSIgui 2D.
-
-% Scaling: Axis Y Limit % ------------------- %
-% Y-limit of axis scaling by VOXEL, SLICE OR VOLUME.
-scaleby = 'vol';
-
-% If voxel, set scale (0), slice (1) and volume (2). 
-% For slice and volume, already calculate the axes-y-limits. 
-scale_range = plot_par.scale_range_axis;
-umbrella = 0; % Disabled here - umbrella fnc
-switch scaleby 
-    case 'vox', plot_par.scale_type_axis = 0; 
-    case 'sli', plot_par.scale_type_axis = 1; 
-
-        % Unit
-        tmp_data = real(data_volume);
-
-        if umbrella % Include all higher order dimensions of this slice
-            ind = plot_par.select_all_dim;
-            ind(1) = plot_par.plotindex(1);            
-        else % Umbrella is off - only include current slice
-            ind = plot_par.plotindex;            
-        end
-
-        % Get data.
-        tmp_data = tmp_data(scale_range(1):scale_range(2),...
-            :,:,ind{:});
-        
-        % Plot axes-scale scaled for all voxels in the slice-volume
-        plot_par.axScale_ylimit = [min(tmp_data(:)) max(tmp_data(:))]; 
-    case 'vol', plot_par.scale_type_axis = 2; 
-        % Unit
-        tmp_dataVol = real(data_volume);
-
-        if umbrella        
-            % Axis scale using all higher order indexes volume
-            ind = plot_par.select_all_dim;
-        else
-            % Axis scale using current higher order index volumes
-            ind = cat(2,...
-                plot_par.select_all_dim(1),plot_par.plotindex(2:end));            
-        end
-
-        % Correct x-axis window and get selected volume
-        tmp_dataVol = tmp_dataVol(scale_range(1):scale_range(2),...
-            :,:,ind{:});
-        
-        % Scale limit.
-        plot_par.axScale_ylimit = [min(tmp_dataVol(:)) max(tmp_dataVol(:))];
-end
-
-% --- Executed by CSI_2D_getPlotSettings
-function plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume)
-% Returns the color-scaling settings for CSIgui 2D plot.
-%
-% Input: plot_par 
-%               using fields .data_unit, .plotindex.
-%        data total volume
-%               the full data-volume of interest used for plotting.
-% Output-fields: 
-%        plot_par .clrs, .clrs_data_range
-
-
-% Scaling: Plot Color % ------------- %
-% Returns colors gradient and related data-values, a range set within the
-% given limits. This is used to color the plot of each voxel in the
-% displayed CSI slice relative to the limits of the slice.
-% E.g. visualise data amplitude using colors allowing individual voxel
-% y-axis scaling!
-% Edited for seperate fnc - QH 08/24
-plot_par.scale_by_window_color = 0;
-plot_par.scale_range_color = [1 size(data_volume,1)];
-
-
-
-% Color scaling by SLICE, VOLUME or STATIC.
-vol_data = CSI_getUnit(data_volume, plot_par.data_unit);
-full_scale_range =  ...
-    plot_par.scale_range_color(1):plot_par.scale_range_color(2);
-
-% Correct volume data used to calculate specific bins for different colors
-% scaled by minimum and maximum values: In x-axis window or from full
-% spectral field of view.
-if plot_par.scale_by_window_color
-    % #N, X, Y, Slice (Z), non-spatial dimensions.
-    vol_data = vol_data(full_scale_range,:,:,plot_par.select_all_dim{:}); 
-end
-
-scaleby = 'vol'; umbrella = 0;
-switch scaleby
-    case 'vol' % Scale by volume
-
-        if umbrella        
-            % Plot color scaled for all voxels in the *volume*
-            ind = plot_par.select_all_dim;
-        else
-            % Umbrella is off - only include volume of current higher
-            % indexes.
-            ind = cat(2,...
-                plot_par.select_all_dim(1),plot_par.plotindex(2:end));            
-        end
-        mx_per_vox = max(vol_data(:,:,:,ind{:}),[],1);
-        data_ylimits_color = [min(mx_per_vox(:)), max(mx_per_vox(:))]; 
-        plot_par.scale_type_color = 0;
-
-    case 'sli' % Scale by slice
-        
-        % Include slice + higher indexes
-        if umbrella 
-            % Correct indexing for slice + other indexes
-            ind = cat(2,...
-                plot_par.plotindex(1),plot_par.select_all_dim(2:end));           
-        else % Include only slice-data
-            % Calc limits in slice        
-            ind = plot_par.plotindex;
-        end
-        mx_per_vox = max(vol_data(:,:,:,ind{:}),[],1);
-        data_ylimits_color = [min(mx_per_vox(:)) max(mx_per_vox(:))];           
-        plot_par.scale_type_color = 1;
-
-    case 'sta' % Static color
-        % Color scaling limited to 1 color: static line color
-        data_ylimits_color = NaN;
-        plot_par.scale_type_color = 2;
-end
-
-
-% Get plot colors range for different max-limits.
-if ~isnan(data_ylimits_color)
-    % Check limits agrees with rules: lim(1) < lim(2)
-    if data_ylimits_color(2) <= data_ylimits_color(1),...
-            data_ylimits_color(2) = data_ylimits_color(1)+1; 
-    end
-    [plot_par.clrs, plot_par.clrs_data_range] = ...
-        CSI_2D_Scaling_Color_Calculate(data_ylimits_color);
-else
-    % Set static line color.
-    plot_par.clrs = csi.clr.lines1; 
-    plot_par.clrs_data_range = max(vol_data(:)); 
-end
-
-% --- % Executed by CSI_plot2D_initiate: get plot2D settings
-function plot_par = CSI_2D_getPlotSettings(plot_par, data_volume)
-% Add to structure plot_par the following plot-settings and plot-data
-% fields: 
-% 
-% Scaling plot color, axis-y and x limit (by volume/static/voxel) and
-% more.
-% Output fields to plot_par:
-%   xlimit                  visual limits for x-axis.
-%   xaxisdata               x-axis data within x-limits.
-%   scale_range_color       range in data to use for color scaling.
-%   scale_by_window_color   boolean to set scale by full x-axis range or
-%                           only visualised x-axis range.
-%   scale_type_color        calculate scale type using voxel (2), slice (1)
-%                           or volume (0).
-%   clrs                    colors for color-scaling per data-range.
-%   clrs_data_range         data ranges that match the clrs-list.
-%   scale_range_axis        range in data to use for axis scaling.
-%   scale_by_window_axis    boolean to set scale by full x-axis range or
-%                           only visualised x-axis range.
-%   scale_type_axis         calculate scale type using voxel (0), slice (1)
-%                           or volume (2).
-%   voxel_grid              boolean to set individual voxel grid on or off.
-
-
-% Axis: scale by window and X-limits % ------------------- %
-% Get visual- and data- index range of x-axis data
-
-% X-axis visual limits
-plot_par.xlimit = plot_par.xaxis.xlimit;
-
-% X-axis values
-% Either unitless(none) or frequency(ppm) plus the correct index range
-% to scale the y-axis; to full spectrum or to visible part of spectrum.
-if isfield(plot_par.xaxis, 'ppm')
-    plot_par.xaxisdata = plot_par.xaxis.ppm;
-else     
-    plot_par.xaxisdata = plot_par.xaxis.none; 
-end
-[~,scale_range(1)] =  ...
-    min(abs(plot_par.xaxisdata - plot_par.xaxis.xlimit(1)));
-[~,scale_range(2)] =  ...
-    min(abs(plot_par.xaxisdata - plot_par.xaxis.xlimit(2)));
-
-% Safety: If only a single value
-if diff(scale_range) > size(data_volume,1)
-    scale_range = [1 size(data_volume,1)];
-end
-
-% Save scale range - for color window of spectra.
-plot_par.scale_range_color = scale_range;
-
-% If user request Y-axis scaling by full spectrum - set full index as new
-% scaling range.
-plot_par.scale_range_axis = scale_range;
-plot_par.scale_by_window_axis = 1;
-
-
-% Scaling: Axis Y Limit % ------------------- %
-% Create and calculate all y-axis scale range settings.
-plot_par = CSI_2D_getPlotSettings_AxisScaling(plot_par, data_volume);
-
-% Scaling: Plot Color % ------------- %
-% Create and calculate the color scale range settings.
-plot_par = CSI_2D_getPlotSettings_ColorScaling(plot_par, data_volume);
- 
-% Voxel grid on or off % ---------------- %
-% Set if voxel-axis has individual grid enabled or disabled.
-plot_par.voxel_grid = 0;
-
 % --- Executes to plot a 2D grid in map-plots
 function CSI_2D_grid(target, target_sz, dim, range, grid_clr)
 
@@ -1466,87 +1186,6 @@ for kk = 1:dim(2)-1
     uicontrol(target,'Style','Text','Unit','Normalized',...
              'Position',[0 ypos h wh],'BackgroundColor',grid_clr);
 end
-
-% --- Executes to set figure-details of graph-plots
-function plot_par = CSI_2D_setFigure(plot_par, init_pos, fig_tag)
-% Create the 2D plot figure using dimension and color settings in plot_par.
-%
-% Input plot_par fields: .dim, .colors;
-% Added plot_par fields: .res, .grid, .range, data_dim;
-%
-% Additional input:
-% init_pos - initial position of the figure.
-% fig_tag  - tag for the figure.
-
-% Process input-arguments
-if     nargin == 1, init_pos = 0; fig_tag = 'CSIgui_plot2D'; 
-elseif nargin == 2,               fig_tag = 'CSIgui_plot2D';
-end
-
-% Create a new figure
-fh = figure('Tag',fig_tag, 'Name', ['CSIgui 2D-plot: ' fig_tag],...
-        'Color',plot_par.colors.main, 'Toolbar', 'None', 'MenuBar', 'None',...
-        'NumberTitle', 'Off');                   
-set(fh, 'CloseRequestFcn', @CSI_close2D);
-        
-% Axis: Resolution % ------------------- %
-% FOV: Relative to figure (Normalized) e.g. [1 1];
-
-plot_par.res = 1./plot_par.dim(1:2); % Axis e.g. voxel resolution
-
-% Axis: Grid % ------------------- %
-
-% Loop X Y and Z
-% X, Y and Z == csi-space. Position in figure starts at point zero (0). 
-% Resolution equals the nr of CSI-voxels to plot in the row (y in 
-% image)and column (x in image) dimension of the figure. 
-for kk = 1:numel(plot_par.res)
-    plot_par.range{kk} = ...
-    0 : plot_par.res(kk) : ...
-       (plot_par.res(kk) * plot_par.dim(kk)-plot_par.res(kk));
-end
-% Caluclate a grid for each axis in the figure representing the voxels in
-% CSI data.
-[x,y] = meshgrid(plot_par.range{1},plot_par.range{2});
-plot_par.grid.x = (x); plot_par.grid.y = flipud(y);
-
-% 1D CORRECTION: Transpose x/col and y/row
-% Creats Nx1 vs 1xN lists of the axis grid coordinates.
-if plot_par.data_dim == 1, plot_par.grid.y = y'; plot_par.grid.x = x'; end
-
-% Figure: Position % ------------------- %
-if ~isequal(sum(init_pos),0)
-    % 1. Use old position vector of previously opened CSI_plot2D figure.
-    set(fh, 'Position', init_pos);
-else
-    % 1. Default figure size and screen pixel size
-    def_sz = 640; scr_sz = get(0, 'screensize'); scr_sz(1:2) = [];
-    % 2. Ratio to define figure height to def_size
-    fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
-    % 4. Position of figure.
-    fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
-    % 5. Apply
-    set(fh, 'Position', [fig_ps fig_sz]);
-end
-
-% SNAP 2 PLOT % ------------------------------------ % DEV Experimental
-% Add snapping of 2D panel to main plot figure.
-% panel_2D_followPlot2D_initiate(); panel_2D_followPlot2D();
-% This option can now be turned on or off through the menubar.
-
-% Save figure object
-plot_par.fh = fh;
-
-% --- Close the 2D MRSI plot figure gui
-function CSI_close2D(hObj, ~)
-% Custom close request function of the 2D CSI plot figure.
-
-% Close the data to display panel.
-panelobj = findobj('Tag','CSIpanel_2D_DataToDisplay');
-if ~isempty(panelobj), delete(panelobj); end
-
-% Close the 2D CSI figure.
-delete(hObj);
 
 
 %% TOOLBAR FUNCTIONS % -------------------------------------------------- %
@@ -1874,9 +1513,10 @@ for axi = 1:size(ax,1)
         tab_index_cell = num2cell(tab_index);
     
         % Colormap and transparency     
-        plot_par.transmap(plot_par.transmap == cur_alpha_val) = new_alpha;
+        plot_par.transmap{axi}(plot_par.transmap{axi} == cur_alpha_val) = ...
+            new_alpha;
         set(tgui.plot_par.plotobj{tab_index_cell{:}}, ...
-            'AlphaData', plot_par.transmap);
+            'AlphaData', plot_par.transmap{axi});
     end    
 end
 guidata(figobj, tgui);

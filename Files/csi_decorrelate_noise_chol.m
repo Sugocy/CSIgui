@@ -33,7 +33,7 @@ mxb = cellfun(@(x) max(real(x(:))), spec); mxb = max(mxb);
 mxa = cellfun(@(x) max(real(x(:))), spec); mxa = max(mxa);
 
 % Correct scaling over all voxels.
-scaleCorrection = numzeros(mxb / mxa) + 1;
+scaleCorrection = numzeros(mxb / mxa);
 spec = cellfun(@(x) x * 10^-(scaleCorrection), spec, 'UniformOutput', false);
 
 % Reshape back to matrix with same dimensions

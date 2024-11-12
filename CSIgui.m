@@ -16,7 +16,7 @@ function varargout = CSIgui(varargin)
 %
 % Quincy van Houtum, PhD. quincyvanhoutum@gmail.com
 
-% Last Modified by GUIDE v2.5 26-Sep-2024 13:17:23
+% Last Modified by GUIDE v2.5 18-Oct-2024 11:50:34
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -798,14 +798,14 @@ clear('twix')
 nfo = whos('tmp'); 
 matlab_nfo = memory;
 
-if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
+% if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
     % Array is too large for matlab-array-memory
-    fprintf('CSIgui: data requires much memory. Loading as single.\n')
+    % fprintf('CSIgui: data requires much memory. Loading as single.\n')
     csi.data.raw = tmp; 
-else
-    % Array will fit matlab-max-array-memory
-    csi.data.raw = double(tmp);    
-end
+% else
+%     % Array will fit matlab-max-array-memory
+%     csi.data.raw = double(tmp);    
+% end
 clear('tmp')
 csi.data.dim = size(csi.data.raw);
 
@@ -3095,9 +3095,17 @@ if isempty(uanstype), CSI_Log({'Skipped apodization.'},{''}); return; end
 switch uanstype{1}
     case 'Gaussian'
         % ((1/(1/BW x nSamples) * (ans/nSamples)) / pi) == (bw/ans)/pi 
-        % Hz = bw / (N*pi) && N = (Hz * Pi)/BW
+        % Hz = bw / (N*pi) && N = (Hz * Pi)/BW        
+        
+        % Ability to read apodization value - set by text-file.
+        fp = 'Files\apodization_value.txt'; def = 20;
+        if exist('Files\apodization_value.txt', 'file') == 2
+            id = fopen(fp); val = fgetl(id); def = str2double(val);
+            fclose(id);
+        end
+                    
         if isfield(csi.xaxis,'BW')
-            uopts = getUserInput({'Apodization factor: (Hz)'},{20});    
+            uopts = getUserInput({'Apodization factor: (Hz)'},{def});    
             if isempty(uopts)
                 CSI_Log({'Skipped apodization.'},{''}); return; 
             end
@@ -4839,113 +4847,28 @@ if backup, CSI_backupSet(gui, 'Before normalization.'); end
 % Normalize
 CSI_Normalize(gui);
 
-% --- Executes on button press in button_CSI_Noise_openFile.
-function button_CSI_Noise_openFile_Callback(~, ~, gui)
-% Load a separate data-file containing noise data.
+% --- Executes on button press in button_CSI_Noise.
+function button_CSI_Noise_Callback(~, ~, gui)
+% Load a separate data-file containing noise data or create it from the
+% CSI-data itself.
 %
-%
-% Noise is loaded into csi.data.noise with field raw, dim, labels and any
-% possible header.
+% Noise is loaded into csi.data.noise with fields raw, dim, labels and any
+% possible header from file.
 
+qry = {'Source for noise-component:'};
+def = {'Data','File'};
+uans = getInput({'popup'},qry, {def}, 'Noise');
+if isempty(uans), return; end
 
-% USERINPUT % ---------------------------------------------------------- %
-
-% Get default path if available
-if isappdata(gui.CSIgui_main,'csi')
-    csi = getappdata(gui.CSIgui_main,'csi');
-    if isfield(csi,'filepath'), fp = csi.filepath; else, fp = []; end
-else, CSI_Log({'No MRS data in memory.'},{'Load MRS-data first.'}); return; 
-end
-    
-% Select-file UI.
-[fn, fp, fi] = uigetfile({'*.*','All Files (*.*)';...
- '*.list;*.data;*.LIST;*.DATA',...
-            'Raw MRS files Philips (*.list, *.data)';...
- '*.spar;*.SPAR;*.sdat;*.SDAT',...
-            'MRS files Philips (*.sdat, *.spar)';...
- '*.dat;*.DAT;',...
-            'Raw MRS file Siemens (*.dat)';...
- '*.txt;*.TXT;',...
-            'Text files (*.txt)'},...
- 'Select a noise-data file', fp, 'MultiSelect', 'off'); 
-% Canceled file selection
-if fi == 0, return; end 
-
-% Get file-extension for further processing.
-[fp, fn, ext] = fileparts([fp, fn]); ext = lower(ext);
-
-
-% Load Data % ---------------------------------------------------------- %
-switch ext
-    case '.list'
-        CSI_Log({'Noise from list-file not implemented.'},...
-            {'Noise-data is usually present in main CSI data-file.'});
-        return;
-    case '.data'
-        CSI_Log({'Noise from data-file not implemented.'},...
-            {'Noise-data is usually present in main CSI data-file.'});
-        return;
-    case '.txt'
-        CSI_Log({'Noise from text-file not implemented.'},{''});
-    case '.dat'
-        % Load data
-        twix = mapVBVD([fp '\' fn ext]);
-        
-        % Save hdr
-        csi.data.noise.twix = twix.hdr;
-
-        % Read data dimension and labels
-        dims = num2cell(twix.image.dataSize);
-        dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
-        
-        % Dimension labels from header
-        dims_txt = twix.image.dataDims;
-        dims_txt = dims_txt(twix.image.dataSize>1);
-        
-        % Correct data labels from twix-file.
-        % Labels in dat-file
-        labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
-        % Library for other name
-        labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
-        dims_txt_corrected = cell(1,size(dims_txt,2));
-        for ti = 1:size(dims_txt,2)        
-            ind = strcmpi(labels_dat_file, dims_txt{ti});
-            if sum(ind) > 0
-                dims_txt_corrected{ti} = labels_match_library{ind};
-            end
-        end
-        csi.data.noise.labels = dims_txt_corrected;
-
-        % MRS-data
-        tmp = squeeze(twix.image(dims_rng{:}));
-        
-        % Free up memory
-        clear('twix');
-
-        % Data memory size
-        nfo = whos('tmp'); 
-        matlab_nfo = memory;
-        
-        if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
-            % Array is too large for matlab-array-memory
-            fprintf('CSIgui: data requires much memory. Loading as single.\n')
-            csi.data.noise.raw = tmp; 
-        else
-            % Array will fit matlab-max-array-memory
-            csi.data.noise.raw = double(tmp);    
-        end
-        clear('tmp');
-        
-        % Noise dimensions
-        csi.data.noise.dim = size(csi.data.noise.raw);
+switch uans{1}
+    case 'Data'
+        CSI_Noise_Create(gui);
+    case 'File'
+        CSI_Noise_LoadFile(gui);
 end
 
 
-% Clean up % ----------------------------------------------------------- %
-setappdata(gui.CSIgui_main,'csi', csi);
 
-CSI_Log({'Loaded noise-data into memory:'},{[fn ext]});
-CSI_Log({'Use noise-options in the MRSI menubar to view.'},{''});
 
 % --- Executes on button press in button_CSI_PCA_Denoising.
 function button_CSI_PCA_Denoising_Callback(hobj, ~, gui, backup)
@@ -4967,10 +4890,11 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 psz_def = 3:2:19; psz_def([1 2]) = psz_def([2 1]);
 qry = {'Noise decorrelation: ', ...
        'Calculate noise-covariance matrix using:', ...
-       'PCA patch-size:', 'PCA SVD-method:'};
+       'PCA patch-size:', 'PCA SVD-method:', ...
+       'Save noise-component from data (overwrites measurment):'};
 opt = {{'Cholesky', 'Whitening','ZCA', 'None'}, ...
        {'Measurement', 'Data', 'ID-Matrix'},...
-       {psz_def}, {'Fast', 'Default'}};
+       {psz_def}, {'Fast', 'Default'}, {'Yes', 'No'}};
 uans = getUserInput_Popup(qry, opt, [], 'PCA-Denoising');
 if isempty(uans), CSI_Log({'PCA Denoising cancelled'},{''}); return; end
 
@@ -4988,13 +4912,16 @@ patch_size = str2double(uans{3});
 % uans{4} - SVD method for PCA denoising
 if strcmp(uans{4},'Default'), do_svd = 0; else, do_svd = 1; end 
 
+% uans{5} - Save a noise component from data
+doSaveNoise = 0; if strcmp(uans{5},'Yes'), doSaveNoise = 1; end 
+
 % Channel Index
 chan_ind = csi_findDimLabel(csi.data.labels,{'chan'});
 
 % Noise Decorrelation % --------------------------------------------- %
 if ~strcmp(noiseMethod,'None')
     button_CSI_NoiseDecorrelation_Callback(hobj, [], gui, ...
-        noiseMethod, nCovSource, chan_ind);
+        noiseMethod, nCovSource, chan_ind, doSaveNoise);
     csi = getappdata(gui.CSIgui_main, 'csi');
 end
 
@@ -5088,7 +5015,7 @@ end
 data = mat2cell(data, cell_layout{:}); 
 
 % --- Executes on button press in button_CSI_NoiseDecorrelation.
-function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind)
+function button_CSI_NoiseDecorrelation_Callback(hobj, ~, gui, method, src, chan_ind, doSaveNoise)
 % Apply either Cholesky or zero-phase component whitening transformations
 % to the multi-channel csi data i.e. noise decomposition, noise
 % decorrelation.
@@ -5107,17 +5034,24 @@ csi = getappdata(gui.CSIgui_main, 'csi');
 
 % User Input % ------------------------------------------------------- %
 if nargin < 4
+
+    % Default answers: coil index; save noise-component
     chan_ind = csi_findDimLabel(csi.data.labels,{'chan','cha'});
     chan_ind(isnan(chan_ind)) = []; chan_ind_def = 1:numel(csi.data.labels);
     if ~isempty(chan_ind)
         chan_ind_def([1 chan_ind]) = chan_ind_def([chan_ind 1]);   
     end
     chan_ind_def = csi.data.labels(chan_ind_def);
-    
+
+    def_noise = {'Yes', 'No'};
+    if isfield(csi.data,'noise'), def_noise = {'No', 'Yes'}; end
+
     qry = {'Noise decorrelation method:', ...
-           'Calculate noise covariance matrix using:', 'Coil index:'};
+           'Calculate noise covariance matrix using:', 'Coil index:',...
+           'Calculate and store noise using current data:'};
     def = {{'Cholesky', 'Whitening', 'ZCA'}, ...
-           {'Measurement', 'Data', 'ID-Matrix'}, chan_ind_def};
+           {'Measurement', 'Voxel-data', 'ID-Matrix'},...
+           chan_ind_def, def_noise};
     uans = getUserInput_Popup(qry,def);
     if isempty(uans), return; end
 
@@ -5133,20 +5067,24 @@ if nargin < 4
     % Coil/Channel index
     chan_ind = find(strcmp(uans{3}, csi.data.labels) == 1);
 
+    % Store noise
+    doSaveNoise = 0; if strcmp(uans{4}, 'Yes'), doSaveNoise = 1; end
+
 end
 
 
 % Noise-covariance source
 switch src
-    case 'Data',        do_NoiseData = 0;
-    case 'Measurement', do_NoiseData = 1;    
-    case 'ID-Matrix',   do_NoiseData = 2;
+    case 'Voxel-data',  doNoiseData = 0;
+    case 'Data',        doNoiseData = 0;
+    case 'Measurement', doNoiseData = 1;    
+    case 'ID-Matrix',   doNoiseData = 2;
 end
 
-
 % Prepare Noise Data % ----------------------------------------------- %
-
-if do_NoiseData == 1
+% doNoiseData means - use it for covariance.
+% doSaveNoise means - store current voxel-noise into memory.
+if doNoiseData == 1 
     if isfield(csi.data,'noise')
         % Run noise-prepare fcn
         [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
@@ -5159,43 +5097,88 @@ if do_NoiseData == 1
         CSI_Log({functag},...
                 {'Noise-data processed and stored.'});  
     else
-        do_NoiseData = 0; 
+        doNoiseData = 0; 
         CSI_Log({functag},...
                 {'No noise-data present, using voxel-noise instead.'});
     end
 end
 
+if doSaveNoise
+    CSI_Noise_Create(gui); csi = getappdata(gui.CSIgui_main, 'csi');
+end
+
 % Noise Covariance Matrix % -------------------------------------------- %
-if isfield(csi.data, 'noise') && do_NoiseData == 1
+if isfield(csi.data, 'noise') && doNoiseData == 1
     
+
+    % Convert to {#S x Chan x Avg} x X x Y x Z...
+
+    % Noise data and labels
+    tmp = csi.data.noise.raw; lbls = csi.data.noise.labels;
+    
+    % Channel dim to index 2: nS x Chan x rest...
+    chan_ind_noise = csi_findDimLabel(csi.data.noise.labels, {'chan'});
+    chan_ind_noise(isnan(chan_ind_noise)) = [];
+    if chan_ind_noise ~= 2
+        permv = 1:numel(lbls); permv([chan_ind_noise 2]) = [2 chan_ind_noise];
+        if numel(permv) >= 3, permv(3:end) = sort(permv(3:end)); end
+        tmp = permute(tmp, permv); lbls = lbls(permv);
+    end
+    
+    % Average to third dimension
+    avg_ind = csi_findDimLabel(csi.data.noise.labels,...
+        {'nsa', 'aver', 'avg'});
+    avg_ind(isnan(avg_ind)) = [];
+    if ~isempty(avg_ind) && avg_ind ~= 3
+        permv = 1:numel(lbls); permv([avg_ind 3]) = [3 avg_ind];
+        if numel(permv) >= 4, permv(4:end) = sort(permv(4:end)); end
+        tmp = permute(tmp, permv); lbls = lbls(permv);
+    end
+
+    % Convert to cell - {nS x Chan x Avg} ... rest
+    sz = size(tmp);
+    if ~isempty(avg_ind)
+        cell_layout = arrayfun(@ones, ones(1,size(sz(4:end),2)), sz(4:end),...
+            'UniformOutput',0);  
+        tmp = squeeze(mat2cell(tmp, sz(1), sz(2), sz(3), cell_layout{:}));
+    else
+        cell_layout = arrayfun(@ones, ones(1,size(sz(3:end),2)), sz(3:end),...
+            'UniformOutput',0);  
+        tmp = squeeze(mat2cell(tmp, sz(1), sz(2), cell_layout{:}));
+    end
+           
     % Get noise-cov using noise data
-    noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw,...
-                                              csi.data.noise.labels);
+    noise_cov = cellfun(@CSI_NoiseCov_usingMeasurement, ...
+        tmp, squeeze(repmat({lbls}, size(tmp))),...
+        'Uniform', 0);
         
-    % Copy it for nVoxels
-    sz = size(csi.data.raw); % Data size
-    non_spat_ind = ...
-        csi_findDimLabel(csi.data.labels,...
-        {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
-    non_spat_ind(isnan(non_spat_ind)) = []; 
-    non_spat_ind(non_spat_ind > numel(sz)) = [];
-    sz(non_spat_ind) = [];
+    if numel(noise_cov) == 1
+        % Copy it for nVoxels
+        sz = size(csi.data.raw); % Data size
+        non_spat_ind = ...
+            csi_findDimLabel(csi.data.labels,...
+            {'chan','cha','fid','sec', 'avg', 'aver', 'nsa'});
+        non_spat_ind(isnan(non_spat_ind)) = []; 
+        non_spat_ind(non_spat_ind > numel(sz)) = [];
+        sz(non_spat_ind) = [];
 
-    % Covariance matrix
-    noise_cov = repmat({noise_cov}, sz);
-
+        % Covariance matrix
+        if ~iscell(noise_cov), noise_cov = {noise_cov}; end
+        noise_cov = repmat(noise_cov, sz);
+    end
+    
     % NFO Update
     CSI_Log({functag},...
             {'Noise-data used to calculate noise-covariance matrix.'});
 
-elseif do_NoiseData == 0
+elseif doNoiseData == 0
     % Noise covariance matrix required for noise-decorrelation
     % calculated using noise in data itself.
     noise_cov = CSI_NoiseCov_usingData(csi.data.raw, chan_ind);
     CSI_Log({functag },...
             {'Voxel-data used to calculate noise-covariance matrices.'});
 
-elseif do_NoiseData == 2
+elseif doNoiseData == 2
     % Calculate the ID-matrix for use as noise-cov matrix
     nVox = prod(csi.data.dim(2:end));
     noise_cov = ...
@@ -5370,13 +5353,18 @@ uans = getUserInput_Popup({'Orientation:'},{{'Sagittal', 'Coronal'}});
 if isempty(uans), return; end
 
 switch uans{1}
-    case 'Sagittal', permvec = [2 3 1]; aim = 0;
+    case 'Sagittal', permvec = [2 3 1]; aim = 2;
     case 'Coronal',  permvec = [1 3 2]; aim = 1;
 end
 
 % Sagittal: Y x Z - SLX --> rot = [2 3 1]
 % Coronal:  X x Z - SLY --> rot = [1 3 2]
 % rot = [2 3 1]; % Creating Y x Z x X
+%
+% What is aim? --> Flipping dimensions such that HF and RL in coronal
+% images are according to convention (H at top, F at bottom etc.)
+%
+% For saggital - a flip in the FH direction is necessary.
 
 % Find patial dimensions indexes
 spat_dim = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x','y','z'});
@@ -5389,7 +5377,7 @@ permv(spat_dim) = spat_dim(permvec);
 
 % Permute CSI-data
 csi.data.raw = permute(csi.data.raw, permv);
-if aim, csi.data.raw = flip(csi.data.raw, find(permv == spat_dim(3))); end 
+if aim, csi.data.raw = flip(csi.data.raw, find(permv == spat_dim(3))); end
 
 % Permute resolution
 csi.ori.res = csi.ori.res(permvec);
@@ -5423,7 +5411,7 @@ if doMRI
     
     % Permute images
     conv.data = permute(conv.data, permvec4img);
-    if aim, flip(conv.data,1); end
+    if aim, conv.data = flip(conv.data, 1); end
     
     % Permute orientation data
     conv.res = conv.res(permvec2);
@@ -5585,7 +5573,7 @@ new_dim = str2double(strsplit(uans{1}, ' '));
 uans = getUserInput_Popup({'Interpolation method: '},...
     {{'Spline', 'Cubic', 'Linear', 'Nearest', 'Makima'}},...
     [], 'Spatial Interpolation');
-if isempty(uans{1}),CSI_Log({'Aborted interpolation.'},{''}); return; end
+if isempty(uans),CSI_Log({'Aborted interpolation.'},{''}); return; end
 meth = uans{1};
 
 % Interpolate --------------------------------------------- %
@@ -6253,7 +6241,7 @@ if isempty(poi), return; end
 
 % SNR Noise mask
 uans = getUserInput({'Size of SNR noise mask: ','Exclude channels: '}, ...
-    {round(csi.data.dim(1)/12), ''});
+    {round(csi.data.dim(1)/4), ''});
 if isempty(uans)
     CSI_Log({'Skipped SNR Weighted Combination.'},{''}); return; 
 end
@@ -6660,12 +6648,20 @@ if isempty(ind_avg), avg_opt = {'No'}; else, avg_opt = {'Yes','No'}; end
 
 % User Input % ------------------------------------------------------- %
 
+% This is such that if WSVD on data is done, next WSVD will force use of in
+% memory scaleMatrix - useful for noise-processing and automatic
+% processing.
+noise_source_str = {'Voxel-Data', 'User', 'ID-Matrix', 'In-Memory'};
+if isfield(csi.data, 'backup_toview_noise') && ...
+        isfield(csi.data, 'scaleMatrix')
+    noise_source_str = {'In-Memory', 'Voxel-Data', 'User', 'ID-Matrix'};
+end
+
 % Define questions and options
 qry = {'Noise decorrelation method:', ...
        'Calculate noise-covariance using:', 'Apply PCA denoising:',...
        'Average data:', 'Exclude channels:'};
-opt = {{'Whitening', 'Cholesky', 'ZCA', 'None'},...
-       {'Measurement', 'Data', 'ID-Matrix', 'In-Memory'},...
+opt = {{'Whitening', 'Cholesky', 'ZCA', 'None'}, noise_source_str,...
        {'No','Yes'}, avg_opt, {'No', 'Yes'}};
 
 % Ask user
@@ -6679,13 +6675,14 @@ do_NoiseDecorrelation = 0; ndmsg = 'None'; % None
 switch uans{1}
     case 'Whitening', do_NoiseDecorrelation = 1; ndmsg = 'WSVD';
     case 'Cholesky',  do_NoiseDecorrelation = 2; ndmsg = 'Cholesky';
-    case 'ZCA',       do_NoiseDecorrelation = 3; ndmsg = 'ZCA';
+    case 'ZCA',       do_NoiseDecorrelation = 3; ndmsg = 'ZCA';        
 end
 
 % uans{2} - nCov using noise measurement or data or ID-mat
-if strcmp(uans{2},'Measurement'),       do_NoiseData = 1; 
+if strcmp(uans{2},'User'),              do_NoiseData = 1; 
 elseif strcmp(uans{2}, 'ID-Matrix'),    do_NoiseData = 2; 
 elseif strcmp(uans{2}, 'In-Memory'),    do_NoiseData = 3;
+                                        do_NoiseDecorrelation = 5;
 else,                                   do_NoiseData = 0; 
 end 
 
@@ -6764,8 +6761,10 @@ if do_PCA
 end
 
 % Noise Covariance matrix % ------------------------------------------ %
+sz = size(csi.data.raw);ind_all = arrayfun(@(x) 1:x, sz, 'uniform', 0);
+ind_all{ind_cha} = ch_incl;
 
-if do_NoiseData == 1 % Use noise-data
+if do_NoiseData == 1                                      % Use noise-data
     % Get noise-cov using noise data
     noise_cov = CSI_NoiseCov_usingMeasurement(csi.data.noise.raw(:,ch_incl),...
                                               csi.data.noise.labels);
@@ -6775,26 +6774,26 @@ if do_NoiseData == 1 % Use noise-data
     noise_cov = repmat({noise_cov}, size(csi.data.raw));     
     msg = 'Used noise-data to calculate the noise-cov matrix.';
 
-elseif do_NoiseData == 2 % Use identity matrix
+elseif do_NoiseData == 2                             % Use identity matrix
     noise_cov = diag(ones(csi.data.dim(ind_cha),1));
     noise_cov = repmat({noise_cov},size(csi.data.raw)); 
     msg = 'Used identity matrix as a substitute for the noise-cov matrix.';
 
-elseif do_NoiseData == 3 % Use stored ncov- / scale- matrix 
+elseif do_NoiseData == 3                % Use stored ncov- / scale- matrix 
 
     if isfield(csi.data,'scaleMatrix')
             noise_cov = csi.data.scaleMatrix; % 
-            msg = 'Used stored scale matrix.';
+            msg = 'Used stored scale matrix.'; 
     elseif isfield(csi.data, 'noise_cov')
-            noise_cov = csi.data.noise_cov;
-            msg = 'Used stored noise-cov matrix.';
+            noise_cov = csi.data.noise_cov; 
+            msg = 'Used stored noise-cov matrix.';    
     else
         CSI_Log({'No stored noise-cov matrix present, aborting.'});
         return;
     end
 
 else % Use voxel-data
-    noise_cov = CSI_NoiseCov_usingData(csi.data.raw, ind_cha);
+    noise_cov = CSI_NoiseCov_usingData(csi.data.raw(ind_all{:}), ind_cha);
     msg = 'Used voxel-data to calculate the noise-cov matrix.';
 end
 CSI_Log({'WSVD:'},{msg}); % Update LOG
@@ -6818,7 +6817,8 @@ comb = struct;
 comb.data = zeros(szr(1),nvox); 
 comb.Q = zeros(nvox,1); 
 comb.W = zeros(size(ch_incl,2), nvox); 
-comb.A = zeros(nvox, size(ch_incl,2)); 
+comb.A = zeros(nvox, size(ch_incl,2));
+comb.scaleMatrix = cell(nvox,1);
 
 
 % WSVD loop. 
@@ -6830,12 +6830,14 @@ for vi = 1:nvox
  
     % WSVD algorithm
     % 0 = none, 1 = WSVD, 2 = Cholesky, 3 = ZCA
-    [comb.data(:,vi), comb.Q(vi),comb.W(:,vi),comb.A(vi,:)] = ...
+    [comb.data(:,vi), comb.Q(vi),comb.W(:,vi),comb.A(vi,:), ...
+        comb.scaleMatrix{vi}] = ...
             WSVD3(tmp_cell{vi}(:,ch_incl), N, do_NoiseDecorrelation);
 
    
 end
 
+csi.data.scaleMatrix = comb.scaleMatrix;
 
 % Reshaping (2/2) % ------------------------------------------------- %
 % Reshape the cell array back to the an array: dt x chan x residual.
@@ -7162,7 +7164,7 @@ end
 
 
 % Calculate using noise mask
-SNR = csi_SNR(data, round(size(data,1)./12), 1, [1 size(data,1)]);
+SNR = csi_SNR(data, round(size(data,1)./4), 1, [1 size(data,1)]);
 
 % Get maximum for each fid/spec entry: dim Dt x .. x .. x .. etc.
 data = (max(data,[],1)); 
@@ -7226,7 +7228,11 @@ end
 function button_CSI_SNR_Callback(~, ~, gui)
 % Calculate SNR for each dimension in the dimensional MRS data.
 %
-% Uses csi_SNR();
+% Uses csi_SNR() and csi_SNR_AUC;
+%
+% SNRmethod defines use of real or magnitude for SNR calculations.
+% Noise-source sets calculation method for noise: use voxel-data or
+% stored-noise data.
 
 % Get CSI data-structure
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
@@ -7235,33 +7241,64 @@ csi = getappdata(gui.CSIgui_main,'csi');
            % --------------- % USERINPUT % --------------- %
            % POI, mask-size, snr-method & display-method
 
-% POI: Peak of SNR
+
 CSI_Log({'Executing SNR caluclations.'},{''});
+
+% POI: Peak of SNR
 range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
 if isempty(range_none), return; end
 
 % SNR Noise mask
-uans = getUserInput({'Size of SNR noise mask: '},{round(csi.data.dim(1)/12)});
+elm = {'edit', 'popup','popup', 'popup'};
+qry = {'Size of noise mask:', 'Noise-source:', 'SNR Signal unit:', ...
+       'Method:'};
+def = {{round(csi.data.dim(1)/4)}, {'Noise-data', 'Voxel-data'},...
+       {'Real', 'Magnitude'}, {'Maximum', 'AUC'}};
+uans = getInput(elm, qry, def,'SNR');
 if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 
-% Convert user input
+% Mask-size user input
 mask_size = str2double(uans{1});
 
-% SNR-method (real/magnitude) and display method (table or graph)
-uans = getUserInput_Popup({'SNR Signal unit: '},...
-                         {{'Real', 'Magnitude'}}, [], 'SNR');
-if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
-switch uans{1} % SNR method
+% Noise-source and input
+% Calculate it from voxel-data or use noise-data
+noise_inp = mask_size;
+switch uans{2}
+    case 'Noise-data'
+        % Get noise from file/memory
+    
+        if isfield(csi.data,'noise')
+            noise = abs(std(csi.data.noise.raw, [], 1));
+            noise_inp = noise;
+        else
+            CSI_Log({'No noise-data stored, using voxel-noise instead.'},...
+                    {''});            
+        end
+end
+    
+% SNR-method (real/magnitude) 
+switch uans{3} % SNR method
     case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; 
 end
+
+% SNR mehotd (maximum/AUC)
+doAUC = 0; if strcmp(uans{4}, 'AUC'), doAUC = 1; end
+    
 
               % --------------- % SNR % --------------- %
 
 % Display Info %
 CSI_Log({'Calculating SNR per voxel, please be patient.'},{''});
 
-% Calculate using noise mask
-SNR_all = csi_SNR(csi.data.raw, mask_size, SNRmethod, range_none);
+
+if doAUC    
+    % Calculate using noise mask and AUC
+    SNR_all = csi_SNR_AUC(csi.data.raw, range_none, noise_inp, [], 0);           
+else
+    % Calculate using noise mask and maximum peak value
+    SNR_all = csi_SNR(csi.data.raw, noise_inp, SNRmethod, range_none);
+end
+
 % Convert NaNs to zero
 SNR_all(isnan(SNR_all)) = 0; 
 
@@ -7273,7 +7310,6 @@ CSI_Log({'SNR statistics: Full Volume ---------------- %',...
           sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
           sprintf('%.2f', stats.median), ...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
-
 
            % --------------- % DISPLAY DATA % --------------- %
 
@@ -8421,6 +8457,7 @@ for sli = 1:size(data,4) % ----------------- %
     % To linear vector per cell.
     nDimC = cellfun(@(x) 1:x, nDimC,'UniformOutput',0);
 
+    plot_par.plotindex = [sli, nDimC];
     plot_par.data2D = data(:,:,:,sli,nDimC{:});
     
     % Plot Scaling Settings %  ------------ %
@@ -14174,7 +14211,7 @@ switch method{1}, case 'Real', method = 1; case 'Magnitude', method = 0; end
 
 
 % Mask size
-masksz = getUserInput({'Mask size: '},{round(size(data,1)/12)});
+masksz = getUserInput({'Mask size: '},{round(size(data,1)/4)});
 if isempty(masksz), return; end
 masksz = str2double(masksz);
 
@@ -14441,7 +14478,6 @@ if isfield(appdata1D.axis, 'ppm')
 else                         
     ax = appdata1D.axis.none;
 end
-
 
 % Baseline | Samples
 N = size(data,1); 
@@ -15149,12 +15185,12 @@ if val <= sz, str(val) = []; gui.listbox_CSIinfo.String = str; end
 % Noise Data Manager and Processing % -------------------------------- %
 % -------------------------------------------------------------------- %
 
-% --- View noise component executed in menu
+% --- Load/View noise component
 
 % --- Noise data manager for separate noise-data
-function CSI_Noise_ViewManager(hObject, ~, ~)
+function CSI_Noise_ViewManager(hobj, ~, ~)
 % Gui-data struct.
-gui = guidata(hObject);
+gui = guidata(hobj);
 
 
 % End if no CSI data present
@@ -15257,10 +15293,9 @@ dans = ones(1,size(qry,2));
 % Default noise-processing steps
 dans(2) = 0; dans(3) = 0; dans(4) = 0;
 
-
 uans = getUserInput_Tick(qry, opt, 'Noise Preparation', dans);
 if isempty(uans)
-    CSI_Log({'Noise Preperation:'},{'Aborted.'}); csi = NaN; return; 
+    CSI_Log({'Noise: processing aborted.'},{''}); csi = NaN; return; 
 end
 
 % UANS 1: process noise data? or no options enabled
@@ -15308,6 +15343,158 @@ CSI_Noise_ViewManager(hobj, [], []);
 
 % Reload csi-app-data
 csi = getappdata(gui.CSIgui_main,'csi');
+
+% NFO output
+CSI_Log({'Noise: processing finished.'},{''});
+
+% --- Noise from data save-system
+function CSI_Noise_Create(gui)
+% One can load a FID noise measurement via the GUI or create
+% noise from the current CSI data. The latter is coded here.
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% Get noisemask
+elm = {'edit', 'popup'};
+qry = {'Size of double-sided noise mask: ', 'Process noise-data:'};
+def = {{round(csi.data.dim(1)/4)}, {'No', 'Yes'}};
+uans = getInput(elm, qry, def, 'Create Noise');
+if isempty(uans), return; end
+
+% Process userinput
+mask_sz = str2double(uans{1});
+doNoise = 0; if strcmp(uans{2}, 'Yes'), doNoise = 1; end
+
+% Double sided noise mask with size mask_size
+dim = size(csi.data.raw);
+mask_sz_sided = [round(mask_sz./2) mask_sz-round(mask_sz./2)];
+noise_mask = [1:mask_sz_sided(1) (dim(1) - mask_sz_sided(2) + 1):dim(1)];
+
+% Convert to cell for dynamic easy data-indexing
+cell_layout = arrayfun(@(x) 1:x, dim, 'UniformOutput', false);
+cell_layout{1} = noise_mask;
+
+% Create and store noise-data array
+csi.data.noise.raw = csi.data.raw(cell_layout{:});
+csi.data.noise.dim = size(csi.data.noise.raw);
+csi.data.noise.labels = csi.data.labels;
+
+% Clean up
+setappdata(gui.CSIgui_main,'csi', csi);
+
+% Log to user
+CSI_Log({'Noise: applied noise-mask of size '},{mask_sz});
+CSI_Log({'Noise: loaded noise-data into memory.'},{''});
+CSI_Log({'Noise: use noise-options in the MRSI menubar to view.'},{''});
+
+% Option to process
+if doNoise, CSI_Noise_Prepare(gui.CSIgui_main, gui); end
+
+% --- Noise from file
+function CSI_Noise_LoadFile(gui)
+% Load noise from a separate file
+
+
+% USERINPUT % ---------------------------------------------------------- %
+
+% Get default path if available
+if isappdata(gui.CSIgui_main,'csi')
+    csi = getappdata(gui.CSIgui_main,'csi');
+    if isfield(csi,'filepath'), fp = csi.filepath; else, fp = []; end
+else, CSI_Log({'No MRS data in memory.'},{'Load MRS-data first.'}); return; 
+end
+    
+% Select-file UI.
+[fn, fp, fi] = uigetfile({'*.*','All Files (*.*)';...
+ '*.list;*.data;*.LIST;*.DATA',...
+            'Raw MRS files Philips (*.list, *.data)';...
+ '*.spar;*.SPAR;*.sdat;*.SDAT',...
+            'MRS files Philips (*.sdat, *.spar)';...
+ '*.dat;*.DAT;',...
+            'Raw MRS file Siemens (*.dat)';...
+ '*.txt;*.TXT;',...
+            'Text files (*.txt)'},...
+ 'Select a noise-data file', fp, 'MultiSelect', 'off'); 
+% Canceled file selection
+if fi == 0, return; end 
+
+% Get file-extension for further processing.
+[fp, fn, ext] = fileparts([fp, fn]); ext = lower(ext);
+
+
+% Load Data % ---------------------------------------------------------- %
+switch ext
+    case '.list'
+        CSI_Log({'Noise from list-file not implemented.'},...
+            {'Noise-data is usually present in main CSI data-file.'});
+        return;
+    case '.data'
+        CSI_Log({'Noise from data-file not implemented.'},...
+            {'Noise-data is usually present in main CSI data-file.'});
+        return;
+    case '.txt'
+        CSI_Log({'Noise from text-file not implemented.'},{''});
+    case '.dat'
+        % Load data
+        twix = mapVBVD([fp '\' fn ext]);
+        
+        % Save hdr
+        csi.data.noise.twix = twix.hdr;
+
+        % Read data dimension and labels
+        dims = num2cell(twix.image.dataSize);
+        dims_rng = cellfun(@(x) 1:x, dims,'uniform', 0); % Range
+        
+        % Dimension labels from header
+        dims_txt = twix.image.dataDims;
+        dims_txt = dims_txt(twix.image.dataSize>1);
+        
+        % Correct data labels from twix-file.
+        % Labels in dat-file
+        labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave'}; 
+        % Library for other name
+        labels_match_library = {'fid','chan','ky','kz','kx', 'aver'};    
+        dims_txt_corrected = cell(1,size(dims_txt,2));
+        for ti = 1:size(dims_txt,2)        
+            ind = strcmpi(labels_dat_file, dims_txt{ti});
+            if sum(ind) > 0
+                dims_txt_corrected{ti} = labels_match_library{ind};
+            end
+        end
+        csi.data.noise.labels = dims_txt_corrected;
+
+        % MRS-data
+        tmp = squeeze(twix.image(dims_rng{:}));
+        
+        % Free up memory
+        clear('twix');
+
+        % Data memory size
+        nfo = whos('tmp'); 
+        matlab_nfo = memory;
+        
+        if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
+            % Array is too large for matlab-array-memory
+            fprintf('CSIgui: data requires much memory. Loading as single.\n')
+            csi.data.noise.raw = tmp; 
+        else
+            % Array will fit matlab-max-array-memory
+            csi.data.noise.raw = double(tmp);    
+        end
+        clear('tmp');
+        
+        % Noise dimensions
+        csi.data.noise.dim = size(csi.data.noise.raw);
+end
+
+
+% Clean up % ----------------------------------------------------------- %
+setappdata(gui.CSIgui_main,'csi', csi);
+
+CSI_Log({'Noise: loaded noise-data into memory:'},{[fn ext]});
+CSI_Log({'Noise: use noise-options in the MRSI menubar to view.'},{''});
 
 
 % -------------------------------------------------------------------- %
@@ -15377,16 +15564,17 @@ end
 
 % Get TR, T1, Zero, Parallel - Add FA?
 ele = {'popup', 'edit', 'edit', 'edit', 'edit', 'edit', 'popup',...
-       'popup', 'popup', 'popup', 'popup', 'popup'};
+       'popup', 'popup', 'popup', 'popup', 'edit'};
 qry = {'TR Index:', 'Give a TR range [s]:',...
        'Initial T1 [s]:', 'T1 boundary [s]:'...
        'Initial FA [deg]:','FA Boundary [deg]:', ...
        'Add S(0) = 0:', 'Extend TR by copying S(end): ',...
-       'Double fit cycle', 'Save data:', 'Display data:'};
+       'Double fit cycle', 'Save data:', 'Display data:',...
+       'M0-Boundary scaling:'};
 opt = {flip(csi.data.labels), num2str(TR, '%2.2f '), ...
       '8.9', '8.8999 8.9001', '20', '1 90', {'Yes', 'No'},...
       {'No', 'Once','Twice', 'Thrice'},...
-      {'Yes', 'No'}, {'Yes', 'No'}, {'Yes', 'No'}};
+      {'Yes', 'No'}, {'Yes', 'No'}, {'Yes', 'No'}, '0.25 2'};
 uans = getInput(ele, qry, opt, 'Fit FA-maps');
 if isempty(uans), return; end
 
@@ -15425,6 +15613,9 @@ if strcmp(uans{10},'Yes'), doSave = 1; else, doSave = 0; end
 
 % UANS - Display data
 if strcmp(uans{11},'Yes'), doDisp = 1; else, doDisp = 0; end
+
+% UANS - M0-boundaries
+M0_boundaryScaling = sort(str2double(strsplit(uans{12})));
 
 % Prepare FIT loop % ------------------------------------------- %
 
@@ -15494,7 +15685,8 @@ for di = 1:double_iter
     % Display fit-variable limits   
     CSI_Log({''},{''});
     CSI_Log({'% ----------------------------------- %'},{''});
-    CSI_Log({'M0:'},{'Voxel and T1/FA dependent.'});
+    CSI_Log({'M0:','M0-Boundary scaling:'},...
+            {'Voxel and T1/FA dependent.', M0_boundaryScaling});
     CSI_Log({'TR:', 'FA-Initial:','FA-boundary:',...
                     'T1-Initial:', 'T1-boundary:', },...
             {TR, FAinit, FAbound, T1init, T1bound});    
@@ -15551,7 +15743,8 @@ for di = 1:double_iter
         M0init = max(yval) .* ...
             (1- (exp(-TR(end-doExtendVal)./T1init).*cosd(FAinit))) ./ ...
             (sind(FAinit).*( 1-exp(-TR(end-doExtendVal)./T1init)));
-        M0bound(1) = M0init * 0.75; M0bound(2) = M0init * 1.25;        
+        M0bound  = M0init .* M0_boundaryScaling;
+
     
         % Upper and lower bound of fitting parameters.
         % M0 needs to be adjusted according T1/FA init
@@ -15601,7 +15794,8 @@ for di = 1:double_iter
             fpn = [fp_out fn_out]; 
             fit_par_label = {'FA', 'T1', 'M0'};
             save(fpn, 'fit_par', 'TR', 'rsq', 'confint', 'opts', ...
-                'csi_model', 'fit_par_label', 'output');
+                'csi_model', 'fit_par_label', 'output', ...
+                'M0_boundaryScaling');
         end
     end
     
@@ -15628,6 +15822,165 @@ for di = 1:double_iter
 
 end % End of double fit-iterations
 
+% --- Executes via CSI
+function CSI_MapB1_DoubleCSI(gui)
+% Given two CSI measurements with M1(a) and M2(2a), calculate the flipangle
+% using: invcos(m2/2*m1) = FA.
+%
+% Input: gui-handle of CSIgui
+
+% Get appdata
+if ~isappdata(gui.CSIgui_main, 'csi'), return; end
+csi = getappdata(gui.CSIgui_main, 'csi');
+
+% ------------------------------------------------- %
+
+% -- USERINPUT -- %
+
+% \\ Get peak of interest
+CSI_Log({'Executing double-CSI FA-mapping...'},{''});
+range = CSI_getPeakOfInterest(csi.xaxis, 'Calculate B1-maps');
+if isempty(range), return; end
+doi = CSI_getDataAtPeak(csi.data.raw, csi.xaxis, range);
+
+% \\ Index of interest and data type
+uans = getUserInput_Popup({'Data type (calculations): ',...
+                           'Data type (results): '},...
+                         {{'Real', 'Magnitude','Complex'},...
+                          {'Real', 'Magnitude', 'Imaginary',...
+                           'Real raw','Imaginary raw', 'Complex'}},...
+                          [], 'B1-mapping');
+if isempty(uans), CSI_Log({'Skipped B1-mapping.'},{''}) ; return; end
+
+% \\ B1 index
+B_ind = find(strcmpi(csi.data.labels,'b1'));
+if isempty(B_ind)
+    B_ind = getUserInput_Popup({'Data B1 index'},{csi.data.labels},...
+                               [], 'B1-mapping');
+    if isempty(B_ind)
+        CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
+    end 
+    B_ind  = find(strcmp(csi.data.labels,B_ind)==1);
+end
+
+% \\ SNR Filtering
+filter_snr = getUserInput(...
+    {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
+    {'0',round(csi.data.dim(1)./10)});
+if isempty(filter_snr)
+    CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
+end
+
+% -- PROCESS USERINPUT -- %
+
+% -- Datatype: DATA CONVERTED TO DATATYPE
+switch uans{1}
+    case 'Real',      doi = real(doi);
+    case 'Magnitude', doi = abs(doi);
+end
+
+% -- CALCULATIONS  -- % B1
+
+% \\ Get maximum value of peak of interest
+CSI_Log({'Calculating B1 per voxel. Using data-type: '}, uans(1));
+
+% Max value
+mx_val = max(doi,[],1);
+
+% \\ Split the data by B_ind
+doi_ranges = cellfun(@(x) 1:x, num2cell(csi.data.dim),'uniform', 0);
+doi_ranges{1} = 1;
+Mone_range = doi_ranges; Mone_range{B_ind} = 1;
+Mtwo_range = doi_ranges; Mtwo_range{B_ind} = 2;
+
+Mone = mx_val(Mone_range{:});
+Mtwo = mx_val(Mtwo_range{:});
+
+% \\ Calculate using acos(M2/2*M1)
+inner = Mtwo ./ (Mone.*2);
+FA = acosd(inner);
+
+
+% -- CALCULATIONS  -- % SNR
+if str2double(filter_snr{1}) ~= 0
+    
+    snr_limit = str2double(filter_snr{1});
+    snr_mask = str2double(filter_snr{2});
+    
+    % Display Info %
+    CSI_Log({['Calculating SNR per voxel, '... 
+              'and filter data using minimum SNR limit: ']},...
+            {snr_limit});
+
+    % Noise mask
+    mask_size = snr_mask;
+
+    % Using high-FA data for SNR
+    snr_dims = doi_ranges; snr_dims(1) = [];
+    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
+    
+    % Use highest flip angle data to calculate SNR
+    snr_dims{B_ind} = 2;
+
+    % Calculate using noise mask
+    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, range);
+    
+    % Convert NaNs to zero
+    SNR_all(isnan(SNR_all)) = 0; 
+    
+    % Filter boolean 
+    SNR_bool = SNR_all < snr_limit;
+    
+    % Filter data
+    FA(SNR_bool) = NaN;
+end
+
+
+% \\ Process output FA-maps
+% FA_main = FA; % Store FA
+imag_FA = imag(FA); % Imaginary FA
+real_FA = real(FA); % Real FA
+abso_FA = abs(FA); % Absolute FA
+
+% When the ratio of M(2a) / 2xM(a) is larger than 1, the resulting inverse
+% cosine will  result in imaginary results, which is fals. We filter that
+% here:
+
+% Where does the result contain imaginary-output
+index_imag_output = (imag_FA ~= 0);
+index_real_output = (index_imag_output == 0);
+
+% Real without any voxel containing imaginary results
+real_FA_noImag = real_FA;
+real_FA_noImag(index_imag_output) = NaN;
+
+% Imaginary without any voxel containing correct results
+% So the imaginary part of the data, with correctly calculated values
+% removed such that you only see the incorrect results.
+imag_FA_noReal = imag_FA;
+imag_FA_noReal(index_real_output == 1) = NaN;
+
+% Process result to data-type 
+switch uans{2}
+    case 'Real',          FA_out = real_FA_noImag;
+    case 'Magnitude',     FA_out = abso_FA;
+    case 'Imaginary',     FA_out = imag_FA_noReal;
+    case 'Real raw',      FA_out = real_FA;
+    case 'Imaginary raw', FA_out = imag_FA;
+    case 'Complex',       FA_out = FA;
+end
+
+% Show statistics nfo
+stats = csi_statistics_of_volume(FA_out);
+CSI_Log({'B1-map statistics ------------------------------- %',...
+         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
+     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
+          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
+          sprintf('%.2f', stats.median), ...
+          sprintf('%.2f | %.2f', stats.min, stats.max)});
+% -------------------------------------------- Display
+% \\ Display Data
+CSI_dataAs_Initiate(FA_out, 'B1-Map', gui, csi.data.labels);
 
 
 % -------------------------------------------------------------------- %
@@ -15985,8 +16338,6 @@ function CSI_saveFig(hObject, ~, ~)
 % Save the 2D CSIgui plot to file supporting multiple formats;
 % jpg, png, eps, tiff, fig.
 
-
-
 % Get guidata
 gui = guidata(hObject);
 
@@ -16020,39 +16371,30 @@ switch ext
     otherwise,   render = '-opengl';
 end
 
-uans = getUserInput_Popup({'Specify figure(s) to save:',...
-                           'Resolution (DPI):',...
-                           'Transparency:',...
-                           'Show index in figure:',...
-                           'Fast mode: '},...
-                         {{'Current figure', 'All', 'All of current slice'},...
-                           cat(2,num2cell(0:200:1200),'Custom'),...
-                           {'No','Yes'},{'Yes','No'},{'No','Yes'}}, ...
-                         [], 'Save Figure');
+qry = {'Specify figure(s) to save:', ...
+       'Transparency:', 'Show index in figure:', 'Fast mode: '};
+def = {{'Current figure', 'All', 'All of current slice', 'Range'},...
+       {'No','Yes'}, {'Yes','No'}, {'No','Yes'}};
+uans = getUserInput_Popup(qry, def, [], 'Save Figure');
 if isempty(uans), CSI_Log({'Skipped exporting figures.'},{''}); return; 
 end  
 
 % Process what to save
 switch uans{1}
-    case 'Current figure', save_all = 0;
-    case 'All',            save_all = 1;
-    case 'All of current slice', save_all =  2;
+    case 'Current figure',          save_all = 0;
+    case 'All',                     save_all = 1;
+    case 'All of current slice',    save_all = 2;
+    case 'Range',                   save_all = 3;
 end
-
-% Process resolution
-if strcmp(uans{2},'Custom')
-        uans{2} = getUserInput({'Custom DPI scaling:'},{''});
-end
-dpi = str2double(uans{2});
 
 % Process transparency
-if strcmp(uans{3},'Yes'), transparency = 1; else, transparency = 0; end
+if strcmp(uans{2},'Yes'), transparency = 1; else, transparency = 0; end
 
 % Process plotting index in figure
-if strcmp(uans{4},'Yes'), showIndex = 1; else, showIndex = 0; end
+if strcmp(uans{3},'Yes'), showIndex = 1; else, showIndex = 0; end
 
 % Process fast saving
-if strcmp(uans{5}, 'Yes'), fast = 1; else, fast = 0; end
+if strcmp(uans{4}, 'Yes'), fast = 1; else, fast = 0; end
 
 % FIGURE OBJECT % ------------------------------------------------------ %
 % Get 2D-plot figure its object, apply chosen options and save as image.
@@ -16123,7 +16465,43 @@ elseif save_all == 2
         indArray_Slice = repmat(sloi,size(indArray,1)',1);
         indArray = cat(2,indArray_Slice, indArray);
     end
+
+elseif save_all == 3
+
+    % Default edit-answer
+    dim = csi.data.dim(4:end); def = repmat({''}, size(dim));
+    % Default query:
+    nqry = numel(def); elm = repmat({'edit'}, 1, nqry); 
+    qry = repmat({'index of interest:'}, 1, nqry); 
+    for kk = 1:nqry
+        qry{kk} = sprintf('%s - %s', csi.data.labels{kk+3}, qry{kk});
+    end
     
+    % // User input
+    uans_sloi = getInput(elm, qry, def, 'Export 2D CSI figure');                                                     
+    if isempty(uans_sloi), return; end
+    
+    % // Process user input
+    urange = cell(1,numel(uans_sloi));
+    for kk = 1:numel(uans_sloi)
+        if strcmp(uans_sloi{kk}, '')
+            % Include full dimensions
+            urange{kk} = 1:csi.data.dim(kk+3);
+        elseif contains(uans_sloi{kk}, ':')
+            parts = strsplit(uans_sloi{kk}); perPart = cell(size(parts));
+            for subi = 1:size(parts,2)
+                perPart{subi} = str2double(strsplit(parts{subi}, ':'));        
+                if numel(perPart{subi}) == 2
+                    perPart{subi} = perPart{subi}(1):perPart{subi}(2);
+                end
+            end
+            urange{kk} = cell2mat(perPart);             
+        else
+            % Single             
+            urange{kk} = str2double(uans_sloi{kk});
+        end
+    end
+    indArray = allCombinations(urange)';
 end
 if isempty(dim), dim = 1; end 
 
@@ -16532,8 +16910,6 @@ if isappdata(gui.CSIgui_main, 'conv')
     img = MRI_matchSlices(hObj);
     display3D(img, 'tag', 'CSI-matched');
 end
-
-
 
 
 % --- Executes on button press in button_MRI_setContrast.
@@ -17344,14 +17720,14 @@ end
 
 % ---- % SNR
 % Calc SNR for POI   
-snr = csi_SNR(poi_vox_4snr, round(size(poi_vox_4snr,1)*0.1), 1, sel.poi); 
+snr = csi_SNR(poi_vox_4snr, round(size(poi_vox_4snr,1)/4), 1, sel.poi); 
 
 % --- % Executed to weight voxels to SNR
 function sel = MergeVoxels_Weighted(sel)
 % Apply weighting to each voxel before averaging
 % Weighting is calculated from maximum SNR at a POI from all voxels.
  
-sel.snr = csi_SNR(sel.voxels, 50, 1, sel.poi); % Calculate SNR
+sel.snr = csi_SNR(sel.voxels, round(size(sel.voxels,1)./4), 1, sel.poi); % Calculate SNR
 
 % ---- % Weighting
 
@@ -17611,8 +17987,6 @@ end
 setappdata(gui.CSIgui_main,'csi', csi);
 CSI_Log({'Timer-auto-click:'}, {msg});
 
-
-
 % --- Simple sinc function
 function an = sincQ(x)
 an = sin(x)./x;
@@ -17808,8 +18182,21 @@ for kk = 1:size(inp,2)
     
     inpfnc = tmp{1}; 
     if length(tmp)>1, inpvar = tmp{2}; else, inpvar=[]; end
+    
+    
+    % If apodization of fid - possible value to use later, write this to
+    % file. It will be read by apodization_fid
+    fpapo = 'Git2\Files\apodization_value.txt';
+    if strcmpi(inpfnc, 'Apodization_FID')
+        id = fopen('Git2\Files\apodization_value.txt', 'w');
+        fprintf(id, '%s', tmp{2}); fclose(id);
+    end
 
 
+    
+    % ------------------------------------------------------------- %
+    
+    % Exceptions to the rule - simple
     if strcmp('plotCSI', inpfnc) || strcmp(inpfnc(1:3), 'MRI')
         qrystr = ['button_' inpfnc];
     else
@@ -17831,6 +18218,9 @@ for kk = 1:size(inp,2)
                 button_TestSomething_Callback([], [], gui);
         end
     else
+        
+    % ------------------------------------------------------------- %
+    % Default auto-run.
        btn = butfunc(qry);
        if ~isempty(btn) 
            fnc2run = [btn{:} '_Callback'];
@@ -18162,166 +18552,6 @@ CSI_Log({'Zero-crossing statistics ---------- %',...
           sprintf('%.2f | %.2f', stats.min, stats.max)});
 end
 
-
-function CSI_MapB1_DoubleCSI(gui)
-% Given two CSI measurements with M1(a) and M2(2a), calculate the flipangle
-% using: invcos(m2/2*m1) = FA.
-%
-% Input: gui-handle of CSIgui
-
-% Get appdata
-if ~isappdata(gui.CSIgui_main, 'csi'), return; end
-csi = getappdata(gui.CSIgui_main, 'csi');
-
-% ------------------------------------------------- %
-
-% -- USERINPUT -- %
-
-% \\ Get peak of interest
-CSI_Log({'Executing double-CSI FA-mapping...'},{''});
-range = CSI_getPeakOfInterest(csi.xaxis, 'Calculate B1-maps');
-if isempty(range), return; end
-doi = CSI_getDataAtPeak(csi.data.raw, csi.xaxis, range);
-
-% \\ Index of interest and data type
-uans = getUserInput_Popup({'Data type (calculations): ',...
-                           'Data type (results): '},...
-                         {{'Real', 'Magnitude','Complex'},...
-                          {'Real', 'Magnitude', 'Imaginary',...
-                           'Real raw','Imaginary raw', 'Complex'}},...
-                          [], 'B1-mapping');
-if isempty(uans), CSI_Log({'Skipped B1-mapping.'},{''}) ; return; end
-
-% \\ B1 index
-B_ind = find(strcmpi(csi.data.labels,'b1'));
-if isempty(B_ind)
-    B_ind = getUserInput_Popup({'Data B1 index'},{csi.data.labels},...
-                               [], 'B1-mapping');
-    if isempty(B_ind)
-        CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
-    end 
-    B_ind  = find(strcmp(csi.data.labels,B_ind)==1);
-end
-
-% \\ SNR Filtering
-filter_snr = getUserInput(...
-    {'Minimum value for SNR Filtering: [0 = off]', 'SNR window:'},...
-    {'0',round(csi.data.dim(1)./10)});
-if isempty(filter_snr)
-    CSI_Log({'Skipped B1-map calculations.'},{''}) ; return; 
-end
-
-% -- PROCESS USERINPUT -- %
-
-% -- Datatype: DATA CONVERTED TO DATATYPE
-switch uans{1}
-    case 'Real',      doi = real(doi);
-    case 'Magnitude', doi = abs(doi);
-end
-
-% -- CALCULATIONS  -- % B1
-
-% \\ Get maximum value of peak of interest
-CSI_Log({'Calculating B1 per voxel. Using data-type: '}, uans(1));
-
-% Max value
-mx_val = max(doi,[],1);
-
-% \\ Split the data by B_ind
-doi_ranges = cellfun(@(x) 1:x, num2cell(csi.data.dim),'uniform', 0);
-doi_ranges{1} = 1;
-Mone_range = doi_ranges; Mone_range{B_ind} = 1;
-Mtwo_range = doi_ranges; Mtwo_range{B_ind} = 2;
-
-Mone = mx_val(Mone_range{:});
-Mtwo = mx_val(Mtwo_range{:});
-
-% \\ Calculate using acos(M2/2*M1)
-inner = Mtwo ./ (Mone.*2);
-FA = acosd(inner);
-
-
-% -- CALCULATIONS  -- % SNR
-if str2double(filter_snr{1}) ~= 0
-    
-    snr_limit = str2double(filter_snr{1});
-    snr_mask = str2double(filter_snr{2});
-    
-    % Display Info %
-    CSI_Log({['Calculating SNR per voxel, '... 
-              'and filter data using minimum SNR limit: ']},...
-            {snr_limit});
-
-    % Noise mask
-    mask_size = snr_mask;
-
-    % Using high-FA data for SNR
-    snr_dims = doi_ranges; snr_dims(1) = [];
-    snr_dims = [{1:csi.data.dim(1)}, snr_dims]; 
-    
-    % Use highest flip angle data to calculate SNR
-    snr_dims{B_ind} = 2;
-
-    % Calculate using noise mask
-    SNR_all = csi_SNR(csi.data.raw(snr_dims{:}), mask_size, 1, range);
-    
-    % Convert NaNs to zero
-    SNR_all(isnan(SNR_all)) = 0; 
-    
-    % Filter boolean 
-    SNR_bool = SNR_all < snr_limit;
-    
-    % Filter data
-    FA(SNR_bool) = NaN;
-end
-
-
-% \\ Process output FA-maps
-% FA_main = FA; % Store FA
-imag_FA = imag(FA); % Imaginary FA
-real_FA = real(FA); % Real FA
-abso_FA = abs(FA); % Absolute FA
-
-% When the ratio of M(2a) / 2xM(a) is larger than 1, the resulting inverse
-% cosine will  result in imaginary results, which is fals. We filter that
-% here:
-
-% Where does the result contain imaginary-output
-index_imag_output = (imag_FA ~= 0);
-index_real_output = (index_imag_output == 0);
-
-% Real without any voxel containing imaginary results
-real_FA_noImag = real_FA;
-real_FA_noImag(index_imag_output) = NaN;
-
-% Imaginary without any voxel containing correct results
-% So the imaginary part of the data, with correctly calculated values
-% removed such that you only see the incorrect results.
-imag_FA_noReal = imag_FA;
-imag_FA_noReal(index_real_output == 1) = NaN;
-
-% Process result to data-type 
-switch uans{2}
-    case 'Real',          FA_out = real_FA_noImag;
-    case 'Magnitude',     FA_out = abso_FA;
-    case 'Imaginary',     FA_out = imag_FA_noReal;
-    case 'Real raw',      FA_out = real_FA;
-    case 'Imaginary raw', FA_out = imag_FA;
-    case 'Complex',       FA_out = FA;
-end
-
-% Show statistics nfo
-stats = csi_statistics_of_volume(FA_out);
-CSI_Log({'B1-map statistics ------------------------------- %',...
-         'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
-     {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
-          sprintf('%.2f | freq. %3.0f || ',cat(1,stats.mode, stats.freq)),...
-          sprintf('%.2f', stats.median), ...
-          sprintf('%.2f | %.2f', stats.min, stats.max)});
-% -------------------------------------------- Display
-% \\ Display Data
-CSI_dataAs_Initiate(FA_out, 'B1-Map', gui, csi.data.labels);
-
 % --- Executes on button press in button_CSI_VoxelMask.
 function button_CSI_VoxelMask_Callback(~, ~, gui)
 % Create a voxel mask to exclude voxels from calculations. 
@@ -18403,26 +18633,27 @@ end
 
 
 % Convert mask to data-size % ----------------------------------------  %
-csz = size(csi.data.raw); msz = size(mask);
+csz = size(csi.data.raw);
+mask = CSI_VoxelMask_Checksum(mask, csz, {NaN});
 
-% Permute vector to move mask to spatial dimension
-permv = [numel(msz)+1 1:numel(msz)];
-mask = permute(mask, permv); msz = size(mask);    
-
-if numel(msz) ~= numel(csz) % If there are higher order indexes    
-    % Repeat mask over non-spatial dimensions    
-    dimrem = csz(numel(msz)+1:numel(csz));
-    dimrem = [ones(1,numel(msz)) dimrem];
-
-    mask = repmat(mask, dimrem); msz = size(mask);
-    if sum(msz(2:end) ~= csz(2:end))
-        mask = zeros(size(csi.data.raw));
-        CSI_Log({'Mask conversion error.'},{'Mask set to empty.'});        
-    end
-end
+% % Permute vector to move mask to spatial dimension
+% permv = [numel(msz)+1 1:numel(msz)];
+% mask = permute(mask, permv); msz = size(mask);    
+% 
+% if numel(msz) ~= numel(csz) % If there are higher order indexes    
+%     % Repeat mask over non-spatial dimensions    
+%     dimrem = csz(numel(msz)+1:numel(csz));
+%     dimrem = [ones(1,numel(msz)) dimrem];
+% 
+%     mask = repmat(mask, dimrem); msz = size(mask);
+%     if sum(msz(2:end) ~= csz(2:end))
+%         mask = zeros(size(csi.data.raw));
+%         CSI_Log({'Mask conversion error.'},{'Mask set to empty.'});        
+%     end
+% end
 
 % Clean up
-csi.data.voxelmask = mask;
+csi.data.voxelmask = logical(mask);
 setappdata(gui.CSIgui_main, 'csi', csi);
 
 % Message user
@@ -18474,8 +18705,6 @@ if sum(msz(2:end) ~= dsz(2:end))
     CSI_Log({'Mask conversion error.'},{'Mask set to empty.'});        
 end
  
-
-
 % --- Executes on button press in button_CSI_Statistics.
 function button_CSI_Statistics_Callback(~, ~, gui)
 % Calculate statistics over the volume or current slice. Includes location
@@ -18602,7 +18831,7 @@ switch uans{4}
         % Get correct signal-unit
         doi = CSI_getUnit_data(doi, gui);
     case 'SNR'
-        sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./12)});
+        sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./4)});
         range = CSI_getPeakOfInterest(csi.xaxis, 'SNR');
         if isempty(sans), return; end; masksz = str2double(sans); 
         doi = csi_SNR(doi, masksz, 1, range); 
@@ -18665,10 +18894,6 @@ Statistics_Viewer(stats);
 % Log to user
 CSI_Log({'Statistics calculated over: '}, {msg});
 
-
-
 % --- Executes on button press in button_MRI_B0map.
-function button_MRI_B0map_Callback(hObject, eventdata, handles)
-% hObject    handle to button_MRI_B0map (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+function button_MRI_B0map_Callback(hobj, ~, gui)
+% This is not implemented and has no priority.

@@ -30,7 +30,7 @@ end
 
 % --- % Create Figure for plotting 2D
 plot_par.fh = VoxelMask_createFigure(...
-              'Voxel Mask', plot_par.colors.main);
+              'Voxelmask-Editor', plot_par.colors.main);
 
 % --- % Calculate plot-parameters
 % Voxel-resolution, voxel axes meshgrid.
@@ -59,12 +59,6 @@ VoxelMask_addMenu(plot_par.fh)
 
 % --- % Add visual mask
 VoxelMask_PlotMask(plot_par.fh);
-
-% --- % Add voxel-selector 
-% VoxelMask_addSelectVoxel(plot_par.fh)
-
-% --- % Add previous-selection, if available
-% VoxelMask_addMask(plot_par.fh)
 
 tgui = guidata(plot_par.fh);
 plot_par = tgui.plot_par;
@@ -419,7 +413,7 @@ tgui = guidata(fh);
 plot_par = tgui.plot_par;
 
 if ~isfield(plot_par, 'mask')
-    plot_par.mask = zeros(plot_par.dim);
+    tgui.plot_par.mask = zeros(tgui.plot_par.dim);
 end
 
 for tabi = 1:plot_par.tabs_total 
@@ -427,14 +421,14 @@ for tabi = 1:plot_par.tabs_total
     % Current tab - its index in tab format
     % This index lacks the slice+1 index (or the dim 1 above the slice
     % dimension). Therefor it requires correction regards pointing to data.
-    tab_index = plot_par.tabs_index_table(tabi,:);
+    tab_index = tgui.plot_par.tabs_index_table(tabi,:);
     tab_index_cell = num2cell(tab_index);
     
     % For data indexing - convert tab_index_cell to correct index-dims.
     sli = tab_index_cell{1}; % Slice from data.   
     
     % Plot data
-    tmp_data = squeeze(plot_par.mask(:,:,:,sli))';
+    tmp_data = squeeze(tgui.plot_par.mask(:,:,sli))';
     tgui.plot_par.plotobj{tab_index_cell{:}} = ...
         imagesc(tgui.plot_par.ax{tab_index_cell{:}}, tmp_data);
 
@@ -455,6 +449,7 @@ for tabi = 1:plot_par.tabs_total
     tgui.plot_par.ax{tab_index_cell{:}}.Visible = 'off';    
 
 end
+guidata(fh, tgui);
 
 function mouseHover(hobj,~)
 % Handles figure-window mouse-position and value string plus tracking.
@@ -478,7 +473,7 @@ if isfield(tgui, 'tracking') && tgui.tracking
     tag = '| Tracking!'; 
 end
 
-hobj.Name = (sprintf('%4.4f | %4.4f | %s', pos, tag));
+hobj.Name = (sprintf('Voxelmask-Editor: %02i | %02i | %s', pos, tag));
 
 % Manage tracking in different ways
 if isfield(tgui, 'tracking') && tgui.tracking
@@ -575,8 +570,8 @@ tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
 % Change mask
 if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))
     sz = size(gui.plot_par.mask);
-    if ~(sum(pos(1:2) > sz(2:3)) > 0)
-        gui.plot_par.mask(:,pos(1),pos(2), tab_nr) = 0;
+    if ~(sum(pos(1:2) > sz(1:2)) > 0)
+        gui.plot_par.mask(pos(1),pos(2), tab_nr) = 0;
     end
 end
 
@@ -588,8 +583,8 @@ tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
 % Change mask
 if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))  
     sz = size(gui.plot_par.mask);
-    if ~(sum(pos(1:2) > sz(2:3)) > 0)
-        gui.plot_par.mask(:,pos(1),pos(2), tab_nr) = 1;
+    if ~(sum(pos(1:2) > sz(1:2)) > 0)
+        gui.plot_par.mask(pos(1),pos(2), tab_nr) = 1;
     end
 end
 
@@ -601,7 +596,7 @@ tab_nr = find(cellfun(@isequal, gui.tabh, inp_selectedTab)==1);
 % Change mask
 isEnabled = 0;
 if ~isempty(tab_nr) && (sum(pos > 0) == numel(pos))
-    isEnabled = gui.plot_par.mask(:,pos(1),pos(2), tab_nr);
+    isEnabled = gui.plot_par.mask(pos(1),pos(2), tab_nr);
 end
 
 function gui = MaskTile_toggle(gui, pos)
@@ -682,7 +677,7 @@ toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;
 
 if ~useMemory
     % Get selected of current slice
-    sel2copy = plot_par.mask(:,:,:,toi);    
+    sel2copy = plot_par.mask(:,:,toi);    
 end
 
 % Store selection if copy-to-memory
@@ -693,9 +688,9 @@ if ~setMemory && ~useMemory
 
     if doReplace
         % Copy selection to other tabs
-        plot_par.mask = repmat(sel2copy, [1 1 1 size(plot_par.mask,4)]);
+        plot_par.mask = repmat(sel2copy, [1 1 size(plot_par.mask,3)]);
     else
-        tmp = repmat(sel2copy, [1 1 1 size(plot_par.mask,4)]);
+        tmp = repmat(sel2copy, [1 1 size(plot_par.mask,3)]);
         plot_par.mask = arrayfun(@(x,y) x + y,tmp, plot_par.mask);
         plot_par.mask(plot_par.mask == 2) = 1;
     end
@@ -704,8 +699,7 @@ if ~setMemory && ~useMemory
 else
     % Use copy from memory
     sel2copy = tgui.copied;
-    plot_par.mask(:,:,:,toi) = sel2copy;
-
+    plot_par.mask(:,:,toi) = sel2copy;
 end
 
 % Clean up and plot
@@ -730,7 +724,7 @@ switch hobj.Text
         toi = find(cellfun(@isequal, tgui.tabh, inp_selectedTab)==1);
         % Clear data
         sz =  size(plot_par.mask);
-        plot_par.mask(:,:,:,toi) = zeros(sz(1:3));
+        plot_par.mask(:,:,toi) = zeros(sz(1:2));
 end
 
 % Save changes.
@@ -777,8 +771,8 @@ img(img < cutoff) = 0; img(img >= cutoff) = max(img(:));
 tmp = img; img(isnan(img)) = 0;
 
 % Dilate and erode binary image
-SE = strel('disk', 5); img = imdilate(img, SE); img = imdilate(img, SE); 
-SE = strel('disk', 10); img = imerode(img, SE); img = imerode(img, SE); 
+SE = strel('disk', 10); img = imdilate(img, SE); %img = imdilate(img, SE); 
+SE = strel('disk', 10); img = imerode(img, SE); %img = imerode(img, SE); 
 % display3D(img, 'tag', 'Dilated/Eroded')
 
 % Mask the image - cut at its boundaries.
@@ -845,13 +839,13 @@ vox2light = permute(vox2light,[2 1 3]);
 
 % If current slice only...
 if doCurrent
-    tmp = vox2light(:,:,toi); vox2light = false(size(vox2light));
+    tmp = vox2light(:,:,toi); vox2light = plot_par.mask;
     vox2light(:,:,toi) = logical(tmp);
 end
 
 % Magic!
 N = numel(size(plot_par.mask));
-plot_par.mask = permute(vox2light,[N+1 1:N]);
+plot_par.mask = vox2light; % permute(vox2light,[N+1 1:N]);
 tgui.plot_par = plot_par;
 guidata(hobj, tgui);
 
@@ -879,7 +873,7 @@ if doSlice
     inp_selectedTab = repmat({tgui.tabg.SelectedTab}, size(tgui.tabh));
     % Tab of interest
     toi = cellfun(@isequal, tgui.tabh, inp_selectedTab)==1;       
-    inversed = selection; inversed(:,:,:,toi) = ~inversed(:,:,:,toi);
+    inversed = selection; inversed(:,:,toi) = ~inversed(:,:,toi);
 else
     inversed = ~selection;
 end
@@ -913,10 +907,10 @@ if idx == 0, return; end
 load([fp fi], 'mask');
 
 % Get GUI data of figure
-tgui = guidata(hobj); plot_par = tgui.plot_par;
+tgui = guidata(hobj); 
 
 % Store mask
-tgui.plot_par.mask  = mask;
+tgui.plot_par.mask = mask;
 
 % Update gui-data
 guidata(hobj, tgui);
