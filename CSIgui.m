@@ -798,10 +798,11 @@ clear('twix')
 nfo = whos('tmp'); 
 matlab_nfo = memory;
 
+% This has been disabled - as data is loaded as single anyways.
 % if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
-    % Array is too large for matlab-array-memory
-    % fprintf('CSIgui: data requires much memory. Loading as single.\n')
-    csi.data.raw = tmp; 
+% If array is too large for matlab-array-memory
+fprintf('CSIgui: data requires much memory. Loading as single.\n')
+csi.data.raw = tmp; 
 % else
 %     % Array will fit matlab-max-array-memory
 %     csi.data.raw = double(tmp);    
@@ -810,7 +811,7 @@ clear('tmp')
 csi.data.dim = size(csi.data.raw);
 
 success = 0;
-if csi.data.dim(1) > 0, success = 1; end
+if csi.data.dim(1) > 0, success = 1; end % Crude but functional
 
 % Meta-data
 csi.ext = 'dat'; csi.filename = fn; % Save filename
@@ -1089,8 +1090,6 @@ end
 
 % Save CSI data in app-data
 setappdata(gui.CSIgui_main,'csi',csi); 
-
-
       
 % --- Parse USERINPUT
 function succes = parse_userinput(gui)
@@ -5089,7 +5088,7 @@ if doNoiseData == 1
         % Run noise-prepare fcn
         [csi, ~, gui] = CSI_Noise_Prepare(hobj, gui);
         if ~isstruct(csi)
-            CSI_Log({'Decorrelation:'}, {'Aborted.'});
+            CSI_Log({functag}, {'Aborted.'});
             return; 
         end
 
@@ -5109,14 +5108,21 @@ end
 
 % Noise Covariance Matrix % -------------------------------------------- %
 if isfield(csi.data, 'noise') && doNoiseData == 1
-    
+    % Using noise-measurement (or stored noise-data from data) calculate
+    % the noise covariance matrix.
 
-    % Convert to {#S x Chan x Avg} x X x Y x Z...
+    % Variable definitions:
+    % lbls = labels of noise-data, permuted with the noise-array
+    % tmp  = rearranged noise-data for noise-cov calculations.
+    
+    % --------- %
+    % PREP: Convert noise-array to {#S x Chan x Avg} x X x Y x Z ...
+    % --------- %
 
     % Noise data and labels
     tmp = csi.data.noise.raw; lbls = csi.data.noise.labels;
     
-    % Channel dim to index 2: nS x Chan x rest...
+    % Channel-dimension to index 2: nS x Chan x rest...
     chan_ind_noise = csi_findDimLabel(csi.data.noise.labels, {'chan'});
     chan_ind_noise(isnan(chan_ind_noise)) = [];
     if chan_ind_noise ~= 2
@@ -5125,7 +5131,7 @@ if isfield(csi.data, 'noise') && doNoiseData == 1
         tmp = permute(tmp, permv); lbls = lbls(permv);
     end
     
-    % Average to third dimension
+    % Average-index to third dimension
     avg_ind = csi_findDimLabel(csi.data.noise.labels,...
         {'nsa', 'aver', 'avg'});
     avg_ind(isnan(avg_ind)) = [];
@@ -5133,6 +5139,17 @@ if isfield(csi.data, 'noise') && doNoiseData == 1
         permv = 1:numel(lbls); permv([avg_ind 3]) = [3 avg_ind];
         if numel(permv) >= 4, permv(4:end) = sort(permv(4:end)); end
         tmp = permute(tmp, permv); lbls = lbls(permv);
+    end
+
+    % Check if user wants to concatenate averages.
+    if ~isempty(avg_ind) && size(tmp, avg_ind) ~= 1            
+        uans_cat = getUserInput_Popup(...
+        {'Noise covariance matrix calculations, concatenate averages:'},...
+        {{'Yes', 'No'}}, [], 'Noise Covariance');
+        if isempty(uans_cat), CSI_Log({functag}, {'Aborted.'}); return; end
+        if strcmp(uans_cat,'Yes'), doCat = 1; end
+    else
+        doCat = 0;
     end
 
     % Convert to cell - {nS x Chan x Avg} ... rest
@@ -5147,13 +5164,23 @@ if isfield(csi.data, 'noise') && doNoiseData == 1
         tmp = squeeze(mat2cell(tmp, sz(1), sz(2), cell_layout{:}));
     end
            
+    % --------- %
+    % CALC: Calculate noise-cov from {#S x Chan x Avg} x X x Y x Z ...
+    % --------- %
+
     % Get noise-cov using noise data
     noise_cov = cellfun(@CSI_NoiseCov_usingMeasurement, ...
         tmp, squeeze(repmat({lbls}, size(tmp))),...
+        squeeze(repmat({doCat}, size(tmp))),...
         'Uniform', 0);
-        
+    
+    
+
+    % --------- %
+    % CLEANUP: Copy noise-cov for nVoxels if single noise-cov
+    % --------- %    
     if numel(noise_cov) == 1
-        % Copy it for nVoxels
+        
         sz = size(csi.data.raw); % Data size
         non_spat_ind = ...
             csi_findDimLabel(csi.data.labels,...
@@ -5169,7 +5196,7 @@ if isfield(csi.data, 'noise') && doNoiseData == 1
     
     % NFO Update
     CSI_Log({functag},...
-            {'Noise-data used to calculate noise-covariance matrix.'});
+            {'Noise-data used to calculate noise-covariance matrices.'});
 
 elseif doNoiseData == 0
     % Noise covariance matrix required for noise-decorrelation
@@ -5184,7 +5211,7 @@ elseif doNoiseData == 2
     noise_cov = ...
         repmat({diag(ones(csi.data.dim(chan_ind),1))},nVox,1); 
     CSI_Log({functag},...
-            {'Using the ID-matrix as the noise-covariance matrix.'});
+            {'Using ID-matrix as the noise-covariance matrix.'});
 
 end
 
@@ -6127,9 +6154,16 @@ end
 sens_maps = cellfun(@(x) mean(x(2:5,:),1), fid, 'UniformOutput',0);
 
 % --- Noise Covariance matrix using noise-data
-function noise_cov = CSI_NoiseCov_usingMeasurement(noise, labels)
+function noise_cov = CSI_NoiseCov_usingMeasurement(noise, labels, doCat)
 % Return the noise covariance matrix (nCov) using the noise measurement.
 % Option to average or concatenate averages.
+%
+% doCat:    concatenate averages to calculate noise-cov matrix (1) or
+%           average before (0). If not given - user will be prompted. This
+%           allows this function to be called via loops/cellfun.
+
+% -1 means the user will be prompted for concatenating averages if present.
+if nargin < 3, doCat = -1; end
 
 % Noise average index
 chan_ind_avg = csi_findDimLabel(labels,{'avg', 'aver','nsa'});
@@ -6139,12 +6173,19 @@ chan_ind_avg(isnan(chan_ind_avg)) = [];
 if ~isempty(chan_ind_avg) && ...
         size(noise,chan_ind_avg) > 1
     
-    % Get userinput request to average of concatenate
-    uans_noise = getUserInput_Popup(...
+    % Concatenate averages
+    if doCat < 0
+
+        % Get userinput request to average of concatenate
+        uans_noise = getUserInput_Popup(...
         {'Noise covariance matrix calculations, concatenate averages:'},...
         {{'Yes', 'No'}}, [], 'Noise Covariance');
-    if isempty(uans_noise), noise_cov = NaN; return; end
-    
+        if isempty(uans_noise), noise_cov = NaN; return; end
+       
+    elseif doCat == 1, uans_noise{1} = 'Yes';
+    elseif doCat == 0, uans_noise{1} = 'No';
+    end
+
     % Concatenate or average
     if strcmp('Yes', uans_noise{1}) % Concatenate noise nsa
         % Take noise
@@ -6167,7 +6208,8 @@ if ~isempty(chan_ind_avg) && ...
 end
 
 % Covariance matrix
-noise_cov = cov(noise);
+noise_cov = diag(diag(cov(noise)));
+
 
 % --- Noise Covariance matrix using data
 function noise_cov = CSI_NoiseCov_usingData(spec, chan_ind, noise_mask)
@@ -6183,14 +6225,14 @@ function noise_cov = CSI_NoiseCov_usingData(spec, chan_ind, noise_mask)
 
 dim = size(spec);
 if nargin < 3
-    nS = dim(1); half_nm_size = round(nS./6);
-    noise_mask = [1:half_nm_size (nS - half_nm_size + 1):nS];
+    nS = dim(1); mask_sz = round(nS./4);
+    mask_sz_sided = [round(mask_sz./2) mask_sz-round(mask_sz./2)];
+    noise_mask = [1:mask_sz_sided(1) (nS - mask_sz_sided(2) + 1):nS];
 end
 
 % Index for cutting data
 cut_ind = arrayfun(@(x) 1:x, dim,'UniformOutput',0);
-cut_ind{1} = noise_mask;
-noise_data = spec(cut_ind{:});
+cut_ind{1} = noise_mask; noise_data = spec(cut_ind{:});
 
 % Reshape channel index: {nS x nChan} x spatial dimensions...
 if isempty(chan_ind), chan_ind = numel(dim)+1; end
@@ -7260,6 +7302,15 @@ if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
 % Mask-size user input
 mask_size = str2double(uans{1});
 
+    
+% SNR-method (real/magnitude) 
+switch uans{3} % SNR method
+    case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; 
+end
+
+% SNR mehotd (maximum/AUC)
+doAUC = 0; if strcmp(uans{4}, 'AUC'), doAUC = 1; end
+
 % Noise-source and input
 % Calculate it from voxel-data or use noise-data
 noise_inp = mask_size;
@@ -7270,19 +7321,108 @@ switch uans{2}
         if isfield(csi.data,'noise')
             noise = abs(std(csi.data.noise.raw, [], 1));
             noise_inp = noise;
+            
+            % Check noise-dimensions
+            sz_data = size(csi.data.raw);
+            sz_noise = size(noise_inp);
+            
+            if ~isequal(sz_data(2:end), sz_noise(2:end))  
+                
+                % Spatial and combine channels option
+                lab_spat = {'kx','ky','kz', 'x', 'y', 'z'};
+                ind_spat = csi_findDimLabel(csi.data.labels,lab_spat);
+                ind_spat(isnan(ind_spat)) = [];
+                chan_ind = csi_findDimLabel(csi.data.labels, {'chan'});  
+                
+                % Booleans
+                doInterpolate = 1;
+                if isequal(sz_data(ind_spat), size(noise_inp, ind_spat))
+                    doInterpolate = 0;
+                end                
+                doCombine = 0; 
+                if ~isnan(chan_ind) &&  size(noise_inp, chan_ind) ~= 1
+                    doCombine = 1; 
+                end
+                
+                
+                if doCombine
+                    % Ask to combine
+                    elm = {'popup'};
+                    qry = {'Combine noise-data channels?'};
+                    def = {{'Yes', 'No'}};
+                    uans = getInput(elm,qry,def,'SNR-noise');
+                    if isempty(uans), return; end
+                    doComb = 1; if strcmp(uans{1}, 'No'), doComb = 0; end
+                    if doComb
+                        % Switch to Noise
+                        % Process noise by setting it as active data set    
+                        CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
+                        
+                        % Activate combine
+                        button_CSI_Combine_Callback(gui.CSIgui_main, [], gui);                      
+                                                                       
+                        % Revert to data
+                        CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
+                                                
+                        % Get noise
+                        csi = getappdata(gui.CSIgui_main, 'csi');
+                        noise = abs(std(csi.data.noise.raw, [], 1));
+                        noise_inp = noise;                        
+
+                    end
+                end
+                
+                if doInterpolate
+                    % Ask to combine
+                    elm = {'popup'};
+                    qry = {'Interpolate noise-data?'};
+                    def = {{'Yes', 'No'}};
+                    uans = getInput(elm,qry,def,'SNR-noise');
+                    if isempty(uans), return; end
+                    doInter = 1; if strcmp(uans{1}, 'No'), doInter = 0; end
+                                        
+                    if doInter
+                        
+                    % Switch to Noise
+                    % Process noise by setting it as active data set    
+                    CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
+                    
+                    % Interpolate
+                    button_CSI_Interpolate_Callback([], [], gui)
+                    
+                    % Revert to data
+                    CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
+                    
+                    % Get noise
+                    csi = getappdata(gui.CSIgui_main, 'csi');
+                    noise = abs(std(csi.data.noise.raw, [], 1));
+                    noise_inp = noise;     
+                    
+                    end
+                end
+
+            end
+            
+
+            % Check for multi-file
+
+            % Check noise-dimensions
+            sz_data = size(csi.data.raw); sz_noise = size(noise_inp);
+            % Sizes data and noise still not equal
+            
+            if ~isequal(sz_data(2:end), sz_noise(2:end))
+                % Process noise
+                [csi, ~, ~] = CSI_Noise_Prepare(gui.CSIgui_main, gui);
+                noise = abs(std(csi.data.noise.raw, [], 1));
+                noise_inp = noise;
+            end
+            
         else
             CSI_Log({'No noise-data stored, using voxel-noise instead.'},...
                     {''});            
         end
 end
-    
-% SNR-method (real/magnitude) 
-switch uans{3} % SNR method
-    case 'Real', SNRmethod = 1; case 'Magnitude', SNRmethod = 0; 
-end
 
-% SNR mehotd (maximum/AUC)
-doAUC = 0; if strcmp(uans{4}, 'AUC'), doAUC = 1; end
     
 
               % --------------- % SNR % --------------- %
@@ -15286,12 +15426,13 @@ function [csi, hobj, gui] = CSI_Noise_Prepare(hobj, gui)
 
 % Apodization | FFT | Delete Channel
 qry = {'Process noise data:', 'Delete a channel from noise-data:', ...
-       'Average noise', 'Remove OS', 'Apodize noise:', 'FFT noise:', };
+       'Average noise', 'Remove OS', 'Apodize noise:', 'FFT noise:',...
+       'Combine data-channels:'};
 opt = repmat({{'Yes', 'No'}}, size(qry));
 dans = ones(1,size(qry,2)); 
 
 % Default noise-processing steps
-dans(2) = 0; dans(3) = 0; dans(4) = 0;
+dans(1) = 0; dans(2) = 0; dans(3) = 0; dans(4) = 0; dans(7) = 0;
 
 uans = getUserInput_Tick(qry, opt, 'Noise Preparation', dans);
 if isempty(uans)
@@ -15304,42 +15445,48 @@ if uans(1) == 0 || sum(uans(2:end)) == 0
 end
 
 % Process noise by setting it as active data set    
-CSI_Noise_ViewManager(hobj, [], []);
+CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
 
 % Noise - Delete channel
 if uans(2)
     button_CSI_Delete_Callback([],[],gui, 0);
-    gui = guidata(hobj);
+    gui = guidata(gui.CSIgui_main);
 end
 
 % Noise - Average
 if uans(3)
     % Apodize
     button_CSI_Average_Callback([],[], gui, 0);
-    gui = guidata(hobj);
+    gui = guidata(gui.CSIgui_main);
 end
 
 % Noise - Remove oversampling
 if uans(4)
     button_CSI_RemoveOS_Callback([],[],gui,0);
-    gui = guidata(hobj);
+    gui = guidata(gui.CSIgui_main);
 end
 
 % Noise - Apodization
 if uans(5)
     % Apodize
     button_CSI_Apodization_FID_Callback([],[],gui,0);
-    gui = guidata(hobj);
+    gui = guidata(gui.CSIgui_main);
 end
 
 % Noise - FFT
 if uans(6)
     button_CSI_FFT_Callback([], [], gui, 0);
-    gui = guidata(hobj);
+    gui = guidata(gui.CSIgui_main);
+end
+
+% Noise - FFT
+if uans(7)
+    button_CSI_Combine_Callback(gui.CSIgui_main, [], gui); 
+    gui = guidata(gui.CSIgui_main);
 end
             
 % Revert to data
-CSI_Noise_ViewManager(hobj, [], []);
+CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
 
 % Reload csi-app-data
 csi = getappdata(gui.CSIgui_main,'csi');
@@ -18185,11 +18332,13 @@ for kk = 1:size(inp,2)
     
     
     % If apodization of fid - possible value to use later, write this to
-    % file. It will be read by apodization_fid
-    fpapo = 'Git2\Files\apodization_value.txt';
+    % file. It will be read by apodization_fid       
+    tmp_fp = [mfilename('fullpath') '\Files\apodization_value.txt'];
     if strcmpi(inpfnc, 'Apodization_FID')
-        id = fopen('Git2\Files\apodization_value.txt', 'w');
-        fprintf(id, '%s', tmp{2}); fclose(id);
+        id = fopen(tmp_fp, 'w');
+        if id ~= -1, fprintf(id, '%s', tmp{2}); fclose(id);
+        else, CSI_Log({'Could not write to apodization_value.txt'},{''});
+        end
     end
 
 

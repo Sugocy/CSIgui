@@ -75,7 +75,7 @@ parpoolName = 'Processes'; if mlyear <2023, parpoolName = 'local'; end
 
 p = gcp('nocreate'); 
 if isempty(p)
-    nCores = feature('numcores');
+    nCores = floor(feature('numcores') .* 0.75);
     parpool(parpoolName, nCores);
 end
 
