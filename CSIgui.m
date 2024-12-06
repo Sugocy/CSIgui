@@ -776,14 +776,16 @@ dims_txt = dims_txt(twix.image.dataSize>1);
 
 % Correct data labels from twix-file.
 % Labels in dat-file
-labels_dat_file      = {'col','cha', 'lin','par','seg', 'ave', 'set'}; 
+labels_dat_file      = {'col','cha', 'lin','par', 'seg', 'ave', 'set', 'phs'}; 
 % Library for other name
-labels_match_library = {'fid','chan','ky','kz','kx', 'aver', 'aver'};    
+labels_match_library = {'fid','chan','ky','kz', 'kx', 'aver', 'aver', 'kz'};    
 dims_txt_corrected = cell(1,size(dims_txt,2));
 for ti = 1:size(dims_txt,2)        
     ind = strcmpi(labels_dat_file, dims_txt{ti});
     if sum(ind) > 0
         dims_txt_corrected{ti} = labels_match_library{ind};
+    else
+        dims_txt_corrected{ti} = dims_txt{ti};
     end
 end
 csi.data.labels = dims_txt_corrected;
@@ -795,13 +797,12 @@ tmp = squeeze(twix.image(dims_rng{:}));
 clear('twix')
 
 % Data sizes.
-nfo = whos('tmp'); 
-matlab_nfo = memory;
+nfo = whos('tmp'); matlab_nfo = memory;
 
 % This has been disabled - as data is loaded as single anyways.
 % if nfo.bytes > matlab_nfo.MaxPossibleArrayBytes
 % If array is too large for matlab-array-memory
-fprintf('CSIgui: data requires much memory. Loading as single.\n')
+% fprintf('CSIgui: data requires much memory. Loading as single.\n')
 csi.data.raw = tmp; 
 % else
 %     % Array will fit matlab-max-array-memory
@@ -5570,13 +5571,14 @@ kspace = csi_findDimLabel(csi.data.labels,{'kx','ky','kz'});
 % Userinput % --------------------------------------------- %
 
 % Default 
+def_ans = csi.data.dim(kspace) .* 2;
 if isfield(csi,'twix')
     % Get interpolation matrix from dat-file header.
     
     % How to figure out what the phase/read direction in data is?
     % csigui.twix.Meas....
     % FinalMatrixSizePhase FinalMatrixSizeRead FinalMatrixSizeSlice
-    
+
     % From twix-header par = kz; lin = ky; seg = kx;
     if isfield(csi.twix.Meas,'RawSeg')
         def_ans(1) = csi.twix.Meas.RawSeg;
@@ -5587,9 +5589,7 @@ if isfield(csi,'twix')
     if isfield(csi.twix.Meas,'RawPar')
         def_ans(3) = csi.twix.Meas.RawPar;
     end
-else
-    % Set as double of current matrix size
-    def_ans = csi.data.dim(kspace) .* 2;
+
 end
 
 % Ask user
@@ -7335,8 +7335,8 @@ switch uans{2}
                 chan_ind = csi_findDimLabel(csi.data.labels, {'chan'});  
                 
                 % Booleans
-                doInterpolate = 1;
-                if isequal(sz_data(ind_spat), size(noise_inp, ind_spat))
+                doInterpolate = 1; sz_noi = size(noise_inp);
+                if isequal(sz_data(ind_spat), sz_noi(ind_spat))
                     doInterpolate = 0;
                 end                
                 doCombine = 0; 
@@ -10120,67 +10120,31 @@ end
 % TWIX-INFO  (dat-file)
 if isfield(csi,'twix')
     
-    % Image orientation
-    if csi.twix.Meas.VoiNormalSag,     ori.image_orientation = 'Sag';
-    elseif csi.twix.Meas.VoiNormalCor, ori.image_orientation = 'Cor';
-    elseif csi.twix.Meas.VoiNormalTra, ori.image_orientation = 'Tra';
+    % Get NFO from twix header.
+    ori = twix_extractNFO(csi.twix);
+        
+    % Data needs flip in YZ direction 
+    ori.flipCorrection = 1;
+    if isfield(csi, 'ori'), ori.flipCorrection = csi.ori.flipCorrection;
     end
 
-    % Offcentre
-    % Also located in Config.VoI_Position_Cor/Sag/Tra
-    % Sagital means slices in LR dir
-    if isempty(csi.twix.Meas.VoiPositionSag), ori.offcenter(2) = 0;
-    else, ori.offcenter(2) = csi.twix.Meas.VoiPositionSag;
+    % Data needs voxel shift correction
+    ori.voxShiftCorrection = 0; 
+    if mod(ori.dim(2),2) == 0, ori.voxShiftCorrection = 1; end
+    % Check if already applied
+    if isfield(csi, 'ori')
+        if ~isfield(csi.ori, 'voxShiftCorrection')
+            % If READ is ODD - apply voxel-shift correction        
+            if mod(ori.dim(2),2) == 0, ori.voxShiftCorrection = 1; end
+        else
+            ori.voxShiftCorrection = csi.ori.voxShiftCorrection;
+        end
     end
-    % Coronal means slices in AP dir
-    if isempty(csi.twix.Meas.VoiPositionCor), ori.offcenter(1) = 0;
-    else, ori.offcenter(1) = csi.twix.Meas.VoiPositionCor;
-    end
-    % Transverse means slices in FH dir
-    if isempty(csi.twix.Meas.VoiPositionTra), ori.offcenter(3) = 0;
-    else, ori.offcenter(3) = csi.twix.Meas.VoiPositionTra;
-    end
-    
-    
-    % FOV
-    if isfield(csi.twix.Config,'VoI_RoFOV')
-        ori.fov(1) = csi.twix.Config.VoI_RoFOV; % Read out fov
-        ori.fov(2) = csi.twix.Config.VoI_PeFOV; % Phased enc fov
-        ori.fov(3) = csi.twix.Config.VoI_SliceThickness; % Slice-dir FOV
-    elseif isfield(csi.twix.MeasYaps.sSpecPara,'sVoI')                
-        ori.fov(1) = csi.twix.MeasYaps.sSpecPara.sVoI.dReadoutFOV;
-        ori.fov(2) = csi.twix.MeasYaps.sSpecPara.sVoI.dPhaseFOV;
-        ori.fov(3) = csi.twix.MeasYaps.sSpecPara.sVoI.dThickness;
-    end
-
-    % Dimensions: [AP LR FH]
-    ori.dim(1) = csi.twix.Meas.ReadResolution;
-    ori.dim(2) = csi.twix.Meas.PhaseEncodingLines;
-    ori.dim(3) = csi.twix.Meas.SliceResolution;
-
+        
     % RES:  [AP LR FH] - [Y X Z]
     ori.res(2)= ori.fov(1)./csi.data.dim(space_dim(1)); % LR = x
     ori.res(1)= ori.fov(2)./csi.data.dim(space_dim(2)); % AP = y
     ori.res(3)= ori.fov(3)./csi.data.dim(space_dim(3)); % FH = z
-    
-    % Orientation (HFS/FFS etc.)
-    % hdr.Meas.Matrix Meas.PatientPosition
-    % twix.Meas.VoiNormalTra or Cor/Sag
-
-    % After multi-file analysis: Data needs flip in YZ direction
-    if ~isfield(ori, 'flipCorrection')
-        ori.flipCorrection = 1;
-    end
-
-    % After multi-file analysis: Data needs voxel shift correction
-    if ~isfield(ori, 'voxShiftCorrection')
-        % If READ i.e. LR-dimension is ODD...
-        if mod(csi.twix.Meas.ReadResolution,2) ~= 0 %  ODD
-            ori.voxShiftCorrection = 1;
-        else
-            ori.voxShiftCorrection = 0;
-        end
-    end
 end
 
 
@@ -12704,10 +12668,21 @@ if isfield(csi, 'twix') && ~isfield(csi, 'xaxis')
         dwelltime = csi.twix.Config.DwellTime * 1e-9;
     else       
         vals = getFieldValues(csi.twix, 'dwelltime');
-        ind = ~cellfun(@ischar, vals); vals = cell2mat(vals(ind));
-        vals = unique(vals);
-        if numel(vals) > 1, vals = mode(vals); end
+
+        % Safety checks: empty, character, cell and array-size
+        ind_empty = cellfun(@isempty, vals);        
+        ind_char = ~cellfun(@ischar, vals);      
+        ind_cell = cellfun(@iscell, vals);     
+        ind_big = ~cell2mat(cellfun(...
+            @(x) sum(size(x)) == 2, vals, 'uniform', 0));        
+        ind = ind_char - ind_empty - ind_cell - ind_big;        
+        ind(ind < 0) = 0;  ind = logical(ind); 
+        vals = cell2mat(vals(ind));
+
+        % Get most common value in array.
+        vals = mode(vals); 
         dwelltime = vals * 1e-9;
+        
     end
     xaxis.BW = 1/dwelltime;
     
@@ -18332,17 +18307,20 @@ for kk = 1:size(inp,2)
     
     
     % If apodization of fid - possible value to use later, write this to
-    % file. It will be read by apodization_fid       
-    tmp_fp = [mfilename('fullpath') '\Files\apodization_value.txt'];
-    if strcmpi(inpfnc, 'Apodization_FID')
-        id = fopen(tmp_fp, 'w');
+    % file. It will be read by apodization_fid 
+
+    if strcmpi(inpfnc, 'Apodization_FID')        
+        fp_csigui = mfilename('fullpath'); 
+        slash_loc = strfind(fp_csigui, '\');
+        fp_csigui = fp_csigui(1:slash_loc(end));
+        fp_tmp = [fp_csigui 'Files\apodization_value.txt'];
+        
+        id = fopen(fp_tmp, 'w');
         if id ~= -1, fprintf(id, '%s', tmp{2}); fclose(id);
         else, CSI_Log({'Could not write to apodization_value.txt'},{''});
         end
     end
 
-
-    
     % ------------------------------------------------------------- %
     
     % Exceptions to the rule - simple
