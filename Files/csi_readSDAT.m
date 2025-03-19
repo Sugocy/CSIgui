@@ -65,11 +65,11 @@ data = freadVAXG(fid , data_size, 'float32'); fclose(fid);
 % Reshape and convert to complex data.
 data = reshape(data,2,[]); data = complex(data(1,:),data(2,:));
 
-% THIS IS BAD QUICK FIX CODE BAD BAD BAD
-if isfield(spar_info,'spec_row_upper_val')
-    disp badbadgoingbadcheckCSIreadsdat!
-    dim{2} = spar_info.spec_row_upper_val;
-end
+% % THIS IS BAD QUICK FIX CODE BAD BAD BAD
+% if isfield(spar_info,'spec_row_upper_val')
+%     disp SomeThingIsNotRightCheckScript!
+%     dim{2} = spar_info.spec_row_upper_val;
+% end
 
 % Reshape according array-dimensions from either SPAR or second input.
 try data = squeeze(reshape(data,dim{:}));

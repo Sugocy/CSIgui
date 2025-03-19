@@ -1,24 +1,23 @@
-function data = csi_interpolate(data, new_dim, spat_dim, interp_method)
-%%% Interpolate 1D, 2D or 3D data to a new resolution specified with 
-%%% new_dim. The first index must contain the FID/spectrum samples, the 
-%%% consequent indexes are the spatial dimensions for either 1D/2D/3D space. 
+function data = csi_interpolate_voxelmask(data, new_dim, spat_dim, interp_method)
+%%% Interpolate 1D, 2D or 3D voxel mask to a new resolution specified with 
+%%% new_dim. Expected is the spatial dimensions on the first 3 indexes. 
 %%% Dimensionality is found by the #elements in new_dim. If this condition 
 %%% is not met, the spat_dim input must be used to set the spatial 
 %%% dimensions and data will be rearranged before interpolation; 
 %%%
-%%% The default interpolation method is spline.
+%%% The default interpolation method is nearest - for best [0; 1] interp.
 %%% Using interp_method input, a different method can be set: 
 %%%                             linear, nearest, spline, cubic and makima.
 %%%
 %%% Be aware, makima, cubic and spline are not fast interpolation methods!
 %%%
 %%% Input
-%%% data:           [#samples x (Kx) x (Ky) x (Kz)] data matrix.
+%%% data:           [(Kx) x (Ky) x (Kz)] data matrix.
 %%% new_dim:        vector [1 x nD] describing the interpolated 
 %%%                 data-dimensions.
 %%% spat_dim:       indexes of the spatial dimensions of [1 x nD];
-%%% interp_method:  the interpolation method as a string: linear, nearest, 
-%%%                 spline (default), cubic and makima.
+%%% interp_method:  the interpolation method as a string: linear, spline, 
+%%%                 nearest (default), cubic and makima.
 %%%
 %%% Algorithm NFO:
 %%% The interpn function in Matlab interpolates as one big volume whilst
@@ -28,12 +27,22 @@ function data = csi_interpolate(data, new_dim, spat_dim, interp_method)
 %%% spatial dimensions of the data, iterating over all extra dimensions 
 %%% seperatly.
 %%%
-%%% Dr. Quincy van Houtum, ELH-Institute Essen, 2023/04.
+%%% This function is a slightly adapted version of csi_interpolate,
+%%% correcting for sample-index size of 1.
+%%%
+%%% Dr. Quincy van Houtum, ELH-Institute Essen, 2024/12.
 %%% quincyvanhoutum@gmail.com
 
+
 % Process input % --------------------------------------------- %
-if nargin < 4, interp_method = 'spline'; end
-if nargin < 3, spat_dim = []; end
+if nargin < 4, interp_method = 'linear'; end
+if nargin < 3 || isempty(spat_dim), spat_dim = [1 2 3]; end
+
+% Data dimensions % ------------------------------------------- %
+dim = size(data); dim_new = new_dim;
+
+% Dimensionality
+dim_type = numel(new_dim); % 1D/2D/3D
 
 
 % Rearrange data % -------------------------------------------- %
@@ -41,7 +50,7 @@ if ~isempty(spat_dim)
     dim = size(data);
 
     % Permute vector
-    perm_vec = [1 spat_dim];
+    perm_vec = spat_dim; % CHANGE HERE NOT [1 spat_dim]
 
     % Remaining indexes for permute vector
     remainder_ind = find(ismember(1:numel(dim), perm_vec) == 0);
@@ -51,24 +60,16 @@ if ~isempty(spat_dim)
     data = permute(data, perm_vec);
 end
 
-
-% Data dimensions % ------------------------------------------- %
-dim = size(data);
-dim_new = [dim(1) new_dim];
-
-% Dimensionality
-dim_type = numel(new_dim); % 1D/2D/3D
-
-
 % Data to cell-array % ---------------------------------------- %
-cell_layout_spat = num2cell(dim(1:dim_type+1));
+cell_layout_spat = num2cell(dim(spat_dim));
 cell_layout_other = arrayfun(@ones,...
-    ones(1,size( dim(dim_type+2:end),2)), dim(dim_type+2:end), 'Uniform', 0);
+    ones(1,size( dim(dim_type+1:end),2)), dim(dim_type+1:end), 'Uniform', 0);
 data = mat2cell(data, cell_layout_spat{:}, cell_layout_other{:});
 
 
 % Data grid points % ------------------------------------------ %
-dim_spat = dim(1:dim_type+1); % #S x Kx x Ky x Kz
+dim_spat = dim(1:dim_type); % #S x Kx x Ky x Kz
+% HERE SOME CHANGE - NOT + 1
 
 % Vectors of the index range in all dimensions - original
 dim_vec = arrayfun(@linspace, ...
@@ -85,8 +86,7 @@ dim_vec_new = arrayfun(@linspace, ones(size(dim_new)), ...
 
 % Gridpoints for alll points in space - new dimensions
 dim_grid_new = cell(1,size(dim_new,2)); % Container for output ndgrid
-[dim_grid_new{:}] = ndgrid(dim_vec_new{:}); 
-
+[dim_grid_new{:}] = ndgrid(dim_vec_new{:});
 
 % Interpolate % ---------------------------------------------- %
 
@@ -98,7 +98,7 @@ nvox = size(data,1);
 for vi = 1:nvox    
     % Interpolate over grid
     data{vi} = ...
-        interpn(dim_grid{:}, data{vi}, dim_grid_new{:}, interp_method);          
+        interpn(dim_grid{:}, single(data{vi}), dim_grid_new{:}, interp_method);          
 end
 
 % Revert reshape
@@ -110,3 +110,5 @@ data = cell2mat(data);
 % Rearrange data % -------------------------------------------- %
 if ~isempty(spat_dim), data = permute(data, perm_vec); end
 
+% Create [0/1] boolean
+data(data <= 0.5) = 0; data(data > 0.5) = 1; data = logical(data);

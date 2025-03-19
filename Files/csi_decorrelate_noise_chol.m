@@ -15,7 +15,7 @@ if nargin < 2, nCov = csi_noisecov_usingdata(spec, chan_ind); end
 dim = size(spec);
 
 
-% Generate virtual coils using Chlesky-Decomp, resulting in unit-noise.
+% Generate "virtual coils" using Chlesky-Decomp, resulting in unit-noise.
 nCov_Chol = cellfun(@chol, nCov, 'UniformOutput', 0);
 
 % Reshape to {nS x nChan} x nVoxels
@@ -24,6 +24,7 @@ nCov_Chol = reshape(nCov_Chol, [numel(nCov_Chol) 1]);
 
 % Maximum before decorrelation
 mxb = cellfun(@(x) max(real(x(:))), spec); mxb = max(mxb);
+mnb = cellfun(@(x) min(real(x(:))), spec); mnb = max(mnb);
 
 % Decompose signal
 [spec, scaleMatrix] = cellfun(@decorrelate_noise_equation, ...
@@ -31,10 +32,11 @@ mxb = cellfun(@(x) max(real(x(:))), spec); mxb = max(mxb);
 
 % Maximum after decorrelation
 mxa = cellfun(@(x) max(real(x(:))), spec); mxa = max(mxa);
+mna = cellfun(@(x) min(real(x(:))), spec); mna = max(mna);
 
 % Correct scaling over all voxels.
 scaleCorrection = numzeros(mxb / mxa);
-spec = cellfun(@(x) x * 10^-(scaleCorrection), spec, 'UniformOutput', false);
+spec = cellfun(@(x) x * 10^-(scaleCorrection+1), spec, 'UniformOutput', false);
 
 % Reshape back to matrix with same dimensions
 if numel(szr) > 2 && (numel(dim)-2 > 2)

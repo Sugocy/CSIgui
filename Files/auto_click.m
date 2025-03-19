@@ -18,8 +18,8 @@ while N ~= 1
                     || strcmp(obj.Children(kk).Tag, 'buttonA')
                     obj.Units = 'Pixels'; obj.Children(kk).Units = 'Pixels';
                     
-                    fsz = obj.Position;
-                    loc = obj.Children(kk).Position; % x  y w h
+                    fsz = obj.Position; % Figure position: x y w h
+                    loc = obj.Children(kk).Position; % Button in figure
                     click_pos = fsz(1:2) + loc(1:2) + (loc(3:4)./2);
                     moveMouse(click_pos);                
                     

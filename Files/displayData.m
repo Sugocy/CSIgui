@@ -44,12 +44,12 @@ if nargin < 4, labels = csi.data.labels; end
 if nargin < 5, opts = struct; end
 
 if ~isfield(opts, 'dataDisp')
-    ename = repmat({'popup'}, 1, 2);
+    elm = repmat({'popup'}, 1, 2);
     qry = {'Display type: ','Apply excluding voxel mask:'};
     inp = {{'Map','Table','Histogram'}, {'Yes', 'No'}};
 
     % Display type from user
-    uans = getInput(ename, qry, inp, data_tag);
+    uans = getInput(elm, qry, inp, data_tag);
     if isempty(uans)
         CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); 
         return; 
@@ -60,6 +60,13 @@ else
     dataDisp = opts.dataDisp;
     doMask = opts.doMask;
 end
+
+
+% Show statistics nfo
+stats = csi_statistics_of_volume(data); stats.mask = 'none'; 
+stats.source = 'full-data-volume'; stats.nfo = data_tag; 
+Statistics_Viewer(stats);
+
 
 % If voxel mask is requested.
 maskMsg = 'none';
@@ -86,15 +93,12 @@ if doMask
         end
     
         % Apply mask to data
-        data(mask) = NaN;
+        data(logical(mask)) = NaN;
         maskMsg = 'applied';
     end
 end
 
-% Show statistics nfo
-stats = csi_statistics_of_volume(data); stats.mask = maskMsg; 
-stats.source = 'full-data-volume'; stats.nfo = data_tag; 
-Statistics_Viewer(stats);
+
 
 
 % Switch to data-display type.
@@ -876,7 +880,8 @@ fig_sz = [def_sz def_sz.*(scr_sz(2)/scr_sz(1))];
 % 4. Position of figure.
 fig_ps = [40 scr_sz(2)-(1.15*fig_sz(2))];
 % 5. Apply
-set(fh, 'Position', [fig_ps fig_sz]); 
+set(fh, 'Position', [fig_ps fig_sz], ...
+    'WindowButtonMotionFcn', @hoverMouse);
 
 % --- Create grid overlay in every tab (CSI_dataAsTabs)
 function tgui = CSI_dataAsTabs_create_griddedTabs(fh, data, clrs)
@@ -1400,12 +1405,14 @@ for kk = 1:size(tabs,1)
     pause(0.75);
 
     % Solution is screenshot!
-    figpos = figobj.Position; % [l b w h]
-    figpos(2) = abs(figpos(2) + figpos(4) - scrsz(2));
-    img = screenshot(figpos); % [l t w h]
+    % figpos = figobj.Position; % [l b w h]
+    % figpos(2) = abs(figpos(2) + figpos(4) - scrsz(2));
+    % img = screenshot(figpos); % [l t w h]
     
+    export_fig(fntmp, '-transparent',['-' ext],'-nocrop','-m1', figobj);
+
     % Save to file
-    imwrite(img, fntmp);    
+    % imwrite(img, fntmp);    
 end
 
 % --- Executes on press of toolbar's set color scale button
@@ -1623,3 +1630,63 @@ for tabi = 1:numel(tgui.tabh)
         end
     end
 end
+
+% --- Hovering mouse over tab-maps axis showing map-value in titlebar
+function hoverMouse(hObj, ~)
+% Display the value of the pixel which the mouse hovers on in titlebar of
+% the figure.
+
+% Get data handle
+gui = guidata(hObj);
+
+if ~isfield(gui, 'title'), gui.title = gui.fig.Name; end
+
+% Current tab
+title_str = extractField(gui.tabh, 'Title');
+ind = strcmp(gui.tabg.SelectedTab.Title, title_str);
+
+% Current point in map-axis
+C = gui.plot_par.ax{ind}.CurrentPoint;
+
+% Only if mouse over axis only == positive values
+if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )
+
+    % X and Y coordinate
+    xc = (round(C(1,1))); yc = (round(C(1,2)));
+    
+    % Convert axis coordinate to map-coordinate (row/col)
+    dim = gui.plot_par.dim;
+
+    % Get image pixel data
+    % Reverse X and Y coordinate for Row/Column discrepancy in Matlab!
+    if   (dim(1) >= xc) && (dim(2) >= yc)                       
+        px = gui.plot_par.ax{ind}.Children.CData(yc,xc);
+    else
+        gui.fh.Name = gui.title;
+        return;
+    end
+    
+    % Display in title-bar
+    if ~isnan(px)
+        nZeros = numzeros(px);
+        if nZeros > 5
+            prefix = '0'; if nZeros >= 9, prefix = ''; end
+            pxstr = sprintf('%3.3fe-%s%i', ...
+                px*10.^(nZeros+1), prefix, nZeros+1);
+        else
+            pxstr = sprintf('%5.5f', px);
+        end
+    else
+        pxstr = 'NaN';
+    end
+    text_str = sprintf('%s : Row: %i Col: %i - Value: %s', ...
+                        gui.title, round(C(1,2)), round(C(1,1)), pxstr);
+
+    % Set name of figure title
+    gui.fig.Name = text_str;
+else
+    gui.fig.Name = gui.title;
+end
+
+
+guidata(hObj,gui);

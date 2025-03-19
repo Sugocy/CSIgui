@@ -14,7 +14,7 @@ function files = dicomreadSiemens_getSeries(varargin)
 % 
 % Returns NaN if no group is found.
 %
-% 
+% Quincy van Houtum, PhD; v1.0 - 2024
 
 if nargin == 0
     [fn, fp, id] = uigetfile({'*.ima', 'Siemens DICOM files (*.ima)'},...

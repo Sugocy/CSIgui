@@ -1,4 +1,4 @@
-function NFOviewer(str)
+function fh = NFOviewer(str)
 % GUI to view a structure in a tree-format with ability to search for
 % fields with a specific text.
 %
@@ -7,7 +7,7 @@ function NFOviewer(str)
 
 
 % Close if opened
-fh = findall(groot, 'Type', 'figure', 'Name', 'Struct Viewer'); close(fh);
+% fh = findall(groot, 'Type', 'figure', 'Name', 'Struct Viewer'); close(fh);
 
 % Create figure
 fh = uifigure('ToolBar','none','MenuBar','none','Name','Struct Viewer');

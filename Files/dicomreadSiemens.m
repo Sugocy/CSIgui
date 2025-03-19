@@ -67,7 +67,14 @@ for fni = 1:size(fn,2)
 
     % Read dicom file
     if numel(img) ~= 1
-        img(:,:,fni) = single(dicomread([fp fnt]));
+        tmp = single(dicomread([fp fnt]));
+        if sum(size(tmp) == matrix_size([2 1])) == 2
+            img(:,:,fni) = single(dicomread([fp fnt]));
+        else
+            fprintf(['IMA-file image dimensions do not match matrix-size '...
+                'of first file in series: \n %s \n '], [fp fnt]); 
+            fprintf('Image-data not loaded into memory.\n');
+        end
     end
     
 end % End of file(s) for-loop.

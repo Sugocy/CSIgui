@@ -7,7 +7,7 @@ function userInput = getInput(e_name, e_query, e_input, fig_title)
 % e_input is the default input seperate per element as a cell-array.
 %           popup e_input: {{'1','2','3'},{'Banana','Apple','Lime'}};
 %            edit e_input: {{'5'}, {'Lime'}}
-% fig_title is the figure its name shown in the window-bar.
+% fig_title is the figure its name shown in the figure it title-bar.
 %
 % userInput is empty when user skips or closes the window.
 %

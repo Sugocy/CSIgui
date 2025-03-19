@@ -13,11 +13,11 @@
 %%%    'limit'          Axis limits of colormap to show i.e. contrast
 %%%    'tag'            Tag to show @ bottom of image display
 %%%    'pos'            Position of display3D on the screen.
-%%%                     If (1x2) positioned, if (1x4) sizes and positions
+%%%                     If (1x2) positions, if (1x4) sizes and positions
 %%%                     expecting [x y w h];
 %%%
 %%% Control options:
-%%%    'Middle mouse'   When hold, mouse movements changes contrast
+%%%    'Middle mouse'   When hold, mouse movements change contrast
 %%%    'Right mouse'    Revert to default contrast of the current array
 
 % ------- Initiate display 3D
@@ -174,10 +174,16 @@ gui.txt.String = sprintf('%i/%i',sl,size(gui.data,3));
 if ~isfield(gui.opt,'limit')
     gui.opt.limit = getContrast(gui.data);
 end
+
 if gui.opt.limit(1) >= gui.opt.limit(2)
     gui.opt.limit(2) = gui.opt.limit(1)+1;
 end
-gui.ax.CLim =  gui.opt.limit;
+
+if isfield(gui.opt, 'limit')
+    gui.ax.CLim =  gui.opt.limit; 
+else
+    return; 
+end
 gui.edit.String = num2str(gui.opt.limit);
 
 
@@ -185,6 +191,8 @@ gui.edit.String = num2str(gui.opt.limit);
 if isfield(gui.opt,'colormap')
     colormap(gui.ax, gui.opt.colormap);
 end
+
+guidata(gui.fh, gui)
     
 % ------- Control slider
 function SB_control(hObj, ~)
@@ -198,6 +206,8 @@ function scrollWheel(hObj, evt)
 % GUI handle
 gui = guidata(hObj); 
 
+if ~isfield(gui, 'sb'), return; end
+
 % If scrolled up, increase scrollbar.
 if evt.VerticalScrollCount < 0 
     if gui.sb.Value+1 <= gui.sb.Max
@@ -209,6 +219,10 @@ elseif  evt.VerticalScrollCount > 0
             gui.sb.Value = gui.sb.Value-1; 
     end
 end
+
+% Update edit-bar
+gui.edit.String = num2str(gui.opt.limit);
+
 
 % Update app-structure
 guidata(hObj,gui);
@@ -224,14 +238,14 @@ mouse_button = get(hObj,'selectiontype');
 
 gui  = guidata(hObj);
 switch lower(mouse_button)
-    case 'normal'
-    case 'alt'
+    case 'normal' % Left click
+    case 'alt' % Right click
         % Default contrast set
         gui.opt.limit = getContrast(gui.data(:,:,gui.sb.Value));
-        caxis(gui.ax, gui.opt.limit);
-        
-        
-    case 'extend'
+        gui.ax.CLim = gui.opt.limit;
+        gui.edit.String = num2str(gui.opt.limit);
+                
+    case 'extend' % Scroll wheel
         % Add additional callback to Mouse Motion Fcn.
         gui.fh.WindowButtonMotionFcn = ... 
             @(hObj,evt)( cellfun( @(x) feval(x,hObj,evt),...
@@ -310,7 +324,10 @@ function hoverMouse(hObj, ~)
 
 % Get data handle
 gui = guidata(hObj);  
+if ~isfield(gui, 'ax'), return; end
 C = gui.ax.CurrentPoint;
+
+
 
 % Only if mouse over axis only == positive values
 if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )
@@ -326,9 +343,22 @@ if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )
         gui.fh.Name = 'Display 3D in 2D';
         return;
     end
-
-    text_str = sprintf('Row: %i Col: %i - Value: %5.5f', ...
-                        round(C(1,2)), round(C(1,1)), px);
+    
+    % Display in title-bar
+    if ~isnan(px)
+        nZeros = numzeros(px);
+        if nZeros > 5
+            prefix = '0'; if nZeros >= 9, prefix = ''; end
+            pxstr = sprintf('%3.3fe-%s%i', ...
+                px*10.^(nZeros+1), prefix, nZeros+1);
+        else
+            pxstr = sprintf('%5.5f', px);
+        end
+    else
+        pxstr = 'NaN';
+    end
+    text_str = sprintf('Row: %i Col: %i - Value: %s', ...
+                        round(C(1,2)), round(C(1,1)), pxstr);
 
     % Set name of figure title
     gui.fh.Name = text_str;

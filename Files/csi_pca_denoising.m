@@ -70,13 +70,13 @@ psz = patch_size;
 
 % Parallel Pool % ------------------------------------------------------ %
 
-mlyear = version('-release'); mlyear = str2double(mlyear(1:end-1));
-parpoolName = 'Processes'; if mlyear <2023, parpoolName = 'local'; end
+% mlyear = version('-release'); mlyear = str2double(mlyear(1:end-1));
+% parpoolName = 'Processes'; if mlyear <2023, parpoolName = 'local'; end
 
 p = gcp('nocreate'); 
-if isempty(p)
-    nCores = floor(feature('numcores') .* 0.75);
-    parpool(parpoolName, nCores);
+if isempty(p)    
+    nCores = ceil(feature('numcores') .* 0.9);    
+    pp = parcluster; pp.NumWorkers = nCores; parpool(pp);  
 end
 
 tic

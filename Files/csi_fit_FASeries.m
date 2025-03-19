@@ -44,7 +44,7 @@ function outp = csi_fit_FASeries(xdata, ydata, fit_method, phase_data, ...
 %
 %
 % vThesis: https://doi.org/10.1002/nbm.4178 (2020)
-% V3: updated 12/2023
+% V3: updated 12/2024
 % Q. van Houtum, PhD; quincyvanhoutum@gmail.com
 
 
@@ -60,8 +60,6 @@ if (nargin >= 10)
         TR = varargin{1}; T1 = varargin{2}; ppm = varargin{3};
     end
 end
-
-
 
 % Create output variable
 outp = struct; 

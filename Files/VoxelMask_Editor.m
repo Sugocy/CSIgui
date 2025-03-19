@@ -57,6 +57,9 @@ VoxelMask_addImages(plot_par.fh);
 % --- % Add menubar with options
 VoxelMask_addMenu(plot_par.fh)
 
+% --- % Visual mask checksum
+VoxelMask_CheckSum(plot_par.fh);
+
 % --- % Add visual mask
 VoxelMask_PlotMask(plot_par.fh);
 
@@ -450,6 +453,60 @@ for tabi = 1:plot_par.tabs_total
 
 end
 guidata(fh, tgui);
+
+
+function VoxelMask_CheckSum(fh)
+% Check if given mask matches the mask-dim dimensions and correct if
+% necessary.
+%
+% plot_par: dim and mask
+
+
+% Get GUI data of figure
+tgui = guidata(fh);
+% Plot data for each tab: voxel grid and more plot settings.
+plot_par = tgui.plot_par;
+
+% Check if mask is available
+if ~isfield(plot_par, 'mask'), return; end
+
+% --- % Find non-matching dimensions ------------- %
+msz = size(plot_par.mask);
+dontMatchInd = find(plot_par.dim ~= msz);
+
+% --- % Correct each non-matching index ---------- %
+for mM = dontMatchInd
+    vsz = size(plot_par.mask, mM); isz = plot_par.dim(mM);
+
+    if vsz ~= isz
+          
+        if vsz < isz        
+            % Dim-difference
+            d = isz - vsz;
+        
+            % Create difference-array for this index
+            vsz = size(plot_par.mask); vsz(mM) = d;
+            addMask = zeros(vsz);
+
+            % Catenate the difference array to current mask-array
+            plot_par.mask = cat(mM, plot_par.mask, addMask);
+        end
+
+        % if vsz > isz 
+        % This is not an issues for the #slices/tabs:
+        % WHY: the #tabs is related to #images, but not 
+        % all mask per image are plotted. User can fix this.
+        % HOWEVER:
+        % For slices only! But Im a lazy programmer today ;)
+        % This error is almost an achievement.
+
+    end
+    
+end
+
+% Update gui-data.
+tgui.plot_par = plot_par; guidata(fh, tgui);
+
 
 function mouseHover(hobj,~)
 % Handles figure-window mouse-position and value string plus tracking.
