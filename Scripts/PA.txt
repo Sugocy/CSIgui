@@ -1,0 +1,6 @@
+setDomain=time;
+Average;
+Apodization_FID;
+FFT;
+AutoPhase;
+plotCSI;

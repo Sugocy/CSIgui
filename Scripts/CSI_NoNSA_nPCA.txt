@@ -1,0 +1,17 @@
+setDomain=frequency;
+TestSomething;
+ReorderDim_Auto;
+FFT_Kspace;
+Apodization_FID=20;
+FFT;
+AutoPhase;
+Noise;
+Combine;
+AutoPhase;
+Interpolate;
+setCoordinates;
+TestSomething;
+MRI_setCoordinates;
+MRI_Convert;
+plotCSI;
+

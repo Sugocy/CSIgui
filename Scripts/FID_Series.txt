@@ -1,0 +1,13 @@
+setDomain=time;
+TestSomething;
+ReorderDim_Auto;
+Average;
+Apodization_FID;
+FFT;
+AutoPhase;
+Combine;
+AutoPhase;
+ReorderDim_Auto;
+plotCSI;
+FAdynamic;
+TestSomething;
