@@ -37,9 +37,9 @@ for kk = 1:numel(stroi)
     if ~isnan(nfo.OS), break; end
 end
 
-% --- Geometric parameters --- %
+% --- Spatial parameters --- %
 
-% Matrix resolutions)
+% Matrix resolutions
 stroi = {'ReadResolution', 'MatrixSizeRead', 'Read'};
 for kk = 1:numel(stroi)
     vals = getFieldValues(twix_hdr, stroi{kk}, 0); 
@@ -64,12 +64,27 @@ for kk = 1:numel(stroi)
 end
 
 % FOV
-vals = getFieldValues(twix_hdr, 'ReadoutFOV'); 
+
+[vals, foi] = getFieldValues(twix_hdr, 'ReadoutFOV'); 
+ind = strfind(lower(foi), 'voi');
+ind = cell2mat(cellfun(@(x) ~isempty(x), ind, 'UniformOutput', false));
+vals(~ind) = [];
 nfo.fov(1) = getCommonValue(vals);
-vals = getFieldValues(twix_hdr, 'PhaseFOV'); 
+
+
+[vals, foi] = getFieldValues(twix_hdr, 'PhaseFOV'); 
+ind = strfind(lower(foi), 'voi');
+ind = cell2mat(cellfun(@(x) ~isempty(x), ind, 'UniformOutput', false));
+vals(~ind) = [];
 nfo.fov(2) = getCommonValue(vals);
-vals = getFieldValues(twix_hdr, 'SliceThickness'); 
+
+[vals, foi] = getFieldValues(twix_hdr, 'VoI_SliceThickness'); 
+ind = strfind(lower(foi), 'voi');
+ind = cell2mat(cellfun(@(x) ~isempty(x), ind, 'UniformOutput', false));
+vals(~ind) = [];
 nfo.fov(3) = getCommonValue(vals);
+% This is the adjustment volume - shimbox size... sigh
+% nfo.fov(3) = twix_hdr.Phoenix.sAdjData.sAdjVolume.dThickness;
 
 % Orientation
 stroi  = {'VoI_Normal_Tra', 'VoI_Normal_Sag', 'VoI_Normal_Cor'};

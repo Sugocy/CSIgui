@@ -1,4 +1,4 @@
-function fieldvals = extractField(istruct, ifield)
+function fieldvals = extractField(istruct, ifield, doWarn)
 %%%% Description:                     Extract multiple struct fields 
 %%% Creator: Ir. Q. van Houtum       Version: 2.1          Date: 2017-04
 %%% --------------------------------------------------------------------
@@ -7,10 +7,19 @@ function fieldvals = extractField(istruct, ifield)
 %%% get all values from the ifield from each cell-index.
 %%%
 %%% See also: isfieldfull();
+%%% 
+%%% doWarn enabled prompts warning if the field is not found. Otherwise
+%%% this warning is disabled.
+%%%
 %%%
 %%% Supported for up to 5 index-dimensions.
 %%% Supported for graphics object in Matlab 2016a. Uses fieldnames and
 %%% isfield combined to figure out existance of subfields in struct-cell.
+%%%
+%%% Quincy van Houtum, version 2 - 2025
+
+
+if nargin < 2, doWarn = 1; end
 
 % Get field-depth field of interest in structure!
 % 1. Get all subfields in requested ifield.
@@ -37,8 +46,11 @@ for qq = 1:size(subfields,2)
     fnindex = find(strcmp(fnames,subfields{qq}),1);
     if isfield(tmpstruct, subfields{qq}) || ~isempty(fnindex) 
         tmpstruct = tmpstruct.(subfields{qq});
-    else warning('RealWorldSys:NoExtractField',...
+    else 
+        if doWarn
+        warning('RealWorldSys:NoExtractField',...
         'Extracted field(s) not in structure - values not extracted'); 
+        end
         fieldvals = []; return;
     end
 end

@@ -131,7 +131,7 @@ gdat.sl = uicontrol('Style','Slider','BackGroundColor','Black',...
 gdat.sl.Position = [0.4 0.075 0.48 0.04]; % [X,Y,W,H]
 
 % Add radio buttons
-% To select either first or zero order correction with srollbar.
+% To select either first or zero order correction with scrollbar.
 % or to select/change the pivot peak.
 rwh           = [0.08 0.025 0.085]; % Radio width and height and yposition.
 rx1           = 0.125;              % X-Position of first radio button
@@ -154,7 +154,14 @@ gdat.radio_Pivot  = ...
              'String','Pivot','BackGroundColor', 'Black',...
              'ForeGroundColor', radio_clr_txt,'FontWeight','Bold',...
              'FontSize', 10, 'Value', 0, 'Callback', @radioSwitch);
-             
+
+
+% Add zoom buttons
+gdat.but_zoom = uicontrol(figh,'Style','pushbutton','Tag','buttonZoom',...
+             'Unit','Normalized', 'String','Zoom','BackGroundColor', 'Black',...
+             'ForeGroundColor', radio_clr_txt,'FontWeight','Bold',...
+             'FontSize', 8, 'Value', 0, 'Callback', @button_Zoom);
+gdat.but_zoom.Position = [0.125 sum(gdat.ax.Position([2 4])) 0.1 0.025]; % [X,Y,W,H]
          
 % Store input in GUI ==================================================== %        
 % ======================================================================= %
@@ -254,18 +261,23 @@ applyPhase(gdat); gdat = guidata(gdat.figh);
 
 
 % 2. Y LIMIT
-ymax = (max(real(gdat.spec))); 
-ymin = (min(real(gdat.spec)));
-if      abs(ymin) > abs(ymax)
-    gdat.ylim = [-1*abs(ymin)*1.05 abs(ymin)*1.05];
-elseif  abs(ymin) < abs(ymax)
-    gdat.ylim = [-1*abs(ymax)*1.05 abs(ymax)*1.05];
+if ~isfield(gdat, 'ylim')
+    ymax = (max(real(gdat.spec))); ymin = (min(real(gdat.spec)));
+    if      abs(ymin) > abs(ymax)
+        gdat.ylim = [-1*abs(ymin)*1.05 abs(ymin)*1.05];
+    elseif  abs(ymin) < abs(ymax)
+        gdat.ylim = [-1*abs(ymax)*1.05 abs(ymax)*1.05];
+    end
+else
+    gdat.ylim = gdat.ax.YLim;
 end
 
 % 3. X LIMIT
 if ~isfield(gdat,'xlim')
     xmax = max(gdat.x.ppm); xmin = min(gdat.x.ppm);
     gdat.xlim = [xmin*1.01 xmax*1.01];
+else
+    gdat.xlim = gdat.ax.XLim;
 end
 
 % 3. PLOT AND AXIS COSMETICS
@@ -586,3 +598,8 @@ switch ext
         % Write as the sdat file
         csi_writeSDAT([fp fn], gdat.spec, 'spec');
 end
+
+
+% --- Activated when user presses zoom
+function button_Zoom(hobj, ~, ~)
+zoom('toggle');

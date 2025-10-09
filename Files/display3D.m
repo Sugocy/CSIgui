@@ -116,7 +116,7 @@ sb.Visible = 'off';
 
 % 3. INFO TEXT
 txt = uicontrol(fh,'Style','Text','Units','Pixels',...
-                'Position',[0 0 60 10],...
+                'Position',[0 1 60 12],...
                 'ForegroundColor','Yellow','BackgroundColor','Black',...
                 'HorizontalAlignment','Center','FontSize',7);              
 txt.String = sprintf('%i/%i',1,size(data,3));
@@ -124,9 +124,9 @@ txt.FontWeight = 'bold';
 
 % 4. TAG TEXT
 if isfield(opt,'tag')
-    tag_w = 80;
+    tag_w = 120;
     tag = uicontrol(fh,'Style','Text','Units','Pixels',...
-                   'Position',[txt.Position(3) 0 tag_w 10],...
+                   'Position',[txt.Position(3) 1 tag_w 12],...
                    'ForegroundColor','Yellow','BackgroundColor','Black',...
                    'HorizontalAlignment','Center','FontSize',7);    
     tag.String = opt.tag;
@@ -179,18 +179,17 @@ if gui.opt.limit(1) >= gui.opt.limit(2)
     gui.opt.limit(2) = gui.opt.limit(1)+1;
 end
 
-if isfield(gui.opt, 'limit')
-    gui.ax.CLim =  gui.opt.limit; 
-else
-    return; 
-end
-gui.edit.String = num2str(gui.opt.limit);
-
-
 % Colormap type
 if isfield(gui.opt,'colormap')
     colormap(gui.ax, gui.opt.colormap);
 end
+
+if isfield(gui.opt, 'limit') && sum(isnan(gui.opt.limit)) == 0    
+    gui.ax.CLim =  gui.opt.limit;    
+else
+    return; 
+end
+gui.edit.String = num2str(gui.opt.limit);
 
 guidata(gui.fh, gui)
     
@@ -221,7 +220,9 @@ elseif  evt.VerticalScrollCount > 0
 end
 
 % Update edit-bar
-gui.edit.String = num2str(gui.opt.limit);
+if isfield(gui.opt,'limit')
+    gui.edit.String = num2str(gui.opt.limit);
+end
 
 
 % Update app-structure
@@ -242,9 +243,10 @@ switch lower(mouse_button)
     case 'alt' % Right click
         % Default contrast set
         gui.opt.limit = getContrast(gui.data(:,:,gui.sb.Value));
-        gui.ax.CLim = gui.opt.limit;
-        gui.edit.String = num2str(gui.opt.limit);
-                
+        if sum(isnan(gui.opt.limit)) == 0
+            gui.ax.CLim = gui.opt.limit;
+            gui.edit.String = num2str(gui.opt.limit);
+        end                       
     case 'extend' % Scroll wheel
         % Add additional callback to Mouse Motion Fcn.
         gui.fh.WindowButtonMotionFcn = ... 
@@ -347,7 +349,7 @@ if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )
     % Display in title-bar
     if ~isnan(px)
         nZeros = numzeros(px);
-        if nZeros > 5
+        if nZeros > 3
             prefix = '0'; if nZeros >= 9, prefix = ''; end
             pxstr = sprintf('%3.3fe-%s%i', ...
                 px*10.^(nZeros+1), prefix, nZeros+1);

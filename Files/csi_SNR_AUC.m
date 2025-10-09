@@ -9,7 +9,8 @@ function [SNR, peak_est] = csi_SNR_AUC(data, poi, noise, bv_mask, unit, strict, 
 %   data        data-array with spectra with index 1 as sample index.
 %   poi         unitless index of peak of interest range in data.
 %   noise       noise-mask size or noise per voxel as an array.
-%   bv_mask     noise-mask for baseline calculation required for AUC.
+%   bv_mask     noise-mask for baseline calculation required for AUC. if
+%               empty ([]) uses 35% of full spectrum to calculate baseline.
 %   unit        signal unit magnitude (0), real (1, default) or
 %               imaginary (2).
 %   strict      Allow the peak-range to increase (0, default) 

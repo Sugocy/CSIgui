@@ -51,7 +51,6 @@ if ~isfield(opts, 'dataDisp')
     % Display type from user
     uans = getInput(elm, qry, inp, data_tag);
     if isempty(uans)
-        CSI_Log({sprintf('%s mapping skipped.', data_tag)},{''}); 
         return; 
     end
     dataDisp = lower(uans{1}); % Display method
@@ -600,7 +599,10 @@ switch uans{2}
     case 'Min to Max'
         color_scale = [min(data(:)) max(data(:))];
     case 'Histogram optimized'
-        [N, edges, bin] = histcounts(data(:));
+        % This removes large outliers by looking at the max value if 98% of
+        % the data-distribution is included
+        tmp = data(:); tmp(isnan(tmp)) = [];
+        [N, edges, bin] = histcounts(tmp(:));
         bool = cumsum(N) <= 0.98*size(bin,1);
         maxval = max(edges(bool));
         color_scale = [min(data(:)) maxval];                         
@@ -1010,7 +1012,7 @@ function csi = VoxelMask_Initiate(csi, clr)
 
 if nargin < 2
     clr.main = [0 0 0]; clr.text_title = [0.941 0.941 0.941];
-    clr.hilight1 = [0.8 0 0];
+    clr.hilight1 = [0.95 0 0];
 end
 
 
@@ -1538,12 +1540,16 @@ tgui = guidata(figobj);
 
 % \\ GET: Data
 ph = [tgui.plot_par.plotobj{:}];
-data = cat(3,ph.CData);
- 
-% data = reshape(data, size(tgui.plot_par.ax));
-sz = size(data);
-data = permute(data, [numel(sz)+1 1:numel(sz)]);
+data = cat(3,ph.CData); 
 
+% Permute such ROW/COL are swapped (X vs Y axis and images)
+permvec = 1:numel(size(data)); permvec([2 1]) = permvec([1 2]); 
+data = permute(data, permvec);
+ 
+% Permute such first index is 1
+sz = size(data); data = permute(data, [numel(sz)+1 1:numel(sz)]);
+
+% Load as table
 CSI_dataAsTable(data,tgui.fig.Name);
 
 % --- Executes on press of toolbar's magnifying-glass-stats-button

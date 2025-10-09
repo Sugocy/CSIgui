@@ -22,10 +22,15 @@ function [varargout] = VoxelMask_Editor(plot_par)
 % Version 2: updated plot-method to use single-axis per tab to speed up 
 %            GUI startup (by a factor of 15!).
 
+if ~isstruct(plot_par)
+    tmp = plot_par; clear('plot_par')
+    plot_par.dim = size(tmp); plot_par.plot_img = 0;
+end
+
 if ~isfield(plot_par, 'colors')
     plot_par.colors.main         = [0.1 0.1 0.1];
     plot_par.colors.text_title   = [0.502 0.502 0.502];
-    plot_par.colors.hilight1     = [0.8 0 0];
+    plot_par.colors.hilight1     = [0.95 0 0];
 end
 
 % --- % Create Figure for plotting 2D

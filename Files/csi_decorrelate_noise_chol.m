@@ -36,7 +36,8 @@ mna = cellfun(@(x) min(real(x(:))), spec); mna = max(mna);
 
 % Correct scaling over all voxels.
 scaleCorrection = numzeros(mxb / mxa);
-spec = cellfun(@(x) x * 10^-(scaleCorrection+1), spec, 'UniformOutput', false);
+% spec = cellfun(@(x) x * 10^-(scaleCorrection+1), spec, 'UniformOutput', false);
+spec = cellfun(@(x) x * 10^-(scaleCorrection), spec, 'UniformOutput', false);
 
 % Reshape back to matrix with same dimensions
 if numel(szr) > 2 && (numel(dim)-2 > 2)

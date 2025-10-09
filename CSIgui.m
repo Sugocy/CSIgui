@@ -980,149 +980,24 @@ setappdata(gui.CSIgui_main,'csi',csi);
 function success = parse_mat(fp, fn, gui)
 % Load mat file, parse the data and store it into CSIgui appdata.
 %
-% Created: csi-struct.
+% App-data: csi, mri & conv. Log-data resubmitted.
 
-% Expected fields of interest
-% foi = {'data','ext','filename','filepath',...
-%        'xaxis','csi','raw','dim','labels', 'conv','mri'};
-
-% Check mat-file integrety   
-mat_cont = whos('-file',[fp '\' fn '.mat']); 
-old_format = 0; new_format = 0;
-if strcmp(mat_cont(1).name,'csigui'),  old_format = 1;
-elseif strcmp(mat_cont(1).name,'csi'), new_format = 1;
-end
-
-if (old_format + new_format) == 0
-    success = 0;
-    CSI_Log(...
-    {'Incorrect mat-file. Use by CSIgui generated mat-file.',...
-     'Expected fields:'},...
-    {'Required structure: csigui (old) or csi (new).',...
-     'raw, dim, filepath and name, noise, split, conv, mri,'}); return;
-else, success = 1; 
-end
-
-% Integrety verified, read matfile
-if old_format
-    inp = load([fp '\' fn '.mat'], 'csigui');
-    csigui = inp.csigui; clear inp;
-elseif new_format
-    inp = load([fp '\' fn '.mat'], 'csi');
-    csi = inp.csi; clear inp;
-end
-
-              % ------- % Process MRI struct % ------- %
-
-if old_format            
-
-    % Find MRI struct and store             
-    if isfield(csigui,'mri')
-        mri = csigui.mri; csigui = rmfield(csigui,'mri');
-        setappdata(gui.CSIgui_main,'mri',mri); 
-    end
-    
-    
-                  % ------- % Process CONV struct % ------- %
-    
-    % Find conv struct and store
-    if isfield(csigui,'conv')
-        converted = csigui.conv; csigui = rmfield(csigui,'conv');
-        setappdata(gui.CSIgui_main,'conv',converted); 
-    end
-    
-                  % ------- % Process CSI HDRNFO % ------- %
-                  
-    if isfield(csigui,'twix')
-        csi.twix = csigui.twix; csigui = rmfield(csigui,'twix');
-    end
-    if isfield(csigui,'list')
-        csi.list = csigui.list; csigui = rmfield(csigui,'list');
-    end
-    
-                % ------- % Process CSI VOXMASK % ------- %
-
-    if isfield(csigui,'voxelmask')
-        csi.data.voxelmask = csigui.voxelmask;
-    end
-    
-                  % ------- % Process CSI struct % ------- %
-    
-    % Set remaining CSI input to structure;
-    csi.data = csigui;
-    
-    % Set extensions
-    csi.ext = 'mat';
-    
-    % Set mat-filename
-    csi.data.filename = fn; csi.data.filepath = fp;
-    csi.filename = fn; csi.filepath = fp;
-    
-    % Find xaxis stuct and store
-    if isfield(csigui, 'xaxis')
-        csi.xaxis = csigui.xaxis; csi.data = rmfield(csi.data,'xaxis');
-    end
-    
-    if isfield(csigui, 'ori')
-        csi.ori = csigui.ori; csi.data = rmfield(csi.data,'ori');
-    end
-                     % ------- % Process LOG % ------- %
-    
-    % Resubmit log if available
-    if isfield(csigui,'log')
-        CSI_Log({'Copying log from mat-file.'},{'See below.'})
-        log_data = cellstr(csigui.log);
-        % Exclude first two lines
-        log_data = log_data(3:end);
-        
-        % Add to log listbox
-        gui.listbox_CSIinfo.String = ...
-        cat(1, gui.listbox_CSIinfo.String,{''} ,log_data);
-    
-        % Remove log-field
-        csi.data = rmfield(csi.data,'log');
-    end
-
-    % Clear memory
-    clear csigui
-    
-elseif new_format
-    
-    if isfield(csi, 'conv')
-        setappdata(gui.CSIgui_main,'conv',csi.conv); 
-        csi = rmfield(csi,'conv');
-    end
-
-    if isfield(csi, 'mri')
-        setappdata(gui.CSIgui_main,'mri', csi.mri); 
-        csi = rmfield(csi,'mri');
-    end
-
-    if isfield(csi, 'log')
-        CSI_Log({'Copying log from mat-file.'},{'See below.'})
-        log_data = cellstr(csi.log);
-        % Exclude first two lines
-        log_data = log_data(3:end);
-        
-        % Add to log listbox
-        gui.listbox_CSIinfo.String = ...
-        cat(1, gui.listbox_CSIinfo.String,{''} ,log_data);
-    
-        % Remove log-field
-        csi = rmfield(csi,'log');
-    end
-
-    if isfield(csi, 'voxelmask')
-        csi.data.voxelmask = csi.voxelmask; 
-        csi = rmfield(csi, 'voxelmask');
-    end
-
-    % Set extensions
-    csi.ext = 'mat';    
-end
+% Parse mat-file
+[csi, mri, conv, log, gui, success] = csigui_parse_mat(fp, fn, gui);
 
 % Save CSI data in app-data
-setappdata(gui.CSIgui_main,'csi',csi); 
+setappdata(gui.CSIgui_main,'csi',csi);
+
+% Store other appdata
+if isstruct(mri), setappdata(gui.CSIgui_main, 'mri', mri); end
+if isstruct(conv), setappdata(gui.CSIgui_main,'conv', conv); end
+
+% Update log-data
+% CSI_Log(log'); 
+gui.listbox_CSIinfo.String = ...
+    cat(1, gui.listbox_CSIinfo.String,{''}, log{:});
+CSI_Log({'Log-data imported.'},{'See below.'});
+
       
 % --- Parse USERINPUT
 function succes = parse_userinput(gui)
@@ -1362,7 +1237,7 @@ switch ext
                     data = cat(file_dim,data,tmp);
                 else
                     CSI_Log({'Aborting, data dimensions between'},...
-                            {'files did no agree. Aborted loading.'});
+                            {'files do not agree.'});
                     success = 0;
                     return;
                 end
@@ -1411,152 +1286,31 @@ switch ext
     
     case '.mat' % Spectroscopy - CSIgui
     CSI_Log({'Reading all mat-files.'},...
-            {'Please be patient, load-time dependent on file-sizes.'});
-        
-        % Load in every mat-file
-        % Get data.raw catenate - if sizes are equal!
-        % Save one file its conv/mri/csi-structs 
+            {'Please be patient, load-time depends on file-sizes.'});
 
-        % Loop all files
+        % -------- % Load all mat-files
+
+        % Container variables and loop mat-file list
         mri = cell(1,numel(fn)); conv = cell(1,numel(fn));
-        csi_dump = cell(1,numel(fn));
-        for kk = 1:size(fn,2)
-
-            % Check mat-file integrity   
-            mat_cont = whos('-file',[fp '\' fn{kk} '.mat']); 
-            old_format = 0; new_format = 0;
-            if strcmp(mat_cont(1).name,'csigui'),  old_format = 1;
-            elseif strcmp(mat_cont(1).name,'csi'), new_format = 1;
-            end
-            
-            if (old_format + new_format) == 0
-                success = 0;
-                CSI_Log(...
-                {'Incorrect mat-file. Use by CSIgui generated mat-file.',...
-                 'Expected fields:'},...
-                {'Required structure: csigui (old) or csi (new).',...
-                 'raw, dim, filepath and name, noise, split, conv, mri,'}); 
-                return;
-            else, success = 1; 
-            end
-            
-            % Integrity verified, read matfile
-            if old_format
-                inp = load([fp '\' fn{kk} '.mat'], 'csigui');
-                csigui = inp.csigui; clear inp;
-            elseif new_format
-                inp = load([fp '\' fn{kk} '.mat'], 'csi');
-                csi = inp.csi; clear inp;
-            end            
-                                      
-            if old_format            
-                
-                % ------- % Process MRI struct % ------- %  
-                % Find MRI struct and store             
-                if isfield(csigui,'mri')
-                    mri{kk} = csigui.mri; csigui = rmfield(csigui,'mri');
-                end
-
-                % ------- % Process CONV struct % ------- %               
-                % Find conv struct and store
-                if isfield(csigui,'conv')
-                    conv{kk} = csigui.conv; csigui = rmfield(csigui,'conv');
-                end
-                
-                % ------- % Process CSI HDRNFO % ------- %
-                if isfield(csigui,'twix')
-                    if kk == 1, twix = cell(1,numel(fn)); end
-                    twix{kk} = csigui.twix; csigui = rmfield(csigui,'twix');
-                end
-                if isfield(csigui,'list')
-                    if kk == 1, list = cell(1,numel(fn)); end
-                    list{kk} = csigui.list; csigui = rmfield(csigui,'list');
-                end
-                
-                % ------- % Process CSI VOXMASK % ------- %        
-                if isfield(csigui,'voxelmask')
-                    csi.data.voxelmask = csigui.voxelmask;
-                end
-                
-                % ------- % Process CSI struct % ------- %                
-                % Set remaining CSI input to structure;
-                csi.data = csigui;
-                
-                % Set extensions
-                csi.ext = 'mat';
-                
-                % Set mat-filename
-                csi.data.filename = fn; csi.data.filepath = fp;
-                csi.filename = fn; csi.filepath = fp;
-                
-                % Find xaxis stuct and store
-                if isfield(csigui, 'xaxis')
-                    csi.xaxis = csigui.xaxis; 
-                    csi.data = rmfield(csi.data,'xaxis');
-                end
-                
-                if isfield(csigui, 'ori')
-                    csi.ori = csigui.ori; 
-                    csi.data = rmfield(csi.data,'ori');
-                end
-
-                % ------- % Process LOG % ------- %                
-                % Resubmit log if available
-                if isfield(csigui,'log')
-                    if kk == 1, log_data = cell(1, numel(fn)); end
-                    log_data_tmp = cellstr(csigui.log);
-                    % Exclude first two lines
-                    log_data{kk} = log_data_tmp(3:end);                                       
-                
-                    % Remove log-field
-                    csi.data = rmfield(csi.data,'log');
-                end
-            
-            elseif new_format
-                
-                if isfield(csi, 'conv')
-                    conv{kk} = csi.conv; csi = rmfield(csi,'conv');
-                end
-            
-                if isfield(csi, 'mri')
-                    mri{kk} = csi.mri; csi = rmfield(csi,'mri');
-                end
-            
-                if isfield(csi, 'log')
-                    if kk == 1, log_data = cell(1, numel(fn)); end
-                    log_data_tmp = cellstr(csi.log);
-                    % Exclude first two lines
-                    log_data{kk} = log_data_tmp(3:end);   
-                
-                    % Remove log-field
-                    csi = rmfield(csi,'log');
-                end
-            
-                if isfield(csi, 'voxelmask')
-                    csi.data.voxelmask = csi.voxelmask; 
-                    csi = rmfield(csi, 'voxelmask');
-                end
-                       
-
-                % Set extensions
-                csi.ext = 'mat';    
-            end
-            
-            % Store app-data csi-struct of this file
-            csi_dump{kk} = csi;
+        csi_dump = cell(1,numel(fn)); log = csi_dump;
+        for kk = 1:size(fn,2)            
+            % Load and parse mat-file
+            [csi_dump{kk}, mri{kk}, conv{kk}, log{kk}, gui, success] = ...
+                csigui_parse_mat(fp, fn{kk}, gui);
 
         end
+
+        % -------- % Analyse mat-file data
 
         % Ask the user which file to use for default header info.
-        % Save only data.raw from other files
-        qry = {'Which file-nfo and header should be stored and used?'};
+        % Save only data.raw from all other files
+        qry = {'Which file-nfo and header should be stored?'};
         uans_foi = getUserInput_Popup(qry ,{fn});
-        if isempty(uans_foi)
-            CSI_Log({'Loading canceled.'},{''}); return; 
+        if isempty(uans_foi), CSI_Log({'Loading canceled.'},{''}); return; 
         end
-        foi_ind = ismember(fn, uans_foi);
+        foi_ind = ismember(fn, uans_foi); % file_of_interest_index
 
-        % Check size-compatibility
+        % Check inter-file size-compatibility
         data_sz = cellfun(...
             @size, extractField(csi_dump, 'data.raw'), 'uniform', 0);
         data_sz_check = cellfun(...
@@ -1567,38 +1321,89 @@ switch ext
             
             % Remove FODs from memory
             csi_dump(fod_ind) = []; mri(fod_ind) = [];
-            conv(fod_ind) = []; log_data(fod_ind) = [];
+            conv(fod_ind) = []; log(fod_ind) = [];
             
             % Show user which files are removed
             tmp = repmat({'Removed:'}, 1, numel(fod_ind));
             qry = ...
-            [{'The files below have incompatible data-dimensions.'},...
+            [{'The file(s) below have incompatible data-dimensions.'},...
             tmp(:)'];
             CSI_Log({'% -------------------------------------- %'}, {''});
             CSI_Log(qry, {'', fn{fod_ind}});
             CSI_Log({'% -------------------------------------- %'}, {''});
 
+            % Remove the wrong-sized files and update file-of-interest for
+            % main header nfo.
             fn(fod_ind) = [];
             foi_ind = contains(fn, uans_foi);
         end
 
+        % -------- % Process Data 
+        % Data-array dimensions are equal - a checksum is still in effect!
+                
         % Concatenate data and add to struct of interest
-        CSI_Log({'Combining mat-files and storing it into app-data.'},{''});
-        csi = csi_dump{foi_ind};
-        nDim = numel(csi.data.labels);
-        data = extractField(csi_dump, 'data.raw');                     
-        csi.data.raw = cat(nDim + 1, data{:});
+        CSI_Log({'Combining mat-files and updating app-data.'},{''});
+
+        % Main CSI-structure (chosen by user) used as starting-point
+        csi = csi_dump{foi_ind}; nDim = numel(csi.data.labels);
+        data = extractField(csi_dump, 'data.raw');  
+
+        % Check for "file"-dimension in loaded data
+        csi_dump_labels = extractField(csi_dump, 'data.labels');
+        hasFile = cell2mat(cellfun(@(x) sum(contains(x, 'file')), ...
+            csi_dump_labels, 'UniformOutput',false));
         label_name = 'file';
-        if sum(contains(csi.data.labels, 'file')) >= 1, label_name = 'inp';
+        if any(hasFile)           
+            % Catenate dimension of interest
+            hfoi = find(hasFile, 1, 'first'); % Has-file index of interest
+            cat_dim = find(strcmp(csi_dump_labels{hfoi}, 'file'));
+
+            % That needs to be done to the noise array too            
+        else
+            cat_dim = nDim + 1;
         end
-        csi.data.labels{end+1} = label_name;
-        csi.data.dim = size(csi.data.raw);
-        csi.filepath = fp;
-        csi.filename = strjoin(fn, ' | ');
+  
+        % Merge data by increasing dimensionality                                          
+        csi.data.raw = cat(cat_dim, data{:});         
+        csi.data.labels{cat_dim} = label_name;
+        csi.data.dim = size(csi.data.raw);        
+        csi.filepath = fp; csi.filename = strjoin(fn, ' | ');
+        
+
+        % -------- % Process Noise
+        % NFO from csi-data will be used to merge noise-data.
+
+        % Get noise data and check if indexes match
+        noise_raw = extractField(csi_dump, 'data.noise',0);
+        if ~isempty(noise_raw)            
+            % Check dimensions are equal
+            ndim = cellfun(@size, extractField(noise_raw, 'raw', 0),...
+                'UniformOutput',false);             
+            ndim_equal = isequal(ndim, repmat(ndim(1),1,numel(ndim)));
+            if ndim_equal % Dimensions of noise match
+
+                % Extract noise-data and labels
+                noise_data = extractField(noise_raw,'raw', 0);
+                labels = noise_raw{1}.labels;     
+                
+                % Write noise-data to struct and save in CSI struct.
+                noise = struct; 
+                noise.raw = cat(cat_dim, noise_data{:});
+                noise.dim = size(noise.raw);
+                noise.labels = labels; noise.labels(cat_dim) = {label_name};                
+
+                % Store noise-data in csi-struct
+                csi.data.noise = noise;             
+            end
+        end
+
+        % -------- % Post processing
+        
+        % Clear memory
         clear csi_dump;
 
         % Save CSI data in app-data
-        setappdata(gui.CSIgui_main,'csi',csi); 
+        setappdata(gui.CSIgui_main,'csi', csi); 
 
         % Save Conv data in app-data
         if ~isempty(conv{foi_ind})
@@ -1612,20 +1417,17 @@ switch ext
             clear mri;
         end
 
-        CSI_Log({'Copying logs from mat-files.'},{'See below.'})
-        % Add to logs listbox
-        log = cell(1,numel(fn)*2);
-        for kk = 1:numel(fn)
-            ind = (kk*2) - 1;
-            log{ind+1} = log_data{kk};
-            log{ind} = {'', '% -------------------------------- %',...
-                        fn{kk},...
-                            '% -------------------------------- %', ''}';                     
+        % Prepare and update log-data
+        for kk = 1:numel(log)
+            log_fn_inp = {'', '% -------------------------------- %', ...
+                      fn{kk}, '% -------------------------------- %', ''};                
+            gui.listbox_CSIinfo.String = ...
+            cat(1, gui.listbox_CSIinfo.String, log_fn_inp', log{kk});
         end
 
-        gui.listbox_CSIinfo.String = ...
-                cat(1, gui.listbox_CSIinfo.String,{''} ,cat(1, log{:}));
+
 end % End of switch-case loop
+
 
 % --- Parse DICOM file
 function success = parse_dicom(fp, fn, gui)
@@ -1694,15 +1496,7 @@ switch ext
             mri.examinfo = NaN; mri.ext = 'ima';
             mri.filename = fn; mri.filepath = fp;
             CSI_Log({'Analysing DICOM header failed.'},{'Images loaded.'}); 
-        end
-               
-        % Siemens dicom fields of interest.
-        % nfo{1}.SliceThickness
-        % nfo{1}.PatientPosition
-        % nfo{1}.ImagePositionPatient
-        % nfo{1}.ImageOrientationPatient
-        % nfo{1}.SliceLocation
-        % nfo{1}.SlicePosition_PCS      
+        end      
 end
         
 
@@ -2802,9 +2596,8 @@ if nargin < 3, labels = strsplit(num2str(1:numel(size(data)))); end
 
 if nargin == 1 || isempty(index) % If not or an empty index is given
     uans = getUserInput_Popup({'Index to average:'},{labels});    
-    if isempty(index), data_averaged = []; return; end
-    index = csi_findDimLabel(csi.data.labels,uans);
-    index = str2double(index{1});
+    if isempty(uans), data_averaged = []; return; end
+    index = csi_findDimLabel(labels, uans);
 end
 
 % Average
@@ -3663,6 +3456,7 @@ CSI_Log({'New labels:','Previous labels:',},...
          {strjoin(csi.data.labels,' | '),strjoin(old_labels,' | ')});
                            
 % --- Executes on button press in button_CSI_ReorderDim.
+
 function button_CSI_ReorderDim_Callback(~, ~, gui)
 % Permute e.g. reorder csi.data.raw.
 
@@ -3712,6 +3506,7 @@ end
 
 % Corrrect for added dimensions if not used
 expdims = ndim_ori+1:ndim_ori+nexp;
+% Boolean if new added dimensions are on their original index
 exp_bool = new_order(end-nexp+1:end) == expdims;
 if  sum(exp_bool) == nexp
     new_order = new_order(1:end-nexp);
@@ -3721,10 +3516,15 @@ else
     new_order = new_order(1:end+(cut_off-nexp));    
 end
 
+% Convert new-order for the permute operation
+cur_order = 1:numel(new_order);
+for kk = 1:numel(cur_order), cur_order(kk) = find(new_order == kk); end
+new_order = cur_order;
+
 % PERMUTE % ---------------------------- %
 
 % Reorder data 
-csi.data.raw = permute(csi.data.raw ,new_order);
+csi.data.raw = permute(csi.data.raw, new_order);
 
 % LABEL MAINTENANCE % ------------------ %
 
@@ -3741,6 +3541,9 @@ for li = 1:size(csi.data.labels,2)
         new_label{li} = []; % Label not found, empty labeling.
     end
 end
+
+
+
 
 % Create new labels.
 empty_lab = cellfun(@isempty, new_label) == 1;
@@ -3780,6 +3583,7 @@ else
 end
 
 % --- Executes on button press in button_CSI_ReorderDim_Auto.
+
 function button_CSI_ReorderDim_Auto_Callback(hObject, ~, ~)
 % Get gui data and run CSI_ReorderDim_Auto script
 gui = guidata(hObject); CSI_ReorderDim_Auto(gui);
@@ -5807,7 +5611,8 @@ if ~isappdata(gui.CSIgui_main, 'csi'), return; end
 csi = getappdata(gui.CSIgui_main, 'csi');
 
 % k-space indexes
-kspace = csi_findDimLabel(csi.data.labels,{'kx','ky','kz','x', 'y', 'z', 'slice'});
+kspace = csi_findDimLabel(csi.data.labels,...
+    {'kx','ky','kz','x', 'y', 'z', 'slice'});
 kspace(isnan(kspace)) = [];
 
 if isempty(kspace), kspace = 2:numel(csi.data.dim); end
@@ -6248,9 +6053,7 @@ switch uans{1}
                                   [], 'Frequency Alignment');
         if isempty(uans), return; end        
         % Reference voxel for each voxel along ind_dim to shift to
-        ind_vox = str2double(uans{1});
-        
-          
+        ind_vox = str2double(uans{1});                
              
         % Get peak indices
         [~, ind_peaks] = max(real(doi),[],1);
@@ -6266,7 +6069,6 @@ switch uans{1}
         shiftval = ind_peaks - ind_ref;
         
         % Convert data to cell
-          % Create cell of raw data
         sz = size(csi.data.raw);
         cell_layout = ...
         arrayfun(@ones, ones(1,size(sz(2:end),2)),sz(2:end),'Uniform',0);
@@ -6313,7 +6115,9 @@ ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
 % Indexes to delete
 tmp = strfind(uans{2},':'); if ~iscell(tmp), tmp = {tmp}; end
 if isempty(tmp{1})
-    tbdeleted = str2double(strsplit(uans{2}));
+    
+    tbdeleted = str2double(strsplit(uans{2}{1}));
+    % Edit QH - with jetlag... be careful.
 else    
     tmp = strsplit(uans{2},' ');
     tbdeleted = [];
@@ -6572,7 +6376,7 @@ if do_NoiseDecorrelation
 
     % Decorrelate signal (Cholensky)
     [csi.data.raw, noise_cov_chol] = ...
-        csi_decorrelate_noise(csi.data.raw, chan_ind, noise_cov);
+        csi_decorrelate_noise_chol(csi.data.raw, chan_ind, noise_cov);
     CSI_Log({'Roemer:'},{'Decorrelated noise via Cholesky-decomposition'});
 end
 
@@ -7836,7 +7640,7 @@ end
 function button_CSI_SNR_Callback(~, ~, gui)
 % Calculate SNR for each dimension in the dimensional MRS data.
 %
-% Uses csi_SNR() and csi_SNR_AUC;
+% Uses csi_getSNR, csi_SNR() and csi_SNR_AUC;
 %
 % SNRmethod defines use of real or magnitude for SNR calculations.
 % Noise-source sets calculation method for noise: use voxel-data or
@@ -7846,94 +7650,11 @@ function button_CSI_SNR_Callback(~, ~, gui)
 if ~isappdata(gui.CSIgui_main,'csi'), return; end
 csi = getappdata(gui.CSIgui_main,'csi');
 
-           % --------------- % USERINPUT % --------------- %
-           % POI, mask-size, snr-method & display-method
-
-
-CSI_Log({'Executing SNR caluclations.'},{''});
-
-% POI: Peak of SNR
-range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
-if isempty(range_none), return; end
-
-% SNR Noise mask
-elm = {'edit', 'popup','popup', 'popup', 'popup', 'popup'};
-qry = {'Size of noise mask:', 'Noise-source:', 'SNR Signal unit:', ...
-       'Method:', 'Strict peak-range for AUC-method: ','Save to file:'};
-def = {{round(csi.data.dim(1)/4)}, {'Noise-data', 'Voxel-data'},...
-       {'Real', 'Magnitude', 'Imaginary'}, {'AUC', 'Maximum'},...
-       {'Off', 'On'},{'No', 'Yes'}};
-uans = getInput(elm, qry, def,'SNR');
-if isempty(uans), CSI_Log({'Skipped SNR calculations.'},{''}) ; return; end
-
-% Mask-size user input
-mask_size = str2double(uans{1});
-
-% SNR-method (real/magnitude) 
-switch uans{3} % SNR method
-    case 'Magnitude', snr_unit = 0; 
-    case 'Real',      snr_unit = 1;     
-    case 'Imaginary', snr_unit = 2;
-end
-
-% SNR method (maximum/AUC)
-doAUC = 0; if strcmp(uans{4}, 'AUC'), doAUC = 1; end
-
-% Strict AUC method - see script for nfo. Default off. Not used for
-% max-method.
-doStrict = 0; if strcmp(uans{5}, 'On'), doStrict = 1; end
-
-% SNR to file?
-doFile = 0; if strcmp(uans{6}, 'Yes'), doFile = 1; end
-
-% Noise-source and input
-% Calculate it from voxel-data or use noise-data
-noise_inp = mask_size;
-switch uans{2}
-    case 'Noise-data'
-        % --- Get noise from file/memory
-
-        % Checksum for noise-data
-        CSI_Noise_Checksum(gui);
-        csi = getappdata(gui.CSIgui_main,'csi');
-
-        % Check if noise is available
-        if isfield(csi.data, 'noise')
-            if snr_unit == 1
-                noise_inp = abs(std(real(csi.data.noise.raw), [], 1));
-            elseif snr_unit == 2
-                noise_inp = abs(std(imag(csi.data.noise.raw), [], 1));    
-            else
-                noise_inp = abs(std(abs(csi.data.noise.raw),  [], 1));    
-            end
-        else        
-            CSI_Log({'No noise-data stored, using voxel-noise instead.'},...
-                    {''});            
-        end   
-end
-
-
-              % --------------- % SNR % --------------- %
-
-% Display Info %
-CSI_Log({'Calculating SNR per voxel, please be patient.',...
-         'Signal-unit & SNR-method:'},...
-        {'', sprintf('%s | %s', uans{3}, uans{4})});
-
-if doAUC    
-    % Calculate using noise mask and AUC
-    SNR_all = csi_SNR_AUC(csi.data.raw, range_none, ...
-        noise_inp, [], snr_unit, doStrict, 0);           
-else
-    % Calculate using noise mask and maximum peak value
-    SNR_all = csi_SNR(csi.data.raw, noise_inp, snr_unit, range_none);
-end
-
-% Convert NaNs to zero
-SNR_all(isnan(SNR_all)) = 0; 
+% Calculate SNR
+SNR = CSI_SNR_get(gui);
 
 % Show statistics nfo
-stats = csi_statistics_of_volume(SNR_all);
+stats = csi_statistics_of_volume(SNR);
 CSI_Log({'SNR statistics: Full Volume ---------------- %',...
          'Mean: ', 'Mode: ', 'Median: ', 'Min | Max: '},...
      {'', sprintf('%.2f +/- %.2f',stats.mean, stats.std), ...
@@ -7944,16 +7665,144 @@ CSI_Log({'SNR statistics: Full Volume ---------------- %',...
            % --------------- % DISPLAY DATA % --------------- %
 
 % \\ Display Data
-CSI_dataAs_Initiate(SNR_all, 'SNR', gui, csi.data.labels);
+CSI_dataAs_Initiate(SNR, 'SNR', gui, csi.data.labels);
 
-% Save to file
-if doFile
-    str_day = string(datetime('now','Format','yyyyMMddHHmm'));
-    str_file = strjoin(['SNR_', str_day, '.mat'],'');
-    SNR = SNR_all; save(str_file, 'SNR', 'noise_inp', 'doAUC');
+% --- Executed to get SNR for full volume
+function [SNR, uans] = CSI_SNR_get(gui, auto)
+% Calculate and return SNR for current MRS data set. 10.2025
+%
+% Options: 
+%   Data unit selection, Use voxel or memory noise data, UAC or 
+%   peak-maximum method, Noise mask size, Save to file
+% 
+% If auto == 1, default settings will be used without user input.
+% uans contains als user-answers i.e. calculation settings used.
+% uans{mask-size, noise-source, unit, method, strict AUC and save2file};
+
+% Get CSI data-structure
+if ~isappdata(gui.CSIgui_main,'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Set auto-calculations
+if nargin == 1, auto = 0; end
+
+           % --------------- % USERINPUT % --------------- %
+           % POI, mask-size, snr-method & display-method
+
+
+% Get user input i.e. SNR calculation settings
+[opts, uans] = CSI_SNR_opts(gui, auto);
+
+              % --------------- % SNR % --------------- %
+
+% Display Info %
+CSI_Log({'Calculating SNR per voxel, please be patient.',...
+         'Signal-unit & SNR-method:'},...
+        {'', sprintf('%s | %s', uans{3}, uans{4})});
+
+if opts.doAUC    
+    % Calculate using noise mask and AUC
+    SNR = csi_SNR_AUC(csi.data.raw, opts.range_none, ...
+        opts.noise_inp, [], opts.snr_unit, opts.doStrict, 0);           
+else
+    % Calculate using noise mask and maximum peak value
+    SNR = csi_SNR(csi.data.raw, ...
+        opts.noise_inp, opts.snr_unit, opts.range_none);
 end
 
+% Convert NaNs to zero
+SNR(isnan(SNR)) = 0; 
 
+% Save to file
+if opts.doFile
+    str_day = string(datetime('now','Format','yyyyMMddHHmm'));
+    str_file = strjoin(['SNR_', str_day, '.mat'],'');
+    save(str_file, 'SNR', 'opts.noise_inp', 'opts.doAUC');
+end
+
+% --- Executed to get SNR calculation options
+function [opts, uans] = CSI_SNR_opts(gui, auto)
+% Get all options from user for SNR calculations - returns processed user
+% input structure and the user-answers cell array.
+%
+% Noise componennt is returned for the full volume if memory-noise is used
+% instead of voxel-noise!
+
+% Get CSI data-structure
+if ~isappdata(gui.CSIgui_main,'csi'), return; end
+csi = getappdata(gui.CSIgui_main,'csi');
+
+% Set auto-calculations
+if nargin == 1, auto = 0; end
+
+           % --------------- % USERINPUT % --------------- %
+           % POI, mask-size, snr-method & display-method
+
+% POI: Peak of SNR
+opts.range_none = CSI_getPeakOfInterest(csi.xaxis, 'Calculate SNR');
+if isempty(opts.range_none), opts = []; uans = []; return; end
+
+% SNR Noise mask
+elm = {'edit', 'popup','popup', 'popup', 'popup', 'popup'};
+qry = {'Size of noise mask:', 'Noise-source:', 'SNR Signal unit:', ...
+       'Method:', 'Strict peak-range for AUC-method: ','Save to file:'};
+def = {{round(csi.data.dim(1)/4)}, {'Noise-data', 'Voxel-data'},...
+       {'Real', 'Magnitude', 'Imaginary'}, {'AUC', 'Maximum'},...
+       {'Off', 'On'},{'No', 'Yes'}};
+if auto, uans = cellfun(@(x) x(1), def);
+else,    uans = getInput(elm, qry, def,'SNR');
+end
+
+% Return if user cancelled
+if isempty(uans)
+    opts = []; CSI_Log({'Skipped SNR calculations.'},{''}); return; 
+end
+
+% Mask-size user input
+opts.mask_size = str2double(uans{1});
+
+% SNR-method (real/magnitude) 
+switch uans{3} % SNR method
+    case 'Magnitude', opts.snr_unit = 0; 
+    case 'Real',      opts.snr_unit = 1;     
+    case 'Imaginary', opts.snr_unit = 2;
+end
+
+% SNR method (maximum/AUC)
+opts.doAUC = 0; if strcmp(uans{4}, 'AUC'), opts.doAUC = 1; end
+
+% Strict AUC method - see script for nfo. Default off. Not used for
+% max-method.
+opts.doStrict = 0; if strcmp(uans{5}, 'On'), opts.doStrict = 1; end
+
+% SNR to file?
+opts.doFile = 0; if strcmp(uans{6}, 'Yes'), opts.doFile = 1; end
+
+% Noise-source and input
+% Calculate it from voxel-data or use noise-data
+opts.noise_inp = opts.mask_size;
+switch uans{2}
+    case 'Noise-data'
+        % --- Get noise from file/memory
+
+        % Checksum for noise-data
+        CSI_Noise_Checksum(gui);
+        csi = getappdata(gui.CSIgui_main,'csi');
+
+        % Check if noise is available
+        if isfield(csi.data, 'noise')
+            if opts.snr_unit == 1
+                opts.noise_inp = abs(std(real(csi.data.noise.raw), [], 1));
+            elseif opts.snr_unit == 2
+                opts.noise_inp = abs(std(imag(csi.data.noise.raw), [], 1));    
+            else
+                opts.noise_inp = abs(std(abs(csi.data.noise.raw),  [], 1));    
+            end
+        else        
+            CSI_Log({'No noise-data stored, using voxel-noise instead.'},...
+                    {''});            
+        end   
+end
 
 % --- Get 2D-CSI plot slider data
 function [pan_gui, gui2D] = CSI_2D_getDataSliders(gui)
@@ -10626,8 +10475,8 @@ if isfield(csi,'twix')
     end
 
     % Data needs voxel shift correction
-    ori.voxShiftCorrection = 0; 
-    if mod(ori.dim(2),2) == 0, ori.voxShiftCorrection = 1; end
+    ori.voxShiftCorrection = 0;     
+    if mod(ori.dim(2),2) == 0, ori.voxShiftCorrection = 1; end    
     % Check if already applied
     if isfield(csi, 'ori')
         if ~isfield(csi.ori, 'voxShiftCorrection')
@@ -10671,7 +10520,6 @@ end
 if isfield(ori, 'voxShiftCorrection'), dans{5} = ori.voxShiftCorrection;
 else, dans{5} = 0;
 end
-
 
 % Resolution and Offset userinput
 qry = {'Resolution (AP LR FH) [mm]:', 'Offcenter (AP LR FH) [mm]: ', ...
@@ -10737,7 +10585,7 @@ if ori.flipCorrection == 1
     CSI_Log({'Applied CSI-volume orientation-correction for dat-file: '},...
         { sprintf('%s | ', csi.data.labels{ind_to_flip}) });
 else
-   csi.ori.flipCorrections = -1;
+   csi.ori.flipCorrection = -1;
 end
 
 % DAT-file Voxel Shift corrections % ----------------------------------- %
@@ -11367,6 +11215,7 @@ end
 % If existing conv data exists, get it.
 if isappdata(gui.CSIgui_main, 'conv')
     conv = getappdata(gui.CSIgui_main, 'conv');
+    if ~isstruct(conv), conv = struct; end
 end
 
 
@@ -12695,10 +12544,8 @@ if isfield(csi.data, 'noise')
         
         data2D.noise = csi.data.noise.raw(:, ind{:});
     catch err
-        err.message
-        err.stack.name
-        err.stack.line
-        err.stack.file
+       fprintf(2, 'Noise checksum or data retrieval failed. \n');
+       err_outp = getReport(err); disp(err_outp);
     end
 end
 
@@ -14222,8 +14069,8 @@ plot(appdata1D.axes, plot_x, plot_y);
 % CSIgui-1D: plot cosmetics % -------------------- %
 
 % X axis
-if isequal(appdata1D.axis.unit ,'ppm')
-    appdata1D.axes.XLim = appdata1D.axis.xlimit;
+if isfield(appdata1D.axis ,'xlimit')
+    appdata1D.axes.XLim = sort(appdata1D.axis.xlimit);
 end
 if revX, appdata1D.axes.XDir = 'reverse'; end
 
@@ -14326,7 +14173,7 @@ bw = w-20; bh = 20; % Normalised w and h of button
 % Buttons, handles and their info description.
 bName = {'Phasing','FFT','iFFT','Apodization', 'Zero Fill', 'SNR',...
          'Linewidth','Baseline','Shift', 'Smoothing','Data Display',...
-         'Replace Voxel', 'Export'};
+         'Replace Voxel', 'Export', 'Noise'};
 bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_FFT, ...
          @panel_1D_iFFT, ...
@@ -14339,7 +14186,8 @@ bCall = {@panel_1D_PhasingMethod,...
          @panel_1D_Smooth,...
          @panel_1D_DataDisplay, ...
          @panel_1D_SaveToMain, ...
-         @panel_1D_Export};
+         @panel_1D_Export,...
+         @panel_1D_Noise};
 bInfo = {'Apply phasing corrections. Multiple methods available',...
          'Forward fourier to frequency domain: FID to spectrum.',...
          'Backwards fourier to time domain: Spectrum to FID.',...
@@ -14352,7 +14200,8 @@ bInfo = {'Apply phasing corrections. Multiple methods available',...
          'Denoise data by applying a Sgolay smoothing filter.',...
          'Change display settings of the 1D plot.',...
          'Replace voxel data in CSIgui with edited 1D data.',...
-         'Export spectrum to file.'};
+         'Export spectrum to file.',...
+         'Display noise component of the spectrum.'};
          
 % Add buttons     
 nButtons = size(bName,2);
@@ -14730,7 +14579,7 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % USER INPUT % --------------------------------- %
 
 % Get zerofill target sample size + if equal for all dimensions
-uans = getUserInput({'Requested sample size:'}, {size(data,1),1});
+uans = getUserInput({'Requested sample size:'}, {size(data,1)*2,1});
 if isempty(uans), return; end
 
 % Integer of target sample size
@@ -14745,8 +14594,12 @@ dir = uans{1}; % Direction for zerofilling of fids
 
 % PROCESSING % --------------------------------- %
 
+
+
 % Zero fill
 appdata1D.voxel.processed = csi_zeroFill(data, target_sz, dir);
+
+
 
 % UPDATE XAXIS LENGTHS % ---------------------- %
 axs = appdata1D.axis;
@@ -14981,20 +14834,28 @@ if allPeaksOn % ----------------------------------------------- All peaks
     
     % Calculate SNR per peak
     for kk = 1:np        
-        range = peak_pos_unit(kk) + [-8 8]; % Range of the peak
+        
         if snr_method == 0 
+            range = peak_pos_unit(kk) + [-2 2]; % Range of the peak
+
             % Calculate SNR using maximum
             snr(kk) = csi_SNR(data, noise_comp, snr_unit, range); 
             peak_est = {range};
-        else 
+        else
+            range = peak_pos_unit(kk) + [-1 1]; % Range of the peak
+
             % Calculate using AUC        
             [snr(kk), peak_est] = csi_SNR_AUC(data, range,...
                 noise_comp, noise_mask_sz, snr_unit, doStrict, 1);
+            snr = snr./10;
         end 
         
         % Plot SNR as text at peak-max location
         tmp = peak_est{1}(1):peak_est{1}(2); 
-        txt_plot_y = max(real(data(tmp,:)))+yst;
+               
+
+
+        txt_plot_y = max(real(data(ceil(tmp),:)))+yst;
         txt_string = sprintf('%3.1f', snr(kk));
         text(appdata1D.axes, peak_pos_plot(kk), txt_plot_y, txt_string,...
             'FontSize',8,'FontWeight','Bold');
@@ -15007,7 +14868,7 @@ else %  ----------------------------------------------- Individual peak
     % Get range from user
     range = CSI_getPeakOfInterest(appdata1D.axis,'CSIgui-1D: SNR');
     if isempty(range), return; end
-    
+    range
 
 
     if snr_method == 0 
@@ -15050,7 +14911,85 @@ CSI_Log({'Signal-unit & SNR-method:'},...
     {sprintf('%s | %s', uans{5}, uans{2})});
 CSI_Log({'CSIgui-1D @ Voxel '}, {appdata1D.voxel.index});
 
+% --- Executes when user presses "Noise" in panel_1D
+function panel_1D_Noise(hobj, ~, ~)
 
+% Get CSIgui 1D figure object
+obj1D  = panel_1D_getInstanceData(hobj); if ~isobject(obj1D), return; end
+% Do checks and get CSI_1D object, data_1D appdata and data array
+[~, appdata1D, data] = CSI_1D_getData(obj1D);
+
+% Y-axis limits, total value and text y-position
+axlim = appdata1D.axes.YLim; 
+axtot = diff(axlim); 
+txty = (axtot .* 0.90) + axlim(1);
+
+% Add 5% of the x-axis unit to the lower x-axis limit
+txtx = appdata1D.axes.XLim(2) - diff(appdata1D.axes.XLim).*0.05;
+
+% Noise in memory
+if isfield(appdata1D,'noise')    
+    noisevec{1} = appdata1D.noise; msksz(1) = size(noisevec{1},1)./2;
+end
+
+% Noise from voxel
+msksz(2) = round((size(data,1)/4)/2); % Half mask!
+noisevec{2} = data([1:msksz(2) size(data,1)-msksz(2)+1:size(data,1)]);    
+
+% Remove memory-noise if not existant
+if isempty(noisevec{1}), noisevec(1) = []; msksz(1) = [];  end
+
+% Plot color string
+clrstr = 'rg';
+
+% Loop plot for noise-text and noise-vector
+for kk = 1:numel(noisevec)
+
+    % Noise STD
+    noisestd = std(noisevec{kk}, 'omitnan');
+
+    % Fix string for #decimals plot.
+    [nZeros, acc] = numzeros(noisestd);
+    if nZeros <= 0 || nZeros == acc
+        txtval = strip(sprintf('%6.2f', val));    
+    else
+        prefix = '0'; if nZeros >= 9, prefix = ''; end
+        txtval = sprintf('%3.3fe-%s%i', ...
+                           noisestd*10.^(nZeros+1), prefix, nZeros+1);
+    end
+    
+    % Prepare x-axis data for noisevector
+    xdata = linspace(appdata1D.axes.XLim(1),appdata1D.axes.XLim(2),...
+        size(data,1));
+    xdata = xdata([1:msksz(1) size(data,1)-msksz(1)+1:size(data,1)]);
+    
+    % Hold current plot of axis.
+    hold(appdata1D.axes, 'on');
+    
+    % Plot noise-vector on both sides of spectrum
+    plot(appdata1D.axes, ...
+        xdata(1:msksz(1)), real(noisevec{kk}(1:msksz(1)))',...
+        '--', 'color', clrstr(kk));
+    plot(appdata1D.axes,...
+        xdata(msksz(1)+1:end), real(noisevec{kk}(msksz(1)+1:end))',...
+        '--', 'color', clrstr(kk));
+    
+    % Update text-yaxis if more than 1 line
+    if kk == 2, txty = (axtot .* 0.85) + axlim(1); end
+    
+    % Update noise-data origin string
+    if kk == 1 && numel(noisevec) > 1, txtstr = '(memory)'; 
+    else, txtstr = '(voxel)'; 
+    end
+    
+    % Plot noise    
+    text(appdata1D.axes, txtx, txty, ...
+        sprintf('Noise %s: %s', txtstr, txtval), ...
+        'FontSize', 8, 'FontWeight', 'Bold'); 
+end
+
+% Disable hold
+hold(appdata1D.axes, 'off');
 
 % --- Executes when user presses "Linewidth" in panel_1D
 function panel_1D_FWHM(hObj, ~)
@@ -15071,7 +15010,8 @@ uans = getUserInput_Popup(qry, def, [], 'FWHM (1D)');
 if isempty(uans), return; end
 
 if strcmp(uans{1}, 'Intersection')
-    panel_1D_FWHM_method_intersect(hObj);
+    auto = 0; if strcmp(uans{2}, 'Automatic'), auto = 1; end    
+    panel_1D_FWHM_method_intersect(hObj, [], [], auto);
     return;
 else
     uans = uans(2);
@@ -15140,7 +15080,7 @@ hold(appdata1D.axes,'off');
 CSI_Log({'Lowest position to highest, FWHM: '},{lw'});
 
 % --- Executes by choice of FWHM-method
-function panel_1D_FWHM_method_intersect(hObj,~,~)
+function panel_1D_FWHM_method_intersect(hObj,~,~, auto)
 
 % Get CSIgui 1D figure object
 obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
@@ -15149,93 +15089,125 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 
 
 % Get range from user (Unitless range given)
-range = CSI_getPeakOfInterest(appdata1D.axis,'FWHM');
-if isempty(range), return; end
+if auto
+    % Get peak positions automatically (Maximum of peak!)
+    peak_pos = csi_findPeaks(data);
+
+    % Peak width 
+    peak_width = ceil(appdata1D.axis.N/100);
+    if peak_width < 3, peak_width = 3; end
+
+else
+    range = CSI_getPeakOfInterest(appdata1D.axis,'FWHM');
+    if isempty(range), return; end
+
+    % Maximum in this range
+    [~,mi] = max(real(data(range(1):range(2))));
+    % Set max as peak position.
+    peak_pos = mi+range(1);
+
+    % Peak width 
+    peak_width = diff(range)./2;
+    if peak_width < 3, peak_width = 3; end
+end
 
 % Prep xaxis % -------- %
 
 % Use unitless or ppm
-if isfield(appdata1D.axis, 'ppm')
-    ax = appdata1D.axis.ppm;
-else                         
-    ax = appdata1D.axis.none;
+if isfield(appdata1D.axis, 'ppm'), ax = appdata1D.axis.ppm;
+else,                              ax = appdata1D.axis.none;
 end
+
+% Imaging frequency
+imf = nan; if isfield(appdata1D.axis, 'img'), imf = appdata1D.axis.img; end
 
 % Baseline | Samples
 N = size(data,1); 
 bv = mean(real([data(1:round(N/20)); data(N-round(N/20):N)])); 
 bvline = cat(2,ax',repmat(bv,N,1));
 
-% MAXIMUM
-data_ranged = real(data(range(1):range(2)));
-[mv, mi] = max(data_ranged);
-% Set max as peak centre.
-peak_pos = mi+range(1)-1; % Data index
-xv = ax(peak_pos);        % In unit (ppm/unitless etc.)
-ax_ranged = ax(range(1):range(2));
-% FWHM ESTIMATE
-fwhm = mv - ((mv-bv)/2);
-fwhmline = cat(2,ax',repmat(fwhm,N,1));
-
-% PREPARE FIGURE % -------- %
-
+ % PREPARE FIGURE % -------- %
 % Create new figure for user input
 fh = figure(); 
 % Plot the spectrum (reverse xaxis)
-spObj = plot(ax, real(data)); spObj.Parent.XDir = 'reverse'; hold on; 
+spObj = plot(ax, real(data)); spObj.Parent.XDir = 'reverse'; hold on;
 % Axes
 axObj = spObj.Parent;
-
-% PLOT MAXIMUM
-plot(axObj, xv,  mv,'or');
-    % datapoint
-cursorMode = datacursormode(fh);hdtip = cursorMode.createDatatip(spObj);
-hdtip.Position = [xv mv 0]; updateDataCursors(cursorMode);
-
-
 % PLOT BASELINE
 baseObj = plot(axObj, bvline(:,1),bvline(:,2),'--k');
-    % datapoint
+% datapoint
 cursorMode = datacursormode(fh); hdtip = cursorMode.createDatatip(baseObj);
 hdtip.Position = [bvline(1,1) bv 0]; updateDataCursors(cursorMode);
+    
+% Loop each peak position
+for pp = 1:size(peak_pos,1)
 
+    % Set range by adding and subtracting peak width from peak position.
+    range = peak_pos(pp); range = range + [-peak_width peak_width];
+    
+    % MAXIMUM
+    data_ranged = real(data(range(1):range(2)));
+    mv = max(data_ranged);
+    
+    % Set max as peak centre.
+    xv = ax(peak_pos(pp));        % In unit (ppm/unitless etc.)
+    ax_ranged = ax(range(1):range(2));
+    
+    % FWHM ESTIMATE
+    fwhm = mv - ((mv-bv)/2);
+    fwhmline = cat(2,ax',repmat(fwhm,N,1));
+    
+    % Intersect FWHM line and DATA(range) (Estimate)
+    [xest,yest] = polyxpoly(ax_ranged',data_ranged,...
+        fwhmline(:,1)', fwhmline(:,2)');
 
-% PLOT FWHM ESTIMATE
-fwhmObj = plot(axObj, fwhmline(:,1),fwhmline(:,2),'--c');
+    % PLOT MAXIMUM
+    plot(axObj, xv,  mv,'or');
+        % datapoint
+    % cursorMode = datacursormode(fh);hdtip = cursorMode.createDatatip(spObj);
+    % hdtip.Position = [xv mv 0]; updateDataCursors(cursorMode);
+    
+    % PLOT FWHM ESTIMATE
+    fwhmObj = plot(axObj, fwhmline(:,1), fwhmline(:,2),'--c');
     % datapoint
-cursorMode = datacursormode(fh); hdtip = cursorMode.createDatatip(fwhmObj);
-hdtip.Position = [fwhmline(1,1) fwhm 0]; updateDataCursors(cursorMode);
+    % cursorMode = datacursormode(fh); 
+    % hdtip = cursorMode.createDatatip(fwhmObj);
+    % hdtip.Position = [fwhmline(1,1) fwhm 0]; 
+    % updateDataCursors(cursorMode);
+    
+    
+    % Plot results of found intersects
+    plot(axObj, xest, yest, '-om');
+    
+    % The answer in PPM or unit-less: ALWAYS use the first two - if more
+    % intersects are found it is shown in the plot. 
+    if size(xest,1) == 1 % The peak is not within the range probabaly
+        fwhm_outp = NaN; 
+    else
+        xest = [xest(1) xest(end)]; yest = [yest(1) yest(end)];
+        fwhm_outp = diff(xest); 
+    end
+    
+    % Plot data in CSIgui 1D
+    yst = diff(appdata1D.axes.YLim)/50; xst = diff(appdata1D.axes.XLim)/100;
+    hold(appdata1D.axes,'on'); % Hold 1D plot figure
+    plot(appdata1D.axes, xest, yest,'or');    % Plot marker
+    text(appdata1D.axes, xest(1)-xst, yest(1)+yst, ...    % Plot text
+       sprintf('%2.3f',fwhm_outp),'FontSize',8,'FontWeight','Bold');
+    
+    % Update in UI
+    if isnan(fwhm_outp)
+        fwhm_outp = 'Single intersect with FWHM found - redefine peak range';
+    end
+    CSI_Log({sprintf('FWHM (ppm) @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
+            {fwhm_outp});
+    if ~isnan(imf)
+    CSI_Log({sprintf('FWHM (Hz)  @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
+            {fwhm_outp.*imf});    
+    end
 
+end % End of peak-position forloop
 
-% Intersect FWHM line and DATA(range) (Estimate)
-[xest,yest] = polyxpoly(ax_ranged',data_ranged, fwhmline(:,1)', fwhmline(:,2)');
-
-% Plot results of found intersects
-plot(axObj, xest, yest, '-om');
-
-% The answer in PPM or unit-less: ALWAYS use the first two - if more
-% intersects are found it is shown in the plot. 
-if size(xest,1) == 1 % The peak is not within the range probabaly
-    fwhm_outp = NaN; 
-else
-    xest = [xest(1) xest(end)]; yest = [yest(1) yest(end)];
-    fwhm_outp = diff(xest); 
-end
-
-
-% Plot data in CSIgui 1D
-yst = diff(appdata1D.axes.YLim)/50; xst = diff(appdata1D.axes.XLim)/100;
-hold(appdata1D.axes,'on'); % Hold 1D plot figure
-plot(appdata1D.axes, xest, yest,'or');    % Plot marker
-text(appdata1D.axes, xest(1)-xst, yest(1)+yst, ...    % Plot text
-   sprintf('%2.3f',fwhm_outp),'FontSize',8,'FontWeight','Bold');
-
-% Update in UI
-if isnan(fwhm_outp)
-    fwhm_outp = 'Single intersect with FWHM found - redefine peak range';
-end
-CSI_Log({sprintf('FWHM @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
-        {fwhm_outp});
 
 % --- Executes when user presses "Baseline" in panel_1D
 function panel_1D_Baseline(hObj,~)
@@ -15430,16 +15402,19 @@ switch uanstype{1}
         % ((1/(1/BW x nSamples) * (ans/nSamples)) / pi) == (bw/ans)/pi 
         % Hz = bw / (N*pi) && N = (Hz * Pi)/BW
         if isfield(appdata1D.axis,'BW')
-            uopts = getUserInput({'Apodization factor: (Hz)'},{20});    
+            uopts = getUserInput({'Apodization factor: (Hz)'},{20});             
             if isempty(uopts)
                 CSI_Log({'Skipped apodization.'},{''}); return; 
             end
             hz = str2double(uopts{1});
             uansopts{1} = num2str(appdata1D.axis.BW ./ (hz * pi));
         else
-            uansopts = getUserInput(...
+            uopts = getUserInput(...
             {'Standard deviation e.g. half length at FWHM: (Samples)'},...
             {(appdata1D.xaxis.N/4)});
+            if isempty(uopts)
+                CSI_Log({'Skipped apodization.'},{''}); return; 
+            end
         end
     case 'Exponential'
         uansopts = getUserInput(...
@@ -15506,14 +15481,26 @@ axis_unit = lower(uans{1}); plot_unit = uans{2};
 % Edit some x axis labels...
 if strcmp(axis_unit,'frequency'), axis_unit = 'freq'; end 
 
+if isfield(appdata1D.axis, axis_unit)
+    switch axis_unit
+        case 'time'    
+            xlimit = appdata1D.axis.time([1 numel(appdata1D.axis.time)]);        
+        case 'freq'
+            xlimit = appdata1D.axis.freq([1 numel(appdata1D.axis.time)]);
+        case 'none'
+            xlimit = [1 numel(appdata1D.axis.none)];
+        case 'ppm'
+            xlimit = appdata1D.axis.ppm([1 numel(appdata1D.axis.time)]);
+    end
+end
+
 % Get current x-axis settings
-xlimit = appdata1D.axes.XLim;                     
+% xlimit = appdata1D.axes.XLim;                     
 
 % Ask user x-axis limits
 xans = getUserInput({'X-axis limits: (ppm or unitless)'},{xlimit}); 
 if isempty(xans),return;end
-appdata1D.axis.xlimit= str2double(strsplit(xans{1}));
-
+appdata1D.axis.xlimit = str2double(strsplit(xans{1}));
 
 % Y-axis ------------ %
 data_new_unit = CSI_getUnit(data, plot_unit);
@@ -15748,97 +15735,97 @@ CSI_Log({'CSIgui-1D:'},{'Applied shift.'});
 % -------------------------------------------------------------------- %
 
 % --- Called everywhere to update CSIinfo listbox
-function CSI_Log(varargin)
-% Expects: infolabel, infoval as input
-% Updates listbox in main CSIgui displaying csi-data information.
-% Requires the info to be send as input
-obj = findobj('Tag','CSIgui_main', 'Type', 'Figure');
-if isempty(obj), return; end
-
-% Get GUIdata from CSIgui_main;
-gui = guidata(obj);
-
-% End if no CSI data present
-if ~isappdata(gui.CSIgui_main,'csi')
-    csi_available = 0;
-else
-    csi_available = 1;
-end
-
-
-% Old string in CSI info listbox
-str_old = get(gui.listbox_CSIinfo,'String');
-
-% Check for lines to save
-if isempty(str_old),                  str_save = {};
-else
-    if size(str_old,1) == 2 % Two lines: is there DIM-lines?
-        if strfind(str_old{1},'Dim'), str_save = {};
-        else,                         str_save = str_old;
-        end
-    elseif size(str_old,1) > 2 % More lines: is there DIM-lines?
-        if strfind(str_old{1},'Dim'), str_save = str_old(3:end);
-        else,                         str_save = str_old;
-        end
-    else
-        str_save = str_old;
-    end
-end
-
-% Process input info arguments
-if nargin >= 1
-    infolabel = varargin{1}; 
-    if nargin < 2, infoval = ''; else, infoval  = varargin{2}; end
-
-    % 1. PROCESS USER INPUT
-    new_info = cell(1,size(infolabel,2));
-    for kk = 1:size(infolabel,2)
-       val = infoval{kk}; 
-       if ~ischar(val), val = num2str(val); end % Convert to a double.
-       new_info{kk} = ...
-           sprintf('%s - %s %s', datetime('now','Format','HH:mm:ss'), ...
-                                 infolabel{kk}, val);
-    end
-else
-    new_info = {};
-end
-
-% 2. PROCESS STANDARD INFO
-% Data size and labels.
-if csi_available
-    csi = getappdata(gui.CSIgui_main,'csi');
-    
-    % Get data dimensions
-    sz = size(csi.data.raw); 
-    % Always shows the ACTUAL array size to catch errors in csi.data.dim which
-    % also saves the dimensions equal to one. 
-
-    % Get dimension labels
-    if isfield(csi.data, 'labels'), lb = csi.data.labels;
-    else,                           lb = 'Unknown';
-    end
-
-    % Standard first two lines: size and labels
-    stand_info = { 
-    ['Dim size  : '  sprintf('%s   ',num2str(sz))];
-    ['Dim label : '  sprintf(repmat('%s | ', 1, size(lb,2)), lb{:})]};
-else
-    stand_info = {};
-end
-
-
-% 3. CREATE NEW
-str_new = [stand_info(:)' new_info(:)' str_save(:)'];
-
-
-try 
-    % Print to info-box.
-    set(gui.listbox_CSIinfo, 'String', str_new, 'Value', 1);
-catch 
-    % Warn if something goes wrong.
-    warning('Something in CSI_Log went wrong. No list box update!');
-end
-drawnow;
+% function CSI_Log(varargin)
+% % Expects: infolabel, infoval as input
+% % Updates listbox in main CSIgui displaying csi-data information.
+% % Requires the info to be send as input
+% obj = findobj('Tag','CSIgui_main', 'Type', 'Figure');
+% if isempty(obj), return; end
+% 
+% % Get GUIdata from CSIgui_main;
+% gui = guidata(obj);
+% 
+% % End if no CSI data present
+% if ~isappdata(gui.CSIgui_main,'csi')
+%     csi_available = 0;
+% else
+%     csi_available = 1;
+% end
+% 
+% 
+% % Old string in CSI info listbox
+% str_old = get(gui.listbox_CSIinfo,'String');
+% 
+% % Check for lines to save
+% if isempty(str_old),                  str_save = {};
+% else
+%     if size(str_old,1) == 2 % Two lines: is there DIM-lines?
+%         if strfind(str_old{1},'Dim'), str_save = {};
+%         else,                         str_save = str_old;
+%         end
+%     elseif size(str_old,1) > 2 % More lines: is there DIM-lines?
+%         if strfind(str_old{1},'Dim'), str_save = str_old(3:end);
+%         else,                         str_save = str_old;
+%         end
+%     else
+%         str_save = str_old;
+%     end
+% end
+% 
+% % Process input info arguments
+% if nargin >= 1
+%     infolabel = varargin{1}; 
+%     if nargin < 2, infoval = ''; else, infoval  = varargin{2}; end
+% 
+%     % 1. PROCESS USER INPUT
+%     new_info = cell(1,size(infolabel,2));
+%     for kk = 1:size(infolabel,2)
+%        val = infoval{kk}; 
+%        if ~ischar(val), val = num2str(val); end % Convert to a double.
+%        new_info{kk} = ...
+%            sprintf('%s - %s %s', datetime('now','Format','HH:mm:ss'), ...
+%                                  infolabel{kk}, val);
+%     end
+% else
+%     new_info = {};
+% end
+% 
+% % 2. PROCESS STANDARD INFO
+% % Data size and labels.
+% if csi_available
+%     csi = getappdata(gui.CSIgui_main,'csi');
+% 
+%     % Get data dimensions
+%     sz = size(csi.data.raw); 
+%     % Always shows the ACTUAL array size to catch errors in csi.data.dim which
+%     % also saves the dimensions equal to one. 
+% 
+%     % Get dimension labels
+%     if isfield(csi.data, 'labels'), lb = csi.data.labels;
+%     else,                           lb = 'Unknown';
+%     end
+% 
+%     % Standard first two lines: size and labels
+%     stand_info = { 
+%     ['Dim size  : '  sprintf('%s   ',num2str(sz))];
+%     ['Dim label : '  sprintf(repmat('%s | ', 1, size(lb,2)), lb{:})]};
+% else
+%     stand_info = {};
+% end
+% 
+% 
+% % 3. CREATE NEW
+% str_new = [stand_info(:)' new_info(:)' str_save(:)'];
+% 
+% 
+% try 
+%     % Print to info-box.
+%     set(gui.listbox_CSIinfo, 'String', str_new, 'Value', 1);
+% catch 
+%     % Warn if something goes wrong.
+%     warning('Something in CSI_Log went wrong. No list box update!');
+% end
+% drawnow;
 
 % --- Executed by X in gui to delete LOG-line
 function CSI_Log_deleteLine(hObj)
@@ -15968,12 +15955,13 @@ function [csi, hobj, gui] = CSI_Noise_Prepare(hobj, gui)
 % Apodization | FFT | Delete Channel
 qry = {'Process noise data:', 'Delete a channel from noise-data:', ...
        'Average noise', 'Remove OS', 'Apodize noise:', 'FFT noise:',...
-       'Combine data-channels:'};
+       'Combine data-channels:', 'Reorder indexes:'};
 opt = repmat({{'Yes', 'No'}}, size(qry));
 dans = ones(1,size(qry,2)); 
 
 % Default noise-processing steps
-dans(1) = 0; dans(2) = 0; dans(3) = 0; dans(4) = 0; dans(7) = 0;
+dans(1) = 0; dans(2) = 0; dans(3) = 0; dans(4) = 0; dans(7) = 0; 
+dans(8) = 0;
 
 uans = getUserInput_Tick(qry, opt, 'Noise Preparation', dans);
 if isempty(uans)
@@ -16020,12 +16008,18 @@ if uans(6)
     gui = guidata(gui.CSIgui_main);
 end
 
-% Noise - FFT
+% Noise - Combine
 if uans(7)
     button_CSI_Combine_Callback(gui.CSIgui_main, [], gui); 
     gui = guidata(gui.CSIgui_main);
 end
-            
+          
+% Noise - Reorder indexes
+if uans(8)
+   button_CSI_ReorderDim_Callback(gui.CSIgui_main, [], gui); 
+   gui = guidata(gui.CSIgui_main); 
+end
+
 % Revert to data
 CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
 
@@ -16204,7 +16198,8 @@ if ~isfield(csi.data, 'noise'), return; end
 
 
 % --- Match indexing --- %
-% Assumed that labels and #labels match with csi-data.
+% Assumed that index labels and #labels match with csi-data. Enforce
+% correct order of dimensions using the labels.
 
 % Unequal data-label vectors.
 if ~isequal(csi.data.labels, csi.data.noise.labels)
@@ -16216,10 +16211,10 @@ if ~isequal(csi.data.labels, csi.data.noise.labels)
     % Reorder noise and labels
     csi.data.noise.labels = csi.data.noise.labels(perm_vec);
     csi.data.noise.raw = permute(csi.data.noise.raw, perm_vec);
+    csi.data.noise.dim = size(csi.data.noise.raw);
     CSI_Log({'Matched noise index-order to csi-data:'}, ...
             {['New-order: ' strjoin(csi.data.noise.labels, ' | ')]});
            
-
     % Store to app-data
     setappdata(gui.CSIgui_main, 'csi', csi);
 end
@@ -16230,7 +16225,9 @@ end
 % Check noise-dimensions
 sz_data = size(csi.data.raw); sz_noise = size(csi.data.noise.raw);
 if ~isequal(sz_data(2:end), sz_noise(2:end))  
-            
+
+    % BIG ERROR HERE - IF SQUEEZE(NOISE) but ~SQUEEZE(DATA)
+
     % Spatial and channel indexes
     lab_spat = {'kx','ky','kz', 'x', 'y', 'z'};
     ind_spat = csi_findDimLabel(csi.data.labels,lab_spat);
@@ -16243,7 +16240,10 @@ if ~isequal(sz_data(2:end), sz_noise(2:end))
         doInterpolate = 0; 
     end                
     doCombine = 0; 
-    if ~isnan(ind_chan) &&  sz_noise(ind_chan) ~= 1, doCombine = 1; end
+    if ~isnan(ind_chan) && ind_chan <= numel(sz_noise) && ...
+            sz_noise(ind_chan) ~= 1
+        doCombine = 1; 
+    end
                         
     if doCombine
         % Ask to combine
@@ -16269,7 +16269,7 @@ if ~isequal(sz_data(2:end), sz_noise(2:end))
     end
 
     if doInterpolate
-        % Ask to combine
+        % Ask to interpolate
         elm = {'popup'}; qry = {'Interpolate noise-data?'};
         def = {{'Yes', 'No'}}; uans = getInput(elm,qry,def,'SNR-noise');
         if isempty(uans), return; end
@@ -16281,7 +16281,7 @@ if ~isequal(sz_data(2:end), sz_noise(2:end))
             CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
             
             % Interpolate
-            button_CSI_Interpolate_Callback([], [], gui)
+            button_CSI_Interpolate_Callback([], [], gui);
             
             % Revert to data
             CSI_Noise_ViewManager(gui.CSIgui_main, [], []);
@@ -17345,7 +17345,7 @@ for indi = 1:size(indArray,1)
        % TRANSPARENCY % --------------------------------------------------- % 
        if transparency
                export_fig([fp fn '_' number_title ext], ...
-                '-transparent',['-' ftype],'-nocrop', '-m2', fig_obj);
+                '-transparent',['-' ftype],'-nocrop', '-m1', fig_obj);
        else
            scrsz = get(0,'ScreenSize'); scrsz = scrsz(3:4);
            if fast
@@ -17839,7 +17839,7 @@ elseif strcmp(night,'on')
     colors.text_title = [0.502 0.502 0.502]; % Used for descriptions/titles
     colors.hilight1   = [0.8 0 0];             % Highlight text
     colors.hilight2   = [0.2 0 0.2];         % Highlight bg
-    colors.lines1     = [1 1 1];             % Static line color
+    colors.lines1     = [0.85 0.85 0];       % Static line color
     colors.lines2     = [1 0 0];             % Second line color
     colors.grid       = [0.4 0 0];           % Grid color 2D plot
     colors.grid2      = [0.4 0 0];           % Grid color 2D plot
@@ -18974,6 +18974,7 @@ switch uans{1}
     plot_par = struct; 
     
     plot_par.colors = gui.colors; % GUI Color-nfo: main, text_title, hilight1
+    plot_par.colors.hilight1 = [0.95 0 0];
     plot_par.plot_img = plot_img; % Image-nfo (boolean, image-data, contrast)
     if plot_par.plot_img, plot_par.img = img; plot_par.contrast = contrast;
     else,                 plot_par.img = NaN; plot_par.contrast = NaN;
@@ -19140,6 +19141,9 @@ switch uans{1}
         msg = sprintf(['Displayed slice only: ' addStr], sloi{:});
     case 'Select'
         
+% Here - take dimensions from label length - not from data itself because
+% the indexes with size 1 are absent using size(x)....
+
         % Create queries for user (dim lists including "all" option)
         def = arrayfun(@(x) 1:x, dim(4:end), 'uniform', 0); 
         nqry = numel(def);
@@ -19195,10 +19199,33 @@ switch uans{4}
         % Get correct signal-unit
         doi = CSI_getUnit_data(doi, gui);
     case 'SNR'
-        sans = getUserInput({'Noise mask size:'},{round(size(doi,1)./4)});
-        range = CSI_getPeakOfInterest(csi.xaxis, 'SNR');
-        if isempty(sans), return; end; masksz = str2double(sans); 
-        doi = csi_SNR(doi, masksz, 1, range); 
+        % get user input for SNR calculations
+        [opts, uans_SNR] = CSI_SNR_opts(gui);
+        if isempty(uans_SNR), return; end
+
+        % If noise_input is noise/voxel - take only for data of interest
+        % using the previous indexing var doi_cell_layout;
+        if numel(opts.noise_inp) > 1
+            tmp = doi_cell_layout; tmp{1} = 1;
+            opts.noise_inp = opts.noise_inp(tmp{:});
+        end
+        
+        % Remove NANs
+        doi(isnan(doi)) = 0;
+
+        if opts.doAUC                
+            % Calculate using noise mask and AUC
+            doi = csi_SNR_AUC(doi, opts.range_none, ...
+            opts.noise_inp, [], opts.snr_unit, opts.doStrict, 0);           
+        else
+            % Calculate using noise mask and maximum peak value
+            doi = csi_SNR(doi, ...
+            opts.noise_inp, opts.snr_unit, opts.range_none);
+        end
+
+        % Remove NANs from calculation and set mask to NaN again.
+        doi(isnan(doi)) = 0; doi(mask) = NaN;
+
     case 'Linewidth'
 
         % Prep data

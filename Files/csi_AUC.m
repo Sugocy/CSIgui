@@ -74,7 +74,11 @@ parea = data_interp(peak_est_interp(1):peak_est_interp(2));
 % AUC: Absolute
 auc{1} = cumtrapz(xarea, abs(parea));
 % AUC: bv-corrected
-auc{2} = cumtrapz(xarea(parea >= bv(1)), abs( parea(parea >= bv(1)) ));
+xinp = xarea(parea >= bv(1)); yinp = abs( parea(parea >= bv(1)));
+if numel(xinp) > 1,    auc{2} = cumtrapz(xinp,yinp);
+elseif isscalar(xinp), auc{2} = yinp(1); 
+else,                  auc{2}  = [];
+end
 
 % Safety for output generation
 for kk = 1:2, if isempty(auc{kk}), auc{kk} = 0; end; end

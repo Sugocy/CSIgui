@@ -2,7 +2,7 @@ setDomain=frequency;
 TestSomething;
 ReorderDim_Auto;
 FFT_Kspace;
-Apodization_FID=20;
+Apodization_FID=30;
 FFT;
 AutoPhase;
 Noise;

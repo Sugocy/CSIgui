@@ -29,7 +29,7 @@ end
 % data.fov = data.res .* data.dim;
 
 switch origin
-    case 'topleft'      % Offcenter defined at center of top left voxel 
+    case 'topleft'      % Offcenter defined at center of most top left voxel        
         
         % Get fields from data struct;
         offc  = data.offcenter; N = data.dim; res = data.res;
@@ -48,9 +48,14 @@ switch origin
             Vend  = Vbegin + (res(kk)*N(kk)) - res(kk);
 
             % Create grid vector and limits field.
-            data.vec{kk}     = Vbegin:res(kk):Vend;
-            data.lim(kk,1:2) = data.vec{kk}([1 end]);
+            data.vector{kk}  = Vbegin:res(kk):Vend;
+            data.lim(kk,1:2) = data.vector{kk}([1 end]);
+
+            % Limits of volume i.e. the grid
+            data.lim_vol(kk,1:2) = ...
+                data.lim(kk,1:2) + (0.5*[-res(kk) res(kk)]);
         end
+
 
         
     case 'center' % Offcenter defined at center of volume.
