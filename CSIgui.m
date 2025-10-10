@@ -3333,13 +3333,10 @@ elseif strcmp('Intersect', lwmeth)  % Intersect method
     % Run script for intersect fwhm
     linewidth = cellfun(@csi_linewidth_intersect,...
         data, inp_xaxis, inp_range, 'Uniform',0);
-
-
     
 end
 
 % Show statistics nfo
-
 linewidth(cellfun(@isnan,linewidth)) = {0};
 linewidth = cellfun(@double,linewidth);
 stats = csi_statistics_of_volume(linewidth);
@@ -15091,29 +15088,23 @@ obj1D  = panel_1D_getInstanceData(hObj); if ~isobject(obj1D),return; end
 % Get range from user (Unitless range given)
 if auto
     % Get peak positions automatically (Maximum of peak!)
-    peak_pos = csi_findPeaks(data);
+    peak_pos = csi_findPeaks(data); 
 
-    % Peak width 
-    peak_width = ceil(appdata1D.axis.N/100);
+    % Estimate a peak width 
+    peak_width = ceil(appdata1D.axis.N/32);
     if peak_width < 3, peak_width = 3; end
+
+    % Peak range per peak
+    peak_range = peak_pos + ([-1 1] .* peak_width);
 
 else
-    range = CSI_getPeakOfInterest(appdata1D.axis,'FWHM');
-    if isempty(range), return; end
+    % Peak range
+    peak_range = CSI_getPeakOfInterest(appdata1D.axis,'FWHM');
+    if isempty(peak_range), return; end
 
-    % Maximum in this range
-    [~,mi] = max(real(data(range(1):range(2))));
-    % Set max as peak position.
-    peak_pos = mi+range(1);
-
-    % Peak width 
-    peak_width = diff(range)./2;
-    if peak_width < 3, peak_width = 3; end
 end
 
-% Prep xaxis % -------- %
-
-% Use unitless or ppm
+% Frequency axis data
 if isfield(appdata1D.axis, 'ppm'), ax = appdata1D.axis.ppm;
 else,                              ax = appdata1D.axis.none;
 end
@@ -15121,75 +15112,16 @@ end
 % Imaging frequency
 imf = nan; if isfield(appdata1D.axis, 'img'), imf = appdata1D.axis.img; end
 
-% Baseline | Samples
-N = size(data,1); 
-bv = mean(real([data(1:round(N/20)); data(N-round(N/20):N)])); 
-bvline = cat(2,ax',repmat(bv,N,1));
+% Loop each peak range and estimate FWHM
+for pp = 1:size(peak_range,1)
+    
+    % Estimate/calculate FWHM
+    [fwhm_outp, xest, yest] = ...
+        csi_linewidth_intersect(data, ax, peak_range(pp,:), 1);
 
- % PREPARE FIGURE % -------- %
-% Create new figure for user input
-fh = figure(); 
-% Plot the spectrum (reverse xaxis)
-spObj = plot(ax, real(data)); spObj.Parent.XDir = 'reverse'; hold on;
-% Axes
-axObj = spObj.Parent;
-% PLOT BASELINE
-baseObj = plot(axObj, bvline(:,1),bvline(:,2),'--k');
-% datapoint
-cursorMode = datacursormode(fh); hdtip = cursorMode.createDatatip(baseObj);
-hdtip.Position = [bvline(1,1) bv 0]; updateDataCursors(cursorMode);
-    
-% Loop each peak position
-for pp = 1:size(peak_pos,1)
-
-    % Set range by adding and subtracting peak width from peak position.
-    range = peak_pos(pp); range = range + [-peak_width peak_width];
-    
-    % MAXIMUM
-    data_ranged = real(data(range(1):range(2)));
-    mv = max(data_ranged);
-    
-    % Set max as peak centre.
-    xv = ax(peak_pos(pp));        % In unit (ppm/unitless etc.)
-    ax_ranged = ax(range(1):range(2));
-    
-    % FWHM ESTIMATE
-    fwhm = mv - ((mv-bv)/2);
-    fwhmline = cat(2,ax',repmat(fwhm,N,1));
-    
-    % Intersect FWHM line and DATA(range) (Estimate)
-    [xest,yest] = polyxpoly(ax_ranged',data_ranged,...
-        fwhmline(:,1)', fwhmline(:,2)');
-
-    % PLOT MAXIMUM
-    plot(axObj, xv,  mv,'or');
-        % datapoint
-    % cursorMode = datacursormode(fh);hdtip = cursorMode.createDatatip(spObj);
-    % hdtip.Position = [xv mv 0]; updateDataCursors(cursorMode);
-    
-    % PLOT FWHM ESTIMATE
-    fwhmObj = plot(axObj, fwhmline(:,1), fwhmline(:,2),'--c');
-    % datapoint
-    % cursorMode = datacursormode(fh); 
-    % hdtip = cursorMode.createDatatip(fwhmObj);
-    % hdtip.Position = [fwhmline(1,1) fwhm 0]; 
-    % updateDataCursors(cursorMode);
-    
-    
-    % Plot results of found intersects
-    plot(axObj, xest, yest, '-om');
-    
-    % The answer in PPM or unit-less: ALWAYS use the first two - if more
-    % intersects are found it is shown in the plot. 
-    if size(xest,1) == 1 % The peak is not within the range probabaly
-        fwhm_outp = NaN; 
-    else
-        xest = [xest(1) xest(end)]; yest = [yest(1) yest(end)];
-        fwhm_outp = diff(xest); 
-    end
-    
-    % Plot data in CSIgui 1D
-    yst = diff(appdata1D.axes.YLim)/50; xst = diff(appdata1D.axes.XLim)/100;
+    % Plot data in CSIgui 1D axis
+    yst = diff(appdata1D.axes.YLim)/50; 
+    xst = diff(appdata1D.axes.XLim)/100;
     hold(appdata1D.axes,'on'); % Hold 1D plot figure
     plot(appdata1D.axes, xest, yest,'or');    % Plot marker
     text(appdata1D.axes, xest(1)-xst, yest(1)+yst, ...    % Plot text
@@ -15199,11 +15131,11 @@ for pp = 1:size(peak_pos,1)
     if isnan(fwhm_outp)
         fwhm_outp = 'Single intersect with FWHM found - redefine peak range';
     end
-    CSI_Log({sprintf('FWHM (ppm) @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
-            {fwhm_outp});
+    CSI_Log({sprintf('FWHM (ppm) @ [%2.2f ; %2.2f]: ',...
+        ax(peak_range(pp,1)), ax(peak_range(pp,2)) )}, {fwhm_outp});
     if ~isnan(imf)
-    CSI_Log({sprintf('FWHM (Hz)  @ [%2.2f ; %2.2f]: ',ax_ranged(1), ax_ranged(2))},...
-            {fwhm_outp.*imf});    
+    CSI_Log({sprintf('FWHM (Hz)  @ [%2.2f ; %2.2f]: ',...
+        ax(peak_range(pp,1)), ax(peak_range(pp,2)) )}, {fwhm_outp.*imf});    
     end
 
 end % End of peak-position forloop
