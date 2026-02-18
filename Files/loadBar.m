@@ -4,8 +4,6 @@ function barObj = loadBar(perc, info, barObj)
 %
 % Input info, a string, is optional and can be used to set text in the
 % window of the loadbar. 
-% 
-% Mainly used for launching of CSIgui
 
 % If no info string is given
 if nargin == 1, info = 'Busy...'; end

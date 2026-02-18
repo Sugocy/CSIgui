@@ -879,8 +879,9 @@ if isfield(csi.data,'noise')
     csi.data = rmfield(csi.data, 'noise');
     csi.data.noise.raw = tmp;
     csi.data.noise.dim = size(csi.data.noise.raw);
-    csi.data.noise.labels = cellfun(@char,...
-        num2cell(65:65+numel(csi.data.noise.dim)-1), 'Uniform', 0);
+    csi.data.noise.labels = csi.data.labels(1:ndims(csi.data.noise.raw));
+    % cellfun(@char,...
+    % num2cell(65:65+numel(csi.data.noise.dim)-1), 'Uniform', 0);
     csi.data.noise.labels{1} = 'sec'; 
 end
 
@@ -4211,7 +4212,7 @@ qry = {'Flip angle dynamics index:',...
        'Display graphs:', 'Save figures' };
 def = {csi.data.labels(2:numel(size(csi.data.raw))),...
       {'No','Full','After zero-crossing'},...
-      {'S(FA): Simple Sine',...
+      {'S(FA): Simple Sine','S(FA): Absolute Sine',...
        'S(FA,TR,T1): MRS Signal equation'},...
       {'Yes','No'},{'Yes','No'}, {'Yes','No'}};
 uans = getUserInput_Popup(qry, def, [], 'FA Dynamic');
@@ -4234,6 +4235,7 @@ end
 % USER: Fit Equation
 switch uans{3}
     case 'S(FA): Simple Sine',               fit_method = 0;
+    case 'S(FA): Absolute Sine',             fit_method = -1; 
     case 'S(FA,TR,T1): MRS Signal equation', fit_method = 1;
 end
 
@@ -6111,11 +6113,10 @@ ind = find(strcmp(uans{1},csi.data.labels)); lab = uans{1};
 
 % Indexes to delete
 tmp = strfind(uans{2},':'); if ~iscell(tmp), tmp = {tmp}; end
-if isempty(tmp{1})
-    
+if isempty(tmp{1})    
     tbdeleted = str2double(strsplit(uans{2}{1}));
-    % Edit QH - with jetlag... be careful.
 else    
+    if iscell(uans{2}), uans{2} = uans{2}{1}; end
     tmp = strsplit(uans{2},' ');
     tbdeleted = [];
     for kk = 1:numel(tmp)
@@ -7053,7 +7054,7 @@ if isempty(ind_avg), avg_opt = {'No'}; else, avg_opt = {'Yes','No'}; end
 
 % User Input % ------------------------------------------------------- %
 
-% This is such that if WSVD on data is done, next WSVD will force use of in
+% Why: if WSVD on data is performed, next WSVD will force use of in
 % memory scaleMatrix - useful for noise-processing and automatic
 % processing.
 noise_source_str = {'Voxel-Data', 'User', 'ID-Matrix', 'In-Memory'};
@@ -11283,10 +11284,10 @@ else
     stack_ind = 1; 
 end
 
-if strcmp(mri.ext ,'par') || strcmp(mri.ext ,'ima')   
+if strcmp(mri.ext ,'par') || strcmp(mri.ext ,'ima') 
     image_convert_data = mri.data.(imtoi)(:,:,:);
 else
-    image_convert_data = mri.data.(imtoi)(:,:,stack_ind,1);
+    image_convert_data = mri.data.(imtoi)(:,:,stack_ind,:); % Last : was a 1.
 end
 
 % Interp
@@ -13056,23 +13057,29 @@ if isfield(csi, 'twix') && ~isfield(csi, 'xaxis')
     
     switch xaxis.nucleus 
         case '1H',  xaxis.gyro = 42.57747892*10^6;
-        case '2H',  xaxis.gyro = 6.536*10^6;
+        case '2H',  xaxis.gyro = 6.5359*10^6;
         case '31P', xaxis.gyro = 17.235*10^6;
         case '23Na',xaxis.gyro = 11.262*10^6;
         case '19F', xaxis.gryo = 40.052*10^6;
         otherwise,  xaxis.gyro = 42.57747892*10^6;
     end 
 
-    % Get imaging frequency
-    vals = getFieldValues(csi.twix, 'Frequency', 0);
-    ind = ~cellfun(@ischar, vals); vals = cell2mat(vals(ind));
-    vals = unique(vals);
-    if numel(vals) > 1, vals = mode(vals); end
-    if vals ~= 0
-        xaxis.trans = vals;
-    else
-        xaxis.trans = xaxis.tesla * xaxis.gyro;    
-    end
+    % QH022026: Fix this when non-doubles want to combine to matrix...
+    % Fix this using twix-nfo parsing script.
+    %
+    % Get imaging frequency    
+    % vals = getFieldValues(csi.twix, 'Frequency', 0);           
+    % vals(cellfun(@isempty, vals)) = [];
+    % ind = ~cellfun(@ischar, vals);
+    % vals = cellfun(@(x) double(x), vals);
+    % vals = vals(ind);vals = unique(vals);
+    % 
+    % if numel(vals) > 1, vals = mode(vals); end
+    % if vals ~= 0
+    %     xaxis.trans = vals;
+    % else
+    xaxis.trans = xaxis.tesla * xaxis.gyro;    
+    % end
 end
 
 % USER INPUT % ------------------------------------------ %
@@ -16138,8 +16145,9 @@ if ~isequal(csi.data.labels, csi.data.noise.labels)
     % Find ordering/permute-vector to match index-labels
     nl = csi.data.noise.labels; dl = csi.data.labels;    
     perm_vec = NaN(1,numel(dl));
-    for kk = dl, perm_vec(strcmp(dl, kk)) = find(strcmp(nl, kk)); end
-    
+    for kk = nl, perm_vec(strcmp(dl, kk)) = find(strcmp(nl, kk)); end
+    perm_vec(isnan(perm_vec)) = [];
+
     % Reorder noise and labels
     csi.data.noise.labels = csi.data.noise.labels(perm_vec);
     csi.data.noise.raw = permute(csi.data.noise.raw, perm_vec);
@@ -16299,7 +16307,7 @@ elseif strcmp(csi.ext, 'dat') || isfield(csi,'twix')
 else, TR = [0.3 0.5 0.65 0.8 1 1.2 1.5 2 4 6 8 10 12 14]; 
 end
 
-% Get TR, T1, Zero, Parallel - Add FA?
+% Get TR, T1, Zero, Parallel - 
 ele = {'popup', 'edit', 'edit', 'edit', 'edit', 'edit', 'popup',...
        'popup', 'popup', 'popup', 'popup', 'edit'};
 qry = {'TR Index:', 'Give a TR range [s]:',...
@@ -16543,9 +16551,9 @@ for di = 1:double_iter
         CSI_dataAs_Initiate(FAt,  ['FA - ' int2str(di)], gui,...
             csi.data.labels);        
         
-        % T1t = permute(fit_par(:,:,:,2), [4 1 2 3]);
-        % CSI_dataAs_Initiate(T1t,  ['T1 - ' int2str(di)], gui,...
-        %     csi.data.labels);
+        T1t = permute(fit_par(:,:,:,2), [4 1 2 3]);
+        CSI_dataAs_Initiate(T1t,  ['T1 - ' int2str(di)], gui,...
+            csi.data.labels);
         
         M0t = permute(fit_par(:,:,:,3), [4 1 2 3]);
         CSI_dataAs_Initiate(M0t,  ['M0 - ' int2str(di)], gui,...
@@ -16995,9 +17003,10 @@ if isappdata(gui.CSIgui_main,'csi')
     % Reduce file size? Save Backup?
     uans = getUserInput_Popup(...
         {'Reduce file size by converting to single?',...
-         'Include backup-data?', 'Remove decorrelation matrices:'},...
+         'Include backup-data?', 'Remove decorrelation matrices?:'},...
         {{'Yes','No'},{'No', 'Yes'},{'Yes','No'}}, [], 'Save Data');
-    
+    if isempty(uans), return; end
+
     if strcmpi(uans{1},'yes')
         csi.data.raw = single(csi.data.raw);
     end
@@ -17017,32 +17026,6 @@ if isappdata(gui.CSIgui_main,'csi')
     log = get(gui.listbox_CSIinfo,'String');
     csi.log = char(log);
 
-
-    % % Get MRSI data
-    % csigui = csi.data;
-    % if strcmpi(reduce_size{1},'yes')
-    %     csigui.raw = single(csigui.raw);
-    % end
-    % 
-    % if isfield(csi,'twix')
-    %     csigui.twix = csi.twix;
-    % end
-    % if isfield(csi,'list')
-    %     csigui.list = csi.list;
-    % end
-    % if isfield(csi,'voxelmask')
-    %     csigui.voxelmask = csi.data.voxelmask;
-    % end
-    % 
-    % % Add log
-    % log = get(gui.listbox_CSIinfo,'String');
-    % csigui.log = char(log);
-    % 
-    % % Add xaxis structure
-    % csigui.xaxis = csi.xaxis;
-    % 
-    % Add Ori
-    % if isfield(csi,'ori'), csigui.ori = csi.ori; end
 end
 
                   % ------- % Save CONV data % ------- %
@@ -17064,7 +17047,14 @@ end
                    % ------- % Save file  % ------- %
 
 % Save it.
-save([fp fn ext], 'csi','-v7.3');
+try 
+    save([fp fn ext], 'csi');
+catch err
+    CSI_Log({'Failed saving data via version 7. Switching to v7.3.'},...
+            {'Expect longer data-export times'});
+    save([fp fn ext], 'csi','-v7.3');
+end
+
 
 % Done.
 CSI_Log({'Saved MRSI data to MAT-file:'},{[fp fn ext]});
@@ -17413,6 +17403,9 @@ end
 
 % Get list of available backup fields
 bup_list = fieldnames(csi.backup);
+if isempty(bup_list)
+    CSI_Log({'No MRSI backup available.'},{''}); return;
+end
 
 % Remove lastBackup if included
 loc = contains(bup_list, 'lastBackup'); bup_list(loc) = [];

@@ -90,9 +90,9 @@ nfo.fov(3) = getCommonValue(vals);
 stroi  = {'VoI_Normal_Tra', 'VoI_Normal_Sag', 'VoI_Normal_Cor'};
 for kk = 1:numel(stroi)
     vals = getFieldValues(twix_hdr, stroi{kk}); 
-    nfo.image_orientation = getCommonValue(vals);
-    if ~isnan(nfo.image_orientation)
-        nfo.image_orientation = stroi{kk}(end-2:end);
+    nfo.orientation = getCommonValue(vals);
+    if ~isnan(nfo.orientation)
+        nfo.orientation = stroi{kk}(end-2:end);
         break;
     end
 end
@@ -124,7 +124,7 @@ function vals = getCommonValue(vals, type)
 % Given a cell-array of values/content, find the most frequent value and
 % return this. Does NOT work with arrays - only single values or strings.
 %
-% type describes if query is a value (1, default) or a string (0)
+% type describes if query is a number (1, default) or a string (0)
 
 if nargin == 1, type = 1; end
 

@@ -59,11 +59,10 @@ fh = figure('Name','Display 3D in 2D','Tag', 'Display3D',...
 
 % --- Calculate position
 
-% 30 percent of screensize
+%  Use main screen size for figure-size
 scrsz = get(0,'screensize');
-
-% Figure size
-fig_sz = scrsz(3:4)./3; 
+if scrsz(3) < 1920 || scrsz(4) < 1080, scrsz(3:4) = [1920 1080]; end
+fig_sz = scrsz(3:4)./2; 
 
 % Check size ratio of data
 sz = size(data); 
@@ -246,7 +245,7 @@ switch lower(mouse_button)
         if sum(isnan(gui.opt.limit)) == 0
             gui.ax.CLim = gui.opt.limit;
             gui.edit.String = num2str(gui.opt.limit);
-        end                       
+        end
     case 'extend' % Scroll wheel
         % Add additional callback to Mouse Motion Fcn.
         gui.fh.WindowButtonMotionFcn = ... 
@@ -379,6 +378,10 @@ contrast = double( [min(data(:)) max(data(:))] );
 
 % Safety check contrast
 if contrast(1) >= contrast(2), contrast(2) = contrast(1)+1; end
+
+if sum(~isfinite(contrast)) > 0 
+    contrast(~isfinite(contrast)) = NaN; 
+end
 
 
 function setContrast_edit(hobj, ~)

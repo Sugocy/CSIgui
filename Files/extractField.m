@@ -19,7 +19,7 @@ function fieldvals = extractField(istruct, ifield, doWarn)
 %%% Quincy van Houtum, version 2 - 2025
 
 
-if nargin < 2, doWarn = 1; end
+if nargin <= 2, doWarn = 1; end
 
 % Get field-depth field of interest in structure!
 % 1. Get all subfields in requested ifield.

@@ -35,6 +35,7 @@ if nargin < 3, method = 1; end
 % calculate noise-covariance matrix using data
 if nargin < 2 || sum(isnan(noiseCov(:))) == 1
     noiseCov = csi_noisecov_usingdata(spec,2);
+    % if ~iscell(noiseCov), noiseCov = {noiseCov}; end
 end
 
 % Preperation % -------------------------------------------------------- %
@@ -55,8 +56,9 @@ if method == 1 % Whitening
     % 
     % % Scale spectra
     % spec = spec * scaleMatrix;
-
-[spec, scaleMatrix] = csi_decorrelate_noise_whitening(spec, 2, {noiseCov});
+    
+    [spec, scaleMatrix] = ...
+        csi_decorrelate_noise_whitening(spec, 2, {noiseCov});
     scaleMatrix = scaleMatrix{1};
     
 elseif method == 0 % none

@@ -4,7 +4,7 @@ function CSI_Log(varargin)
 %%% Updates listbox in main CSIgui window displaying csi-data information
 %%% and processing steps.
 
-obj = findobj('Tag','CSIgui_main', 'Type', 'Figure');
+obj = findobj('Type', 'Figure', 'Tag', 'CSIgui_main', 'Name', 'CSIgui');
 if isempty(obj), return; end
 
 % Get GUIdata from CSIgui_main;

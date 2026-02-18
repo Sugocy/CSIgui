@@ -2,7 +2,7 @@ function [data, permv, szr] = csi_combine_reshape(data, channel_index)
 % This function reshapes the data for use with WSVD and other coil 
 % combinations functions. It permutes the channel index to the second 
 % dimension and creates a cell of the FID/SPEC for every channel per voxel.
-% Returns all required variables to undo this operation  after any 
+% Returns all required variables to undo this operation after any 
 % calculations.
 %
 % Input:

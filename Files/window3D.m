@@ -1,33 +1,36 @@
 function win3D = window3D(wx, wy, wz)
-%% Description:                     Create a 3D filter window.
-% Creator: Ir. Q. van Houtum        Version: 1.0          Date: 2017-06
-% --------------------------------------------------------------------
+% Return a 3D  filter window given the 1D filter windows for every 
+% dimension.
 %
-% Input: WX - 1D window in row/x-direction
-%        WY - 1D window in col/y-direction
-%        WZ - 1D window in pag/z-direction
+% Input: 
+%   wx, wy, wz:     A 1D window for each dimension.
 %
-% If no WY is given, the transposed 1D window WX is used for WY and
-% 3rd dimension permuted WX is used for WZ.
+% Output:
+%   win3D	        A 3D filter window constructed using given 1D
+%                   window(s).
 %
-% This allows for differently sized windows.
+% If wy and  wz are NOT given, the transposed 1D window wx is used for wy 
+% and 3rd-dimension permuted wx is used for wz. This allows for differently 
+% sized windows in every dimension.
 %
-% !!!!! Be aware: WY and WZ need permutations! This is done during
+% NB. Windows for wy and wz need permutations which are applied during 
 % calculations.
 %
-% https://dsp.stackexchange.com/questions/19519/extending-1d-window-functions-to-3d-or-higher
+% Source:
+% Stackexchange - extending-1d-window-functions-to-3d-or-higher.
+%
+% Quincy van Houtum. v06.2017
+% quincyvanhoutum@gmail.com
 
-%% Analyse input.
+% Analyse input.
 if nargin == 1, wy = wx; wz = wx; end
 
-%% Permute data
+% Permute data
 wy = wy'; 
 wz = permute(wz,[3 2 1]);
 
-%% Outerproduct method
+% Outerproduct method
 
 % Create 2D window using x and y e.g. r and c.
 win2D = bsxfun(@times, wx, wy);                   
 win3D = bsxfun(@times, win2D, wz);                
-
-% bsxfun(@times, bsxfun(@times, window1D(5), window1D(5)'), permute(window1D(5), [3 2 1]))

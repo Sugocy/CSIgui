@@ -26,13 +26,24 @@ if nargin < 4 , loop = 0; end
 % Prepare variables
 fft_data = csi; sz = size(fft_data);
 
+%QH: Rough try/edit 12.2025
+% % Shift zero-freq to center - if done - rewrite mri/mrs matching
+% for kk = 1:numel(dim), fft_data = ifftshift(fft_data, dim(kk)); end
+% 
+% % Fourier Transform
+% for kk = 1:size(dim,2), fft_data = ifft(fft_data,[], dim(kk)); end
+% 
+% % Shift back
+% for kk = 1:numel(dim), fft_data = fftshift(fft_data, dim(kk)); end
+
 % odd even bool
 odd_bool = mod(sz(dim),2);    
 % Number of positions to shift for circshift-fnc
-shift_val = ceil( ( sz(dim) ./ 2 ) + 1 );
-% shift_val = ceil( ( sz(dim) ./ 2 ) + 1);
-
-
+shift_val = ceil( ( sz(dim) ./ 2 ) + 1 ); 
+% This adds one additional shift step compared to fftshift (even only).
+% [1 2 3 4 5 6] circshift: [ 3 4 5 6 1 2 ]
+%               fftshift:  [ 4 5 6 1 2 3 ]
+% Was this smart? --> 0.5 voxel shift vs. 1 voxel shift.
 
 % NFO output
 fprintf('K-space Matrix: %i x %i x %i.\n', sz(dim));
@@ -45,15 +56,15 @@ end
 % CIRC SHIFT
 if shift_method == 0
     if ~loop
-        
+
         % Shift every dimension circular
         for kk = 1:size(dim,2)
             fft_data = circshift(fft_data,shift_val(kk), dim(kk)); 
         end
-    
+
         % Apply iFFT
         for kk = 1:size(dim,2), fft_data =  ifft( fft_data,[], dim(kk) ); end
-    
+
         % Shift back every dimension
         for kk = size(dim,2):-1:1
             fft_data = circshift(fft_data,-1.*shift_val(kk), dim(kk)); 
@@ -71,9 +82,9 @@ if shift_method == 0
 
 % FFT SHIFT
 elseif shift_method == 1
-        
+
     if ~loop 
-        
+
         % Shift everything first.
         for kk = 1:size(dim,2)
             fft_data =  ifftshift(fft_data, dim(kk));
@@ -88,7 +99,7 @@ elseif shift_method == 1
         for kk = 1:size(dim,2)
             fft_data =  fftshift(fft_data, dim(kk));
         end
-    
+
     else
 
         % FFT and FFTshift in one loop.
@@ -97,12 +108,12 @@ elseif shift_method == 1
             fftshift(ifft(ifftshift(fft_data, dim(kk)), [], dim(kk)),dim(kk) );
         end
     end
-    
+
 % CIRC/FFTSHIFT based on odd/even    
 elseif shift_method == 2
-    
+
     if ~loop
-        
+
         % SHIFT 1/2
         for kk = 1:size(dim,2)
             if odd_bool(kk) % Odd
@@ -129,7 +140,7 @@ elseif shift_method == 2
         end
 
     else
-        
+
         % Loop each dimension and process fully.
         for kk = 1:size(dim,2)
             % If odd use fft-shift
@@ -146,6 +157,6 @@ elseif shift_method == 2
             end
         end
     end
-    
+
 end
 

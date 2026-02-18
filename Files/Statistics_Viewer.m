@@ -22,7 +22,10 @@ else
 end
 fh.Position(3:4) = round(fh.Position(3:4) ./ [1.9 1.25]);
 scrsz = get(0,'screensize');
+if scrsz(3) < 1280, scrsz = [0 0 1280 720]; end
 fh.Position(1:2) = (scrsz(3:4) .* [0.15 0.85]) - [0 fh.Position(4)];
+
+
 
 dxy = 5;
 lb_sz = fh.Position(3:4)-(dxy*2); lb_sz(1) = lb_sz(1)./2.5;

@@ -18,20 +18,14 @@ end
  
 
 %% Read file
-
-% Open file ID
-fid = fopen([fp '\' fn]); if fid == -1, nfo = NaN; return; end
-% Read each line
-k = 1;
-while ~feof(fid), lines{k} = fgetl(fid); k = k+1; end
-% Close file ID
-fclose(fid);
+lines = readText([fp '\' fn]); 
+if ~iscell(lines) && isnan(lines), nfo = NaN; return; end
 
 
 %% Analyze file
 
 % Loop each line and convert data
-sz = size(lines,2); nfo = struct;
+sz = numel(lines); nfo = struct;
 for li = 1:sz
     % Split tag and data
     tagdata = strsplit(lines{li},' =');
@@ -49,8 +43,7 @@ for li = 1:sz
     
     if size(tagdata,2) > 1
         
-    
-    
+        
     % Convert data
     if isempty(strfind(tagdata{2},'"'))                         % Double
         % Get numbers only and convert  to double

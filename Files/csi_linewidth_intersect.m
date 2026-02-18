@@ -47,11 +47,11 @@ fwhmline = cat(2,ax',repmat(fwhm,N,1));
     fwhmline(:,1)', fwhmline(:,2)');
 
 % The answer in PPM or unit-less: ALWAYS use the first two - if more
-% intersects are found, data is wrong anyways... 
+% intersects are found ...?
 if size(xest,1) == 1 || size(xest,1) == 0 % The peak is not within the peak_range probabaly
     linewidth = NaN; xest = NaN; yest = NaN;
 else
-    xest = [xest(1) xest(end)]; % yest = [yest(1) yest(end)];
+    xest = [xest(1) xest(end)]; yest = [yest(1) yest(end)];
     linewidth = diff(xest); 
 end
 
@@ -87,7 +87,7 @@ if doPlot
 end
 
 
-catch % catches errors due to full nan-values data
+catch err% catches errors due to full nan-values data
     linewidth = NaN;
     xest = NaN; yest = NaN;
 end

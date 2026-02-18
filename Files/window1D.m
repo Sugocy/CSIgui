@@ -1,15 +1,17 @@
 function win = window1D(L, type, state, ac)
-%% Description:                    Create filter window of specific type
-% Creator: Ir. Q. van Houtum       Version: 1.0          Date: 2017-06
-% --------------------------------------------------------------------
+% win = window1D(L, type, state, ac)
+%
+% Return a 1D filter window of size L in symmetric or periodic state. 
+% Multiple filter types are available.
 %
 % Input: window size  - L, integer and non-zero size of the window
-%        window type  - hamming_ideal (default), hamming classic, hann, 
-%                       blackman or flattop.
+%        window type  - "hamming_ideal" (default), "hamming" classic, 
+%                       "hann", "blackman" or "flattop". See below for
+%                       details on the ideal hamming window.
 %        window state - Symmetric (default) or periodic.
 %        window coeff - Actual coefficients (ac) for general window 
-%                       formula. If this input is given, type is set 
-%                       to custom and these ac-values are used.
+%                       formula. "Type" will be ignored (set to custom) if 
+%                       the 5 ac are given.
 %
 % Output: window      - 1D window if length L.
 %
@@ -19,13 +21,23 @@ function win = window1D(L, type, state, ac)
 %
 % Hamming_ideal:
 % In the equiripple sense, the optimal values for the coefficients are 
-% a0 = 0.53836 and a1 = 0.46164. Equiripple: filter' with specific ripple
-% magnitude with equal amplitude ripple peaks and valleys.
+% a0 = 0.53836 and a1 = 0.46164. Equiripple: the ripple in the frequency 
+% response is spread out evenly across, avoiding large peaks. The zero
+% crossing at 5pi/(N-1) will cancel the first sidelobe present in the Hann
+% window, which is the main goal/aim of the hamming windows. 
+% NB. This is NOT equal to equiripple Parks–McClellan methods and it has
+% only as small (neglible) <0.03dB change in sidelobe level.
+%
+% Quincy van Houtum. v06.2017
+% quincyvanhoutum@gmail.com
+
+
+% // --- Handle input
 
 % If window size equals 1.
 if L == 1, win = 1; return; end
 
-% Handle input
+% Check input-arguments
 if     nargin == 1, state = 'symmetric'; type = 'hamming_ideal'; 
 elseif nargin <= 2, state = 'symmetric'; 
 elseif nargin == 4, state = 'custom';
@@ -36,7 +48,7 @@ if isempty(type), type = 'hamming_ideal'; end
 % fix uppercase-issues
 type = lower(type); state = lower(state);
 
-%% Set window type
+% // --- Set window type
 
 switch type
     case 'hamming_ideal',  ac = [ 0.53836 0.46164 0 0 0 ];
@@ -47,17 +59,17 @@ switch type
                                   0.277263158 0.083578947 0.006947368 ];
     case 'custom',   fprintf('Using custom coefficients for window.\n');
     otherwise,       fprintf('Incorrect window type selected. Abort.\n'); 
-                     return;
+                     win = NaN; return;
 end
 
 
-%% Set window state e.g. sflag.
+% Set window state e.g. sflag.
 switch state
     case 'symmetric', x = (0:L-1)'./(L-1);
     case 'periodic',  x = (0:L)'./(L);
 end
 
-%% Create window
+% // --- Create window
 
 % Generalised window equation.
 wineq = @(ac, x) ac(1) - ac(2)*cos(2*pi*x) + ac(3)*cos(4*pi*x) - ...

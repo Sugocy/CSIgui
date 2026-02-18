@@ -16,9 +16,9 @@ function outp = csi_fit_FASeries(xdata, ydata, fit_method, phase_data, ...
 %                    |1: phase all data prior to processing
 %                    |2: phase spectra only after initial zero-crossing 
 %                    |0: do not phase data at all.
-%       4. fit_method   = 0, 1;
+%       4. fit_method   = 0, -1, 1;
 %                    |(1) -REQUIRES varargin(1)=TR and varargin(2)=T1;
-%                    |Sine (0) or MR signal equation (1)
+%                    |Sine (0), abs(sine) (-1) or MR signal equation (1)
 %       5. add_zero     = Adds S(FA=0) = 0 to data before fitting.
 %       6. plot_data    = Boolean for plotting fit and result
 %       7. save_plot    = Boolean for saving plot
@@ -123,7 +123,7 @@ if add_zero, weights = [max(snrw) snrw]; else, weights = snrw; end
 % FIT % ---------------------------------------------------------------- %
 % According to fit-method, fit equation through data-points.
 
-if fit_method == 0
+if fit_method <= 0
     % --- % FIT SINE
 
     % // Initial parameters
@@ -141,7 +141,11 @@ if fit_method == 0
     init_par = [init_amp, init_fre, init_shift];
 
     % Sine function: radians with frequency
-    func = @(par,x) (par(1) .* sin( 2*pi*par(2).*x + par(3) )) ;
+    if fit_method == 0
+        func = @(par,x) (par(1) .* sin( 2*pi*par(2).*x + par(3) )) ;
+    else
+        func = @(par,x) abs((par(1) .* sin( 2*pi*par(2).*x + par(3) )));
+    end
     
     % FIT    
     beta = nlinfit(xdata, vals, func, init_par, 'Weights', weights);
@@ -206,7 +210,7 @@ zc_data = xdat_HR(zc) + xdat_HR(1);
     
 % --- % ZERO CORSSING FROM EXTENDED FIT
 % Period/Frequency from fit-data
-if     fit_method == 0, period = 1/beta(2);
+if     fit_method <= 0, period = 1/beta(2);
 elseif fit_method == 1, period = beta(2);
 end
 
@@ -221,7 +225,7 @@ if fit_method == 1
     zc_ext = findZeroCross(fitval_HR_ext); zc_ext_ind = zc_ext;
     zc_ext = xdat_HR_ext(zc_ext) + xdat_HR_ext(1);
 
-elseif fit_method == 0    
+elseif fit_method <= 0    
     
     % Calculating zero-crossing via sine-function   
     zc_ext = -1; N = 1;

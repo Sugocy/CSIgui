@@ -1652,7 +1652,9 @@ title_str = extractField(gui.tabh, 'Title');
 ind = strcmp(gui.tabg.SelectedTab.Title, title_str);
 
 % Current point in map-axis
+if isempty(gui.plot_par.ax{ind}), return; end
 C = gui.plot_par.ax{ind}.CurrentPoint;
+
 
 % Only if mouse over axis only == positive values
 if ( round(C(1,1))> 0 ) && ( round(C(1,2)) >0 )

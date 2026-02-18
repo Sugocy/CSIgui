@@ -81,9 +81,6 @@ end
 % ONLY IF REQUIRED
 
 if ~was_cell
-    % Undo squeeze of first-dimension.
-    % spec = permute(spec, [numel(size(spec))+1 1:numel(size(spec))]);
-    % Convert.
     spec = cell2mat(spec);
     if numel(sz) <= 2, spec = squeeze(spec); end
 end
